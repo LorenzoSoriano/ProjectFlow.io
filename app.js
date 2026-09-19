@@ -36,18 +36,18 @@
   const world = $("world");
 
   const TYPE_META = {
-    object: { label: "GameObject", icon: "◇", color: "#9b8cff" },
-    component: { label: "Componente Unity", icon: "⬡", color: "#6ea8ff" },
-    class: { label: "Classe", icon: "C", color: "#42d4df" },
-    function: { label: "Funzione", icon: "ƒ", color: "#55d69e" },
-    enum: { label: "Enum", icon: "E", color: "#c58cff" },
-    enumSwitch: { label: "Switch Enum", icon: "⇆", color: "#b893ff" },
-    event: { label: "Evento", icon: "⚡", color: "#ffcf66" },
-    action: { label: "Azione", icon: "▶", color: "#6fe0a7" },
-    state: { label: "Stato", icon: "S", color: "#72b5ff" },
-    variable: { label: "Variabile", icon: "x", color: "#f3bd59" },
-    condition: { label: "Condizione", icon: "?", color: "#ff966d" },
-    ui: { label: "Interfaccia", icon: "▣", color: "#e979c6" },
+    object: { label: "GameObject", icon: "◇", color: "#5b9bc4" },
+    component: { label: "Componente Unity", icon: "⬡", color: "#6f91ad" },
+    class: { label: "Classe", icon: "C", color: "#4faab7" },
+    function: { label: "Funzione", icon: "ƒ", color: "#6fb47b" },
+    enum: { label: "Enum", icon: "E", color: "#9c7fb5" },
+    enumSwitch: { label: "Switch Enum", icon: "⇆", color: "#8f7fb2" },
+    event: { label: "Evento", icon: "⚡", color: "#c9ad58" },
+    action: { label: "Azione", icon: "▶", color: "#70b77c" },
+    state: { label: "Stato", icon: "S", color: "#5f93ba" },
+    variable: { label: "Variabile", icon: "x", color: "#c9ad58" },
+    condition: { label: "Condizione", icon: "?", color: "#c88455" },
+    ui: { label: "Interfaccia", icon: "▣", color: "#b57bab" },
     note: { label: "Nota", icon: "≡", color: "#98a6c2" }
   };
 
