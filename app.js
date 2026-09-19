@@ -19,6 +19,7 @@
     if (type === "component") return 430;
     if (["event", "action", "condition", "state", "enumSwitch"].includes(type)) return 420;
     if (type === "note") return 390;
+    if (type === "sketch") return 480;
     return 430;
   }
 
@@ -51,7 +52,8 @@
     variable: { label: "Variabile", icon: "x", color: "#c9ad58" },
     condition: { label: "Condizione", icon: "?", color: "#c88455" },
     ui: { label: "Interfaccia", icon: "▣", color: "#b57bab" },
-    note: { label: "Nota", icon: "≡", color: "#98a6c2" }
+    note: { label: "Nota", icon: "≡", color: "#98a6c2" },
+    sketch: { label: "Sketch", icon: "✎", color: "#8aa7c2" }
   };
 
   const ROW_META = {
@@ -618,6 +620,26 @@
       if (typeof node.stateKind !== "string") node.stateKind = "normal";
     }
 
+    if (node.type === "sketch") {
+      if (!Array.isArray(node.sketchStrokes)) node.sketchStrokes = [];
+      node.sketchStrokes = node.sketchStrokes
+        .filter((stroke) => stroke && Array.isArray(stroke.points) && stroke.points.length > 1)
+        .map((stroke) => ({
+          id: stroke.id || uid("stroke"),
+          color: typeof stroke.color === "string" ? stroke.color : "#52677c",
+          size: Math.max(1, Math.min(10, Number(stroke.size) || 3)),
+          points: stroke.points
+            .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
+            .map((point) => ({
+              x: Math.max(0, Math.min(1, point.x)),
+              y: Math.max(0, Math.min(1, point.y))
+            }))
+        }))
+        .filter((stroke) => stroke.points.length > 1);
+      if (typeof node.sketchColor !== "string") node.sketchColor = "#52677c";
+      if (typeof node.sketchSize !== "number") node.sketchSize = 3;
+    }
+
     if (node.type === "class") {
       if (typeof node.classVisibility !== "string") node.classVisibility = "public";
       if (typeof node.baseType !== "string") node.baseType = "MonoBehaviour";
@@ -967,22 +989,22 @@
     if (!Array.isArray(base.nodes)) base.nodes = [];
     if (!Array.isArray(base.connections)) base.connections = [];
     if (!Array.isArray(base.groups)) base.groups = [];
-    if (!base.sketch || typeof base.sketch !== "object") base.sketch = { strokes: [] };
-    if (!Array.isArray(base.sketch.strokes)) base.sketch.strokes = [];
-    base.sketch.strokes = base.sketch.strokes
-      .filter((stroke) => stroke && Array.isArray(stroke.points) && stroke.points.length > 1)
-      .map((stroke) => ({
-        id: stroke.id || uid("stroke"),
-        color: typeof stroke.color === "string" ? stroke.color : "#9fb7ff",
-        size: Math.max(1, Math.min(10, Number(stroke.size) || 3)),
-        points: stroke.points
-          .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
-          .map((point) => ({
-            x: Math.max(0, Math.min(1, point.x)),
-            y: Math.max(0, Math.min(1, point.y))
-          }))
-      }))
-      .filter((stroke) => stroke.points.length > 1);
+    // v2.5 migration: the old project-level Sketch drawer becomes a real node.
+    if (base.sketch && Array.isArray(base.sketch.strokes) && base.sketch.strokes.length &&
+        !base.nodes.some((node) => node && node.type === "sketch")) {
+      base.nodes.push({
+        id: uid("node"),
+        type: "sketch",
+        title: "Sketch",
+        description: "",
+        pseudo: "",
+        rows: [],
+        x: 240,
+        y: 240,
+        sketchStrokes: base.sketch.strokes
+      });
+    }
+    delete base.sketch;
 
     base.connections.forEach((edge) => {
       if (!edge.id) edge.id = uid("edge");
@@ -1169,8 +1191,6 @@
   let marqueeState = null;
   let minimapProjection = null;
   let minimapDrag = false;
-  let sketchDraft = null;
-  let sketchPointerId = null;
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -1364,10 +1384,8 @@
     closeSurface($("accountMenu"));
     closeSurface($("newBlockPalette"));
     closeSurface($("sharePanel"));
-    closeSurface($("sketchPanel"));
     if ($("addObjectTop")) $("addObjectTop").setAttribute("aria-expanded", "false");
     if ($("shareProjectButton")) $("shareProjectButton").setAttribute("aria-expanded", "false");
-    if ($("sketchTool")) $("sketchTool").classList.remove("active");
     document.querySelectorAll(".section-add-popup.open, .type-picker-popup.open").forEach(closeSurface);
 
     if ($("editorAuthButton") && except !== $("accountMenu")) {
@@ -2503,7 +2521,10 @@
       showToast("Invito salvato per " + email);
     } catch (error) {
       console.warn("ProjectFlow: invito non riuscito.", error);
-      showToast("Invito non riuscito");
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      showToast(denied
+        ? "Permesso Firebase negato · controlla e pubblica le Firestore Rules"
+        : "Invito non riuscito · " + (error.code || "errore Firebase"));
     }
   }
 
@@ -2538,12 +2559,39 @@
       const url = new URL(window.location.href);
       url.searchParams.set("shared", record.sharedProjectId);
       url.hash = "";
-      await navigator.clipboard.writeText(url.toString());
+      const text = url.toString();
+
+      let copied = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (clipboardError) {
+          console.warn("ProjectFlow: Clipboard API non disponibile.", clipboardError);
+        }
+      }
+
+      if (!copied) {
+        const field = document.createElement("textarea");
+        field.value = text;
+        field.setAttribute("readonly", "");
+        field.style.position = "fixed";
+        field.style.left = "-9999px";
+        document.body.appendChild(field);
+        field.select();
+        copied = document.execCommand("copy");
+        field.remove();
+      }
+
       await refreshSharePanelMeta();
-      showToast("Link copiato");
+      if (copied) showToast("Link copiato");
+      else window.prompt("Copia questo link:", text);
     } catch (error) {
       console.warn("ProjectFlow: copia link non riuscita.", error);
-      showToast("Impossibile copiare il link");
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      showToast(denied
+        ? "Permesso Firebase negato · pubblica le nuove Firestore Rules"
+        : "Impossibile creare il link · " + (error.code || "errore Firebase"));
     }
   }
 
@@ -2722,7 +2770,6 @@
         $("projectName").value = value.name || project.name || "Untitled Flow";
         render();
         resetHistory();
-        drawSketch();
       } finally {
         cloudState.applyingRemote = false;
       }
@@ -2920,33 +2967,32 @@
     await initCloud(true);
     if (!cloudState.user || !cloudState.api || !cloudState.db) return null;
 
-    const id = record.sharedProjectId || record.id;
-    const ref = sharedProjectRef(id);
-    const existing = await cloudState.api.getDoc(ref);
-
-    if (!existing.exists()) {
-      await cloudState.api.setDoc(ref, {
-        ownerId: cloudState.user.uid,
-        ownerName: cloudState.user.displayName || "",
-        ownerEmail: normalizeShareEmail(cloudState.user.email),
-        name: record.name,
-        createdAt: record.createdAt || Date.now(),
-        updatedAt: record.updatedAt || Date.now(),
-        updatedBy: cloudState.user.uid,
-        data: record.data
-      });
-    } else {
-      const value = existing.data() || {};
-      if (value.ownerId && value.ownerId !== cloudState.user.uid && record.sharedRole !== "editor") {
-        throw new Error("Solo il proprietario può gestire la condivisione.");
-      }
+    if (record.sharedRole === "editor" || (record.ownerId && record.ownerId !== cloudState.user.uid)) {
+      throw new Error("Solo il proprietario può gestire la condivisione.");
     }
 
+    const id = record.sharedProjectId || record.id;
+    const ref = sharedProjectRef(id);
+
+    // Important: create/update directly. Reading a document before its first
+    // creation can be denied by strict Firestore rules because resource.data
+    // does not exist yet.
+    await cloudState.api.setDoc(ref, {
+      ownerId: cloudState.user.uid,
+      ownerName: cloudState.user.displayName || "",
+      ownerEmail: normalizeShareEmail(cloudState.user.email),
+      name: record.name,
+      createdAt: record.createdAt || Date.now(),
+      updatedAt: record.updatedAt || Date.now(),
+      updatedBy: cloudState.user.uid,
+      data: record.data
+    }, { merge: true });
+
     record.sharedProjectId = id;
-    record.ownerId = record.ownerId || cloudState.user.uid;
-    record.ownerName = record.ownerName || cloudState.user.displayName || "";
-    record.ownerEmail = record.ownerEmail || normalizeShareEmail(cloudState.user.email);
-    record.sharedRole = record.ownerId === cloudState.user.uid ? "owner" : (record.sharedRole || "editor");
+    record.ownerId = cloudState.user.uid;
+    record.ownerName = cloudState.user.displayName || "";
+    record.ownerEmail = normalizeShareEmail(cloudState.user.email);
+    record.sharedRole = "owner";
     persistProjectLibrary();
     return ref;
   }
@@ -3900,6 +3946,42 @@
     });
   }
 
+  function renderSketchNodeCanvas(canvas, node, draftStroke) {
+    if (!canvas || !node) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const width = Math.max(1, Math.round(rect.width * ratio));
+    const height = Math.max(1, Math.round(rect.height * ratio));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const drawStroke = (stroke) => {
+      if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color || "#52677c";
+      ctx.lineWidth = (Number(stroke.size) || 3) * ratio;
+      stroke.points.forEach((point, index) => {
+        const x = point.x * canvas.width;
+        const y = point.y * canvas.height;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+
+    (node.sketchStrokes || []).forEach(drawStroke);
+    if (draftStroke) drawStroke(draftStroke);
+  }
+
   function createNodeElement(node, connectedPorts) {
     ensureNodeMeta(node);
     const meta = typeMeta(node.type);
@@ -4143,7 +4225,133 @@
       return input;
     };
 
-    if (node.type === "note") {
+    if (node.type === "sketch") {
+      const tools = document.createElement("div");
+      tools.className = "node-sketch-tools";
+
+      const color = document.createElement("input");
+      color.type = "color";
+      color.className = "node-sketch-color";
+      color.value = node.sketchColor || "#52677c";
+      color.title = "Colore tratto";
+      color.addEventListener("pointerdown", (event) => event.stopPropagation());
+      color.addEventListener("input", () => {
+        node.sketchColor = color.value;
+        markDirty();
+      });
+
+      const size = document.createElement("input");
+      size.type = "range";
+      size.className = "node-sketch-size";
+      size.min = "1";
+      size.max = "10";
+      size.value = String(node.sketchSize || 3);
+      size.title = "Spessore tratto";
+      size.addEventListener("pointerdown", (event) => event.stopPropagation());
+      size.addEventListener("input", () => {
+        node.sketchSize = Number(size.value) || 3;
+        markDirty();
+      });
+
+      const undoStroke = document.createElement("button");
+      undoStroke.type = "button";
+      undoStroke.textContent = "↶";
+      undoStroke.title = "Rimuovi ultimo tratto";
+      undoStroke.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+      const clearSketch = document.createElement("button");
+      clearSketch.type = "button";
+      clearSketch.textContent = "Pulisci";
+      clearSketch.title = "Pulisci Sketch";
+      clearSketch.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+      tools.append(color, size, undoStroke, clearSketch);
+
+      const canvasWrap = document.createElement("div");
+      canvasWrap.className = "node-sketch-paper";
+      const canvas = document.createElement("canvas");
+      canvas.className = "node-sketch-canvas";
+      canvas.setAttribute("aria-label", "Area disegno Sketch");
+      canvasWrap.appendChild(canvas);
+
+      let draft = null;
+      let pointerId = null;
+      const pointFromEvent = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
+          y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)))
+        };
+      };
+
+      canvas.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 && event.pointerType !== "pen" && event.pointerType !== "touch") return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isNodeSelected(node.id)) selectNode(node.id, null, true);
+        pointerId = event.pointerId;
+        if (canvas.setPointerCapture) canvas.setPointerCapture(pointerId);
+        draft = {
+          id: uid("stroke"),
+          color: node.sketchColor || "#52677c",
+          size: Number(node.sketchSize) || 3,
+          points: [pointFromEvent(event)]
+        };
+        broadcastActivity("Disegna nello Sketch " + (node.title || ""));
+      });
+
+      canvas.addEventListener("pointermove", (event) => {
+        if (!draft || event.pointerId !== pointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const point = pointFromEvent(event);
+        const previous = draft.points[draft.points.length - 1];
+        const dx = point.x - previous.x;
+        const dy = point.y - previous.y;
+        if (dx * dx + dy * dy < 0.00001) return;
+        draft.points.push(point);
+        renderSketchNodeCanvas(canvas, node, draft);
+      });
+
+      const finishStroke = (event) => {
+        if (!draft || event.pointerId !== pointerId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (canvas.releasePointerCapture) {
+          try { canvas.releasePointerCapture(pointerId); } catch (error) {}
+        }
+        if (draft.points.length > 1) {
+          node.sketchStrokes.push(draft);
+          markDirty();
+          broadcastActivity("Aggiorna Sketch " + (node.title || ""));
+        }
+        draft = null;
+        pointerId = null;
+        renderSketchNodeCanvas(canvas, node, null);
+      };
+      canvas.addEventListener("pointerup", finishStroke);
+      canvas.addEventListener("pointercancel", finishStroke);
+
+      undoStroke.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!node.sketchStrokes.length) return;
+        node.sketchStrokes.pop();
+        renderSketchNodeCanvas(canvas, node, null);
+        markDirty();
+      });
+
+      clearSketch.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!node.sketchStrokes.length) return;
+        if (!confirm("Pulire questo Sketch?")) return;
+        node.sketchStrokes = [];
+        renderSketchNodeCanvas(canvas, node, null);
+        markDirty();
+      });
+
+      body.append(tools, canvasWrap);
+      requestAnimationFrame(() => renderSketchNodeCanvas(canvas, node, null));
+    } else if (node.type === "note") {
       const noteEditor = document.createElement("textarea");
       noteEditor.className = "node-note-editor";
       noteEditor.value = node.description || "";
@@ -6476,144 +6684,6 @@
   }
 
 
-  function sketchData() {
-    if (!project.sketch || typeof project.sketch !== "object") project.sketch = { strokes: [] };
-    if (!Array.isArray(project.sketch.strokes)) project.sketch.strokes = [];
-    return project.sketch;
-  }
-
-  function resizeSketchCanvas() {
-    const canvas = $("sketchCanvas");
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const width = Math.max(1, Math.round(rect.width * ratio));
-    const height = Math.max(1, Math.round(rect.height * ratio));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
-    }
-    drawSketch();
-  }
-
-  function drawSketch() {
-    const canvas = $("sketchCanvas");
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    const drawStroke = (stroke) => {
-      if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
-      ctx.beginPath();
-      ctx.strokeStyle = stroke.color || "#9fb7ff";
-      ctx.lineWidth = (Number(stroke.size) || 3) * ((scaleX + scaleY) / 2);
-      stroke.points.forEach((point, index) => {
-        const x = point.x * rect.width * scaleX;
-        const y = point.y * rect.height * scaleY;
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    };
-
-    sketchData().strokes.forEach(drawStroke);
-    if (sketchDraft) drawStroke(sketchDraft);
-  }
-
-  function sketchPointFromEvent(event) {
-    const canvas = $("sketchCanvas");
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
-      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)))
-    };
-  }
-
-  function startSketchStroke(event) {
-    if (event.button !== 0 && event.pointerType !== "touch" && event.pointerType !== "pen") return;
-    event.preventDefault();
-    const canvas = $("sketchCanvas");
-    sketchPointerId = event.pointerId;
-    if (canvas.setPointerCapture) canvas.setPointerCapture(event.pointerId);
-    sketchDraft = {
-      id: uid("stroke"),
-      color: $("sketchColor").value || "#9fb7ff",
-      size: Number($("sketchSize").value) || 3,
-      points: [sketchPointFromEvent(event)]
-    };
-    broadcastActivity("Disegna nello Sketch");
-  }
-
-  function moveSketchStroke(event) {
-    if (!sketchDraft || event.pointerId !== sketchPointerId) return;
-    event.preventDefault();
-    const point = sketchPointFromEvent(event);
-    const previous = sketchDraft.points[sketchDraft.points.length - 1];
-    const dx = point.x - previous.x;
-    const dy = point.y - previous.y;
-    if (dx * dx + dy * dy < 0.000012) return;
-    sketchDraft.points.push(point);
-    drawSketch();
-  }
-
-  function endSketchStroke(event) {
-    if (!sketchDraft || event.pointerId !== sketchPointerId) return;
-    const canvas = $("sketchCanvas");
-    if (canvas.releasePointerCapture) {
-      try { canvas.releasePointerCapture(event.pointerId); } catch (error) {}
-    }
-    if (sketchDraft.points.length > 1) {
-      sketchData().strokes.push(sketchDraft);
-      markDirty();
-      broadcastActivity("Aggiunge uno sketch");
-    }
-    sketchDraft = null;
-    sketchPointerId = null;
-    drawSketch();
-  }
-
-  function undoSketchStroke() {
-    const sketch = sketchData();
-    if (!sketch.strokes.length) return;
-    sketch.strokes.pop();
-    drawSketch();
-    markDirty();
-    broadcastActivity("Annulla un tratto Sketch");
-  }
-
-  function clearSketch() {
-    const sketch = sketchData();
-    if (!sketch.strokes.length) return;
-    if (!confirm("Pulire tutto lo Sketch?")) return;
-    sketch.strokes = [];
-    drawSketch();
-    markDirty();
-    broadcastActivity("Pulisce lo Sketch");
-  }
-
-  function openSketchPanel() {
-    const panel = $("sketchPanel");
-    if (!panel) return;
-    const willOpen = !panel.classList.contains("open");
-    closeInterfaceSurfaces(willOpen ? panel : null);
-    panel.classList.toggle("open", willOpen);
-    panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
-    $("sketchTool").classList.toggle("active", willOpen);
-    if (willOpen) {
-      broadcastActivity("Apre lo Sketch");
-      requestAnimationFrame(resizeSketchCanvas);
-    }
-  }
-
   function inspectorField(labelText, control) {
     const label = document.createElement("label");
     label.className = "field-label inspector-dynamic-field";
@@ -7203,7 +7273,6 @@
     renderInspector();
     updateHistoryUI();
     setWorldTransform();
-    drawSketch();
   }
 
   function selectNode(id, event, forceSingle) {
@@ -7557,6 +7626,17 @@
         description: "",
         rows: [],
         pseudo: ""
+      },
+      sketch: {
+        title: "Sketch",
+        description: "",
+        rows: [],
+        pseudo: "",
+        extra: {
+          sketchStrokes: [],
+          sketchColor: "#52677c",
+          sketchSize: 3
+        }
       }
     };
 
@@ -7599,7 +7679,8 @@
 
       { type: "variable", category: "DATI", label: "Variabile", description: "Dato o stato condiviso", icon: "x" },
       { type: "ui", category: "INTERFACCIA & NOTE", label: "Interfaccia", description: "Text, button, HUD, menu…", icon: "▣" },
-      { type: "note", category: "INTERFACCIA & NOTE", label: "Nota", description: "Regola, idea o TODO", icon: "≡" }
+      { type: "note", category: "INTERFACCIA & NOTE", label: "Nota", description: "Regola, idea o TODO", icon: "≡" },
+      { type: "sketch", category: "INTERFACCIA & NOTE", label: "Sketch", description: "Riquadro da disegno per appunti visuali", icon: "✎" }
     ];
 
     UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
@@ -7945,14 +8026,7 @@
   });
   $("copyShareLink").addEventListener("click", copyCurrentShareLink);
 
-  $("sketchTool").addEventListener("click", openSketchPanel);
-  $("closeSketchPanel").addEventListener("click", () => closeInterfaceSurfaces());
-  $("sketchUndoStroke").addEventListener("click", undoSketchStroke);
-  $("sketchClear").addEventListener("click", clearSketch);
-  $("sketchCanvas").addEventListener("pointerdown", startSketchStroke);
-  $("sketchCanvas").addEventListener("pointermove", moveSketchStroke);
-  $("sketchCanvas").addEventListener("pointerup", endSketchStroke);
-  $("sketchCanvas").addEventListener("pointercancel", endSketchStroke);
+  $("sketchTool").addEventListener("click", () => addNode("sketch"));
 
   $("undoAction").addEventListener("click", undoProjectChange);
   $("redoAction").addEventListener("click", redoProjectChange);
@@ -8241,8 +8315,7 @@
         closeNewBlockPalette();
         return;
       }
-      if (($("sharePanel") && $("sharePanel").classList.contains("open")) ||
-          ($("sketchPanel") && $("sketchPanel").classList.contains("open"))) {
+      if ($("sharePanel") && $("sharePanel").classList.contains("open")) {
         closeInterfaceSurfaces();
         return;
       }
@@ -8387,7 +8460,6 @@
     reconcileWorkspacePanels();
     renderEdges();
     renderMinimap();
-    resizeSketchCanvas();
   });
 
   window.addEventListener("beforeunload", () => {
