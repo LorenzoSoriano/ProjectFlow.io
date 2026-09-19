@@ -514,6 +514,8 @@
     if (!ROW_META[item.kind]) item.kind = "variable";
     if (typeof item.label !== "string") item.label = "value";
     if (typeof item.value !== "string") item.value = "";
+    if (typeof item.uiExpanded !== "boolean") item.uiExpanded = false;
+    if (typeof item.memberComment !== "string") item.memberComment = "";
 
     if (item.kind === "variable" || item.kind === "property") {
       if (typeof item.access !== "string") item.access = item.kind === "property" ? "public" : "private";
@@ -1005,6 +1007,63 @@
       item.serialized
     ) {
       return "Unity non serializza Dictionary direttamente.";
+    }
+    return "";
+  }
+
+  function csharpParameterText(parameter) {
+    const mode = parameter.mode && parameter.mode !== "value" ? parameter.mode + " " : "";
+    return mode + parameterTypeKey(parameter) + " " + (parameter.name || parameter.label || "value");
+  }
+
+  function csharpMethodSignature(item) {
+    ensureFunctionSignature(item, item.access);
+    const returnType = methodReturnTypeKey(item);
+    const params = item.methodParameters.map(csharpParameterText).join(", ");
+    const prefix = item.methodKind === "coroutine" && returnType === "void" ? "IEnumerator" : returnType;
+    return (item.access || "private") + " " + prefix + " " + (item.label || "Method") + "(" + params + ")";
+  }
+
+  function csharpVariableSignature(item) {
+    const attribute = item.serialized && item.access !== "public" && item.collectionKind !== "dictionary"
+      ? "[SerializeField] "
+      : "";
+    const value = item.defaultValue ? " = " + item.defaultValue : "";
+    return attribute + (item.access || "private") + " " + variableTypeKey(item) + " " + (item.label || "value") + value + ";";
+  }
+
+  function csharpEventSignature(item) {
+    const payload = item.payloadType && item.payloadType !== "void" ? "<" + item.payloadType + ">" : "";
+    return (item.access || "public") + " UnityEvent" + payload + " " + (item.label || "OnEvent") + ";";
+  }
+
+  function memberCompactSignature(item) {
+    if (item.kind === "function") return csharpMethodSignature(item);
+    if (item.kind === "variable" || item.kind === "property") return csharpVariableSignature(item);
+    if (item.kind === "unityEvent") return csharpEventSignature(item);
+    if (item.kind === "component") {
+      return item.componentSource === "script"
+        ? item.componentType + " : MonoBehaviour"
+        : item.componentType;
+    }
+    return (item.label || item.kind || "member") + (item.value ? " : " + item.value : "");
+  }
+
+  function memberCompactComment(item) {
+    if (item.kind === "function") return item.methodDescription || "";
+    if (item.memberComment) return item.memberComment;
+    if (item.kind === "component") {
+      return (item.componentSource === "script" ? "Custom script" : "Unity component") +
+        " · " + componentCategoryLabel(item.componentCategory);
+    }
+    if (item.kind === "variable" || item.kind === "property") {
+      const parts = [];
+      if (item.referenceMode && item.referenceMode !== "value") {
+        parts.push(REFERENCE_MODE_LABELS[item.referenceMode] || item.referenceMode);
+      }
+      if (item.collectionKind === "list" && item.listInitialCount > 0) parts.push("initial " + item.listInitialCount);
+      if (item.collectionKind === "array" && item.arrayLength > 0) parts.push("length " + item.arrayLength);
+      return parts.join(" · ");
     }
     return "";
   }
@@ -1609,7 +1668,6 @@
 
     const header = document.createElement("div");
     header.className = "node-header";
-    header.appendChild(makePort(node.id, "__node__", "in", connectedPorts));
 
     const typeDot = document.createElement("span");
     typeDot.className = "node-type-dot";
@@ -1671,7 +1729,7 @@
       showToast("Blocco eliminato");
     });
 
-    header.append(typeDot, heading, more, removeNodeButton, makePort(node.id, "__node__", "out", connectedPorts));
+    header.append(typeDot, heading, more, removeNodeButton);
 
     header.addEventListener("pointerdown", (event) => {
       if (
@@ -5068,8 +5126,9 @@
     }
 
     event.preventDefault();
-    const factor = event.deltaY < 0 ? 1.08 : 0.92;
-    setZoom(view.scale * factor, event.clientX, event.clientY);
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const step = event.shiftKey ? 0.1 : 0.05;
+    setZoom(view.scale + direction * step, event.clientX, event.clientY);
   }, { passive: false });
 
   function startMarquee(event) {
