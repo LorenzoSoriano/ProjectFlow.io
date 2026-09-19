@@ -6791,3 +6791,61 @@ body,
     width:min(310px,calc(100vw - 24px));
   }
 }
+
+
+/* v2.14 — reliable group border dragging and title editing */
+.group-layer{
+  z-index:4;
+  pointer-events:none;
+}
+.graph-group{
+  --group-drag-hit:18px;
+  pointer-events:none;
+}
+.graph-group-header{
+  z-index:8;
+  height:34px;
+  pointer-events:auto;
+  cursor:text;
+  border-radius:8px;
+}
+.graph-group-header:hover{
+  background:rgba(20,28,38,.36);
+}
+.graph-group-title{
+  position:relative;
+  z-index:9;
+  pointer-events:auto;
+  cursor:text!important;
+  user-select:text;
+  -webkit-user-select:text;
+}
+.graph-group-title:focus{
+  border-color:rgba(91,155,196,.72);
+  background:rgba(10,16,23,.9);
+  box-shadow:0 0 0 2px rgba(91,155,196,.12);
+}
+.graph-group-drag-zone{
+  z-index:7;
+  pointer-events:auto!important;
+  cursor:grab;
+}
+.graph-group-drag-zone:active{
+  cursor:grabbing;
+}
+.graph-group-drag-zone.top,
+.graph-group-drag-zone.bottom{
+  height:18px;
+}
+.graph-group-drag-zone.left,
+.graph-group-drag-zone.right{
+  width:18px;
+}
+.graph-group.selected .graph-group-drag-zone:hover{
+  background:rgba(91,155,196,.13);
+  box-shadow:0 0 0 1px rgba(91,155,196,.52);
+}
+/* Keep collaborator cursors above group controls. */
+.collaboration-layer{
+  z-index:6;
+}
