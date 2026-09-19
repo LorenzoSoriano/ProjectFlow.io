@@ -2265,6 +2265,488 @@
     if (anchor === $("editorAuthButton")) anchor.setAttribute("aria-expanded", "true");
   }
 
+
+  function inviteDocumentRef(email, projectId) {
+    return cloudState.api.doc(
+      cloudState.db,
+      "shareInvites",
+      normalizeShareEmail(email),
+      "projects",
+      projectId
+    );
+  }
+
+  function ownerInviteDocumentRef(projectId, email) {
+    return cloudState.api.doc(
+      cloudState.db,
+      "sharedProjects",
+      projectId,
+      "invites",
+      encodeURIComponent(normalizeShareEmail(email))
+    );
+  }
+
+  async function refreshSharePanelMeta() {
+    const record = projectRecordById(currentProjectId);
+    if (!cloudState.user || !record || !cloudState.api || !cloudState.db) {
+      cloudState.sharedMeta = null;
+      renderSharePanel();
+      return;
+    }
+
+    if (!record.sharedProjectId) {
+      cloudState.sharedMeta = {
+        projectId: "",
+        ownerId: cloudState.user.uid,
+        ownerName: cloudState.user.displayName || "",
+        ownerEmail: normalizeShareEmail(cloudState.user.email),
+        invites: []
+      };
+      renderSharePanel();
+      return;
+    }
+
+    try {
+      const snapshot = await cloudState.api.getDoc(sharedProjectRef(record.sharedProjectId));
+      if (!snapshot.exists()) {
+        cloudState.sharedMeta = null;
+        renderSharePanel();
+        return;
+      }
+
+      const value = snapshot.data() || {};
+      const meta = {
+        projectId: snapshot.id,
+        ownerId: value.ownerId || "",
+        ownerName: value.ownerName || "",
+        ownerEmail: value.ownerEmail || "",
+        invites: []
+      };
+
+      if (meta.ownerId === cloudState.user.uid) {
+        const inviteCollection = cloudState.api.collection(
+          cloudState.db,
+          "sharedProjects",
+          snapshot.id,
+          "invites"
+        );
+        const inviteSnapshot = await cloudState.api.getDocs(inviteCollection);
+        inviteSnapshot.forEach((inviteDoc) => {
+          const invite = inviteDoc.data() || {};
+          if (invite.email) meta.invites.push({
+            email: normalizeShareEmail(invite.email),
+            createdAt: Number(invite.createdAt) || 0
+          });
+        });
+        meta.invites.sort((a, b) => a.email.localeCompare(b.email));
+      }
+
+      cloudState.sharedMeta = meta;
+      renderSharePanel();
+    } catch (error) {
+      console.warn("ProjectFlow: impossibile leggere i dati di condivisione.", error);
+      renderSharePanel();
+    }
+  }
+
+  function renderSharePanel() {
+    const notice = $("shareLoginNotice");
+    const controls = $("shareControls");
+    const ownerCopy = $("shareOwnerCopy");
+    const inviteField = $("shareInviteField");
+    const memberList = $("shareMemberList");
+    const copyButton = $("copyShareLink");
+    if (!notice || !controls || !memberList) return;
+
+    const record = projectRecordById(currentProjectId);
+    const loggedIn = !!cloudState.user;
+    notice.hidden = loggedIn;
+    controls.hidden = !loggedIn;
+
+    if (!loggedIn) {
+      memberList.innerHTML = "";
+      return;
+    }
+
+    const meta = cloudState.sharedMeta || {
+      projectId: record && record.sharedProjectId || "",
+      ownerId: record && record.ownerId || cloudState.user.uid,
+      ownerName: record && record.ownerName || cloudState.user.displayName || "",
+      ownerEmail: record && record.ownerEmail || normalizeShareEmail(cloudState.user.email),
+      invites: []
+    };
+    const isOwner = !meta.ownerId || meta.ownerId === cloudState.user.uid;
+
+    if (ownerCopy) {
+      ownerCopy.textContent = isOwner
+        ? (meta.projectId
+          ? "Sei il proprietario. Gli inviti restano validi anche quando chiudi ProjectFlow."
+          : "Il progetto non è ancora condiviso. Il primo invito creerà lo spazio collaborativo persistente.")
+        : "Progetto di " + (meta.ownerName || meta.ownerEmail || "un altro utente") + ". Hai accesso come editor.";
+    }
+
+    if (inviteField) inviteField.hidden = !isOwner;
+    if (copyButton) copyButton.hidden = !isOwner;
+
+    memberList.innerHTML = "";
+    const ownerRow = document.createElement("div");
+    ownerRow.className = "share-member";
+    const ownerAvatar = document.createElement("span");
+    ownerAvatar.className = "share-member-avatar";
+    ownerAvatar.textContent = (meta.ownerName || meta.ownerEmail || "P").trim().charAt(0).toUpperCase();
+    const ownerText = document.createElement("span");
+    ownerText.className = "share-member-copy";
+    const ownerStrong = document.createElement("strong");
+    ownerStrong.textContent = meta.ownerName || "Proprietario";
+    const ownerSmall = document.createElement("small");
+    ownerSmall.textContent = (meta.ownerEmail || "") + " · proprietario";
+    ownerText.append(ownerStrong, ownerSmall);
+    ownerRow.append(ownerAvatar, ownerText);
+    memberList.appendChild(ownerRow);
+
+    if (isOwner) {
+      (meta.invites || []).forEach((invite) => {
+        const row = document.createElement("div");
+        row.className = "share-member";
+
+        const avatar = document.createElement("span");
+        avatar.className = "share-member-avatar";
+        avatar.textContent = invite.email.charAt(0).toUpperCase();
+
+        const copy = document.createElement("span");
+        copy.className = "share-member-copy";
+        const strong = document.createElement("strong");
+        strong.textContent = invite.email;
+        const small = document.createElement("small");
+        small.textContent = "Editor invitato";
+        copy.append(strong, small);
+
+        const revoke = document.createElement("button");
+        revoke.type = "button";
+        revoke.textContent = "Revoca";
+        revoke.addEventListener("click", () => revokeCollaborator(invite.email));
+
+        row.append(avatar, copy, revoke);
+        memberList.appendChild(row);
+      });
+    } else {
+      const self = document.createElement("div");
+      self.className = "share-member";
+      const avatar = document.createElement("span");
+      avatar.className = "share-member-avatar";
+      avatar.textContent = (cloudState.user.displayName || cloudState.user.email || "T").trim().charAt(0).toUpperCase();
+      const copy = document.createElement("span");
+      copy.className = "share-member-copy";
+      const strong = document.createElement("strong");
+      strong.textContent = cloudState.user.displayName || "Tu";
+      const small = document.createElement("small");
+      small.textContent = normalizeShareEmail(cloudState.user.email) + " · editor";
+      copy.append(strong, small);
+      self.append(avatar, copy);
+      memberList.appendChild(self);
+    }
+  }
+
+  async function inviteCollaborator(emailValue) {
+    const record = projectRecordById(currentProjectId);
+    const email = normalizeShareEmail(emailValue);
+    if (!record || !cloudState.user) {
+      showToast("Accedi con Google per condividere");
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      showToast("Inserisci un'email valida");
+      return;
+    }
+    if (email === normalizeShareEmail(cloudState.user.email)) {
+      showToast("Sei già il proprietario del progetto");
+      return;
+    }
+
+    try {
+      const ref = await ensureSharedProject(record);
+      if (!ref) return;
+      if (record.ownerId && record.ownerId !== cloudState.user.uid) {
+        showToast("Solo il proprietario può invitare altri utenti");
+        return;
+      }
+
+      const invitePayload = {
+        projectId: record.sharedProjectId,
+        email: email,
+        ownerId: cloudState.user.uid,
+        ownerName: cloudState.user.displayName || "",
+        ownerEmail: normalizeShareEmail(cloudState.user.email),
+        projectName: record.name,
+        createdAt: Date.now()
+      };
+
+      await Promise.all([
+        cloudState.api.setDoc(inviteDocumentRef(email, record.sharedProjectId), invitePayload, { merge: true }),
+        cloudState.api.setDoc(ownerInviteDocumentRef(record.sharedProjectId, email), invitePayload, { merge: true })
+      ]);
+
+      record.sharedRole = "owner";
+      record.ownerId = cloudState.user.uid;
+      record.ownerName = cloudState.user.displayName || "";
+      record.ownerEmail = normalizeShareEmail(cloudState.user.email);
+      persistProjectLibrary();
+      await refreshSharePanelMeta();
+      startSharedProjectSession(record);
+      showToast("Invito salvato per " + email);
+    } catch (error) {
+      console.warn("ProjectFlow: invito non riuscito.", error);
+      showToast("Invito non riuscito");
+    }
+  }
+
+  async function revokeCollaborator(emailValue) {
+    const record = projectRecordById(currentProjectId);
+    const email = normalizeShareEmail(emailValue);
+    if (!record || !record.sharedProjectId || !cloudState.user) return;
+    if (record.ownerId && record.ownerId !== cloudState.user.uid) return;
+
+    try {
+      await Promise.all([
+        cloudState.api.deleteDoc(inviteDocumentRef(email, record.sharedProjectId)),
+        cloudState.api.deleteDoc(ownerInviteDocumentRef(record.sharedProjectId, email))
+      ]);
+      await refreshSharePanelMeta();
+      showToast("Accesso revocato a " + email);
+    } catch (error) {
+      console.warn("ProjectFlow: revoca non riuscita.", error);
+      showToast("Revoca non riuscita");
+    }
+  }
+
+  async function copyCurrentShareLink() {
+    const record = projectRecordById(currentProjectId);
+    if (!record || !cloudState.user) {
+      showToast("Accedi con Google per condividere");
+      return;
+    }
+
+    try {
+      await ensureSharedProject(record);
+      const url = new URL(window.location.href);
+      url.searchParams.set("shared", record.sharedProjectId);
+      url.hash = "";
+      await navigator.clipboard.writeText(url.toString());
+      await refreshSharePanelMeta();
+      showToast("Link copiato");
+    } catch (error) {
+      console.warn("ProjectFlow: copia link non riuscita.", error);
+      showToast("Impossibile copiare il link");
+    }
+  }
+
+  function openSharePanel() {
+    const panel = $("sharePanel");
+    if (!panel) return;
+    const willOpen = !panel.classList.contains("open");
+    closeInterfaceSurfaces(willOpen ? panel : null);
+    panel.classList.toggle("open", willOpen);
+    panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
+    $("shareProjectButton").setAttribute("aria-expanded", willOpen ? "true" : "false");
+    if (willOpen) refreshSharePanelMeta();
+  }
+
+  function renderRemotePresence() {
+    if (collaborationLayer) collaborationLayer.innerHTML = "";
+    const toolbar = $("collabPresence");
+    if (toolbar) {
+      toolbar.innerHTML = "";
+      toolbar.hidden = true;
+    }
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+
+    const now = Date.now();
+    const active = Array.from(cloudState.remotePresence.values())
+      .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry.updatedAt || 0) < 45000);
+
+    active.forEach((entry) => {
+      if (collaborationLayer && entry.cursor && typeof entry.cursor.x === "number" && typeof entry.cursor.y === "number") {
+        const cursor = document.createElement("div");
+        cursor.className = "remote-cursor";
+        cursor.style.left = entry.cursor.x + "px";
+        cursor.style.top = entry.cursor.y + "px";
+
+        const pointer = document.createElement("span");
+        pointer.className = "remote-cursor-pointer";
+        const label = document.createElement("span");
+        label.className = "remote-cursor-label";
+        label.textContent = entry.name || entry.email || "Collaboratore";
+        const activity = document.createElement("small");
+        activity.textContent = entry.activity || "Attivo";
+        label.appendChild(activity);
+        cursor.append(pointer, label);
+        collaborationLayer.appendChild(cursor);
+      }
+
+      if (toolbar) {
+        const avatar = document.createElement("span");
+        avatar.className = "collab-presence-avatar";
+        avatar.textContent = (entry.name || entry.email || "?").trim().charAt(0).toUpperCase();
+        avatar.title = (entry.name || entry.email || "Collaboratore") + " · " + (entry.activity || "Attivo");
+        toolbar.appendChild(avatar);
+      }
+    });
+
+    if (toolbar) toolbar.hidden = active.length === 0;
+  }
+
+  async function writePresenceNow() {
+    if (!cloudState.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    clearTimeout(cloudState.presenceWriteTimer);
+    cloudState.presenceWriteTimer = null;
+    cloudState.presenceLastWrite = Date.now();
+
+    try {
+      const ref = cloudState.api.doc(
+        cloudState.db,
+        "sharedProjects",
+        cloudState.sharedProjectId,
+        "presence",
+        cloudState.user.uid
+      );
+      await cloudState.api.setDoc(ref, {
+        uid: cloudState.user.uid,
+        name: cloudState.user.displayName || "",
+        email: normalizeShareEmail(cloudState.user.email),
+        photoURL: cloudState.user.photoURL || "",
+        cursor: cloudState.presenceCursor,
+        activity: cloudState.presenceActivity || "Attivo",
+        updatedAt: Date.now()
+      }, { merge: true });
+    } catch (error) {
+      console.warn("ProjectFlow: presenza realtime non disponibile.", error);
+    }
+  }
+
+  function queuePresenceWrite(immediate) {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    const elapsed = Date.now() - cloudState.presenceLastWrite;
+    if (immediate || elapsed >= 250) {
+      writePresenceNow();
+      return;
+    }
+    if (cloudState.presenceWriteTimer) return;
+    cloudState.presenceWriteTimer = setTimeout(writePresenceNow, Math.max(30, 250 - elapsed));
+  }
+
+  function broadcastActivity(text) {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    cloudState.presenceActivity = String(text || "Attivo").slice(0, 80);
+    queuePresenceWrite(false);
+  }
+
+  function stopSharedProjectSession() {
+    const previousId = cloudState.sharedProjectId;
+    if (cloudState.sharedProjectUnsubscribe) cloudState.sharedProjectUnsubscribe();
+    if (cloudState.presenceUnsubscribe) cloudState.presenceUnsubscribe();
+    clearInterval(cloudState.presenceHeartbeat);
+    clearTimeout(cloudState.presenceWriteTimer);
+
+    if (previousId && cloudState.user && cloudState.api && cloudState.db) {
+      try {
+        const ref = cloudState.api.doc(
+          cloudState.db,
+          "sharedProjects",
+          previousId,
+          "presence",
+          cloudState.user.uid
+        );
+        cloudState.api.deleteDoc(ref).catch(() => {});
+      } catch (error) {}
+    }
+
+    cloudState.sharedProjectUnsubscribe = null;
+    cloudState.presenceUnsubscribe = null;
+    cloudState.presenceHeartbeat = null;
+    cloudState.presenceWriteTimer = null;
+    cloudState.sharedProjectId = "";
+    cloudState.remotePresence = new Map();
+    cloudState.presenceCursor = null;
+    cloudState.presenceActivity = "Attivo";
+    renderRemotePresence();
+  }
+
+  function startSharedProjectSession(record) {
+    if (!record || !record.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) {
+      stopSharedProjectSession();
+      return;
+    }
+
+    if (cloudState.sharedProjectId === record.sharedProjectId && cloudState.sharedProjectUnsubscribe) return;
+    stopSharedProjectSession();
+    cloudState.sharedProjectId = record.sharedProjectId;
+    cloudState.presenceActivity = "Nel progetto";
+
+    const ref = sharedProjectRef(record.sharedProjectId);
+    cloudState.sharedProjectUnsubscribe = cloudState.api.onSnapshot(ref, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const value = snapshot.data() || {};
+      cloudState.sharedMeta = Object.assign({}, cloudState.sharedMeta || {}, {
+        projectId: snapshot.id,
+        ownerId: value.ownerId || "",
+        ownerName: value.ownerName || "",
+        ownerEmail: value.ownerEmail || ""
+      });
+
+      if (!value.data || value.updatedBy === cloudState.user.uid) {
+        renderSharePanel();
+        return;
+      }
+
+      const localRecord = projectRecordById(record.id);
+      cloudState.applyingRemote = true;
+      try {
+        project = normalizeProject(cloneProjectData(value.data));
+        if (localRecord) {
+          localRecord.name = value.name || project.name || localRecord.name;
+          localRecord.updatedAt = Number(value.updatedAt) || Date.now();
+          localRecord.data = normalizeProject(cloneProjectData(project));
+          localRecord.sharedProjectId = snapshot.id;
+          localRecord.ownerId = value.ownerId || localRecord.ownerId || "";
+          localRecord.ownerName = value.ownerName || localRecord.ownerName || "";
+          localRecord.ownerEmail = value.ownerEmail || localRecord.ownerEmail || "";
+        }
+        persistProjectLibrary();
+        $("projectName").value = value.name || project.name || "Untitled Flow";
+        render();
+        resetHistory();
+        drawSketch();
+      } finally {
+        cloudState.applyingRemote = false;
+      }
+    }, (error) => {
+      console.warn("ProjectFlow: sessione condivisa interrotta.", error);
+      showToast("Accesso collaborativo interrotto");
+      stopSharedProjectSession();
+    });
+
+    const presenceCollection = cloudState.api.collection(
+      cloudState.db,
+      "sharedProjects",
+      record.sharedProjectId,
+      "presence"
+    );
+    cloudState.presenceUnsubscribe = cloudState.api.onSnapshot(presenceCollection, (snapshot) => {
+      const next = new Map();
+      snapshot.forEach((docSnapshot) => {
+        const value = docSnapshot.data() || {};
+        if (value.uid) next.set(value.uid, value);
+      });
+      cloudState.remotePresence = next;
+      renderRemotePresence();
+    }, (error) => {
+      console.warn("ProjectFlow: cursori collaborativi non disponibili.", error);
+    });
+
+    writePresenceNow();
+    cloudState.presenceHeartbeat = setInterval(writePresenceNow, 12000);
+  }
+
   async function mergeCloudLibrary() {
     if (!cloudState.user || !cloudState.api || !cloudState.db) return;
 
