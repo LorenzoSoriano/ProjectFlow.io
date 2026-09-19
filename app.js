@@ -7105,15 +7105,30 @@
       return;
     }
 
+    // Read the real rendered size once per node. The minimap must reflect
+    // tall classes, expanded content and freely resized Sketch nodes.
+    const nodeBounds = project.nodes.map((node) => {
+      const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      const fallbackWidth = nodeWidthFor(node);
+      const fallbackHeight = node.type === "sketch"
+        ? Math.max(260, Number(node.sketchHeight || 320) + 95)
+        : 220;
+
+      return {
+        node: node,
+        x: node.x,
+        y: node.y,
+        width: element && element.offsetWidth > 0 ? element.offsetWidth : fallbackWidth,
+        height: element && element.offsetHeight > 0 ? element.offsetHeight : fallbackHeight
+      };
+    });
+
     const groupBounds = (project.groups || []).map(groupWorldBounds).filter(Boolean);
     const padding = 90;
-    const minX = Math.min.apply(null, project.nodes.map((node) => node.x).concat(groupBounds.map((bounds) => bounds.x))) - padding;
-    const minY = Math.min.apply(null, project.nodes.map((node) => node.y).concat(groupBounds.map((bounds) => bounds.y))) - padding;
-    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)).concat(groupBounds.map((bounds) => bounds.x + bounds.width))) + padding;
-    const maxY = Math.max.apply(null, project.nodes.map((node) => {
-      const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
-      return node.y + (element ? element.offsetHeight : 220);
-    }).concat(groupBounds.map((bounds) => bounds.y + bounds.height))) + padding;
+    const minX = Math.min.apply(null, nodeBounds.map((bounds) => bounds.x).concat(groupBounds.map((bounds) => bounds.x))) - padding;
+    const minY = Math.min.apply(null, nodeBounds.map((bounds) => bounds.y).concat(groupBounds.map((bounds) => bounds.y))) - padding;
+    const maxX = Math.max.apply(null, nodeBounds.map((bounds) => bounds.x + bounds.width).concat(groupBounds.map((bounds) => bounds.x + bounds.width))) + padding;
+    const maxY = Math.max.apply(null, nodeBounds.map((bounds) => bounds.y + bounds.height).concat(groupBounds.map((bounds) => bounds.y + bounds.height))) + padding;
     const width = Math.max(1, maxX - minX);
     const height = Math.max(1, maxY - minY);
     const scale = Math.min(170 / width, 94 / height);
@@ -7128,8 +7143,8 @@
       const groupRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       groupRect.setAttribute("x", offsetX + (bounds.x - minX) * scale);
       groupRect.setAttribute("y", offsetY + (bounds.y - minY) * scale);
-      groupRect.setAttribute("width", Math.max(7, bounds.width * scale));
-      groupRect.setAttribute("height", Math.max(5, bounds.height * scale));
+      groupRect.setAttribute("width", Math.max(2, bounds.width * scale));
+      groupRect.setAttribute("height", Math.max(2, bounds.height * scale));
       groupRect.setAttribute("rx", "3");
       groupRect.setAttribute("fill", "rgba(63,127,166,.08)");
       groupRect.setAttribute("stroke", selectedGroupId === group.id ? "#5f9fbe" : "#46556d");
@@ -7137,12 +7152,13 @@
       svg.appendChild(groupRect);
     });
 
-    project.nodes.forEach((node) => {
+    nodeBounds.forEach((bounds) => {
+      const node = bounds.node;
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.setAttribute("x", offsetX + (node.x - minX) * scale);
-      rect.setAttribute("y", offsetY + (node.y - minY) * scale);
-      rect.setAttribute("width", Math.max(6, nodeWidthFor(node) * scale));
-      rect.setAttribute("height", Math.max(4, 95 * scale));
+      rect.setAttribute("x", offsetX + (bounds.x - minX) * scale);
+      rect.setAttribute("y", offsetY + (bounds.y - minY) * scale);
+      rect.setAttribute("width", Math.max(2, bounds.width * scale));
+      rect.setAttribute("height", Math.max(2, bounds.height * scale));
       rect.setAttribute("rx", "2");
       rect.setAttribute("class", "minimap-node" + (isNodeSelected(node.id) ? " selected" : ""));
       svg.appendChild(rect);
@@ -7196,11 +7212,11 @@
         });
     }
 
-    const bounds = viewport.getBoundingClientRect();
+    const viewportBounds = viewport.getBoundingClientRect();
     const worldLeft = -view.x / view.scale;
     const worldTop = -view.y / view.scale;
-    const worldWidth = bounds.width / view.scale;
-    const worldHeight = bounds.height / view.scale;
+    const worldWidth = viewportBounds.width / view.scale;
+    const worldHeight = viewportBounds.height / view.scale;
     const visible = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     visible.setAttribute("x", offsetX + (worldLeft - minX) * scale);
     visible.setAttribute("y", offsetY + (worldTop - minY) * scale);
