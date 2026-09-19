@@ -558,6 +558,7 @@
     event.stopPropagation();
     junctionDrag = { edgeId: edgeId, pointId: pointId };
     selectedEdgeId = edgeId;
+    selectedNodeIds.clear();
     selectedNodeId = null;
     window.addEventListener("pointermove", moveJunction);
     window.addEventListener("pointerup", endJunctionDrag, { once: true });
@@ -1230,6 +1231,7 @@
     if (!confirm("Ripristinare il flow di esempio? Il progetto locale corrente verrà sostituito.")) return;
     project = sampleProject();
     $("projectName").value = project.name;
+    selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
     pendingPort = null;
