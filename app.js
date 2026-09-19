@@ -665,103 +665,287 @@
   }
 
   function sampleProject() {
-    const doorId = row("doorId", "int", "variable");
-    const requiredKey = row("requiredKeyId", "int", "variable");
-    const open = row("open", "bool = false", "property");
-    const tryOpen = row("TryOpen()", "returns bool", "function");
+    const itemTypeValues = [
+      enumValue("Consumable", 0),
+      enumValue("Weapon", 1),
+      enumValue("Armor", 2),
+      enumValue("Material", 3),
+      enumValue("Quest", 4),
+      enumValue("KeyItem", 5),
+      enumValue("Currency", 6),
+      enumValue("Misc", 7)
+    ];
+    const rarityValues = [
+      enumValue("Common", 0),
+      enumValue("Uncommon", 1),
+      enumValue("Rare", 2),
+      enumValue("Epic", 3),
+      enumValue("Legendary", 4)
+    ];
 
-    const keyId = row("keyId", "int", "variable");
-    const compareA = row("doorId", "input", "input");
-    const compareB = row("keyId", "input", "input");
-    const compareResult = row("sameId", "bool", "output");
+    const itemDataRows = [
+      variableRow("id", "string", "public"),
+      variableRow("displayName", "string", "public"),
+      variableRow("type", "ItemType", "public"),
+      variableRow("rarity", "ItemRarity", "public"),
+      variableRow("maxStack", "int", "public"),
+      variableRow("icon", "Texture2D", "public"),
+      variableRow("value", "int", "public")
+    ];
+    itemDataRows[4].defaultValue = "1";
 
-    const score = row("score", "int", "variable");
-    const multiplier = row("multiplier", "float", "variable");
-    const calc = row("CalculateScore()", "returns int", "function");
+    const slotItem = variableRow("item", "ItemData", "public");
+    const slotQuantity = variableRow("quantity", "int", "public");
+    const slotIsEmpty = methodRow("IsEmpty", "bool", "custom");
+    slotIsEmpty.access = "public";
+    slotIsEmpty.methodDescription = "True quando lo slot non contiene un item o la quantità è zero.";
+    slotIsEmpty.methodLogic = "return item == null || quantity <= 0";
+    const slotCanStack = methodRow("CanStack", "bool", "custom");
+    slotCanStack.access = "public";
+    slotCanStack.methodParameters = [functionParameter("other", "ItemData")];
+    slotCanStack.methodDescription = "Verifica se l'item può essere aggiunto allo stack esistente.";
+    slotCanStack.methodLogic = "return item == other && quantity < item.maxStack";
+    syncLegacyParameters(slotCanStack);
 
-    const calcInput = row("baseScore", "int", "input");
-    const calcMultiplier = row("multiplier", "float", "input");
-    const calcOutput = row("result", "int", "output");
+    const inventorySlots = variableRow("slots", "InventorySlot", "private");
+    inventorySlots.collectionKind = "list";
+    inventorySlots.serialized = true;
+    inventorySlots.listInitialCount = 12;
+    const inventoryCapacity = variableRow("capacity", "int", "private");
+    inventoryCapacity.serialized = true;
+    inventoryCapacity.defaultValue = "24";
 
-    const uiText = row("text", "string", "property");
+    const addItem = methodRow("AddItem", "bool", "custom");
+    addItem.access = "public";
+    addItem.methodParameters = [
+      functionParameter("item", "ItemData"),
+      functionParameter("amount", "int")
+    ];
+    addItem.methodDescription = "Aggiunge quantità allo stack compatibile o crea un nuovo slot se c'è capacità.";
+    addItem.methodLogic = "find compatible stack\nif found: increase quantity\nelse if free slot: create slot\nraise OnInventoryChanged\nreturn success";
+    addItem.returnName = "added";
+    syncLegacyParameters(addItem);
+
+    const removeItem = methodRow("RemoveItem", "bool", "custom");
+    removeItem.access = "public";
+    removeItem.methodParameters = [
+      functionParameter("item", "ItemData"),
+      functionParameter("amount", "int")
+    ];
+    removeItem.methodDescription = "Rimuove una quantità e libera lo slot quando raggiunge zero.";
+    removeItem.methodLogic = "find matching slots\nsubtract amount\nclear empty slots\nraise OnInventoryChanged";
+    removeItem.returnName = "removed";
+    syncLegacyParameters(removeItem);
+
+    const containsItem = methodRow("Contains", "bool", "custom");
+    containsItem.access = "public";
+    containsItem.methodParameters = [
+      functionParameter("item", "ItemData"),
+      functionParameter("amount", "int")
+    ];
+    containsItem.methodDescription = "Controlla se l'inventario contiene almeno la quantità richiesta.";
+    containsItem.methodLogic = "sum quantities for item\nreturn total >= amount";
+    containsItem.returnName = "contains";
+    syncLegacyParameters(containsItem);
+
+    const inventoryChanged = eventRow("OnInventoryChanged", "void");
+
+    const dbItems = variableRow("itemsById", "ItemData", "private");
+    dbItems.collectionKind = "dictionary";
+    dbItems.dictionaryKeyType = "string";
+    const getById = methodRow("GetById", "ItemData", "custom");
+    getById.access = "public";
+    getById.methodParameters = [functionParameter("id", "string")];
+    getById.methodDescription = "Risolve un ItemData a partire dal suo identificatore persistente.";
+    getById.methodLogic = "return itemsById.TryGetValue(id)";
+    getById.returnName = "item";
+    syncLegacyParameters(getById);
+
+    const uiInventoryRef = variableRow("inventory", "Inventory", "private");
+    uiInventoryRef.serialized = true;
+    uiInventoryRef.referenceMode = "inspector";
+    const refreshMethod = methodRow("Refresh", "void", "custom");
+    refreshMethod.access = "public";
+    refreshMethod.methodDescription = "Ridisegna gli slot UI a partire dallo stato corrente dell'inventario.";
+    refreshMethod.methodLogic = "for each visible slot\nbind item icon, quantity and rarity\nclear unused views";
+
+    const playerInventoryComponent = componentRow("Inventory", "scripts", "script", {
+      componentClassId: "inventory",
+      locked: false
+    });
+
+    const pickupItem = variableRow("item", "ItemData", "private");
+    pickupItem.serialized = true;
+    pickupItem.referenceMode = "inspector";
+    const pickupAmount = variableRow("amount", "int", "private");
+    pickupAmount.serialized = true;
+    pickupAmount.defaultValue = "1";
+
+    const pickupEventOut = row("Next", "", "flowOut");
+    const pickupDataOut = row("item", "ItemData", "output");
+    const canAddIn = row("Enter", "", "flowIn");
+    const canAddItemIn = row("item", "ItemData", "input");
+    const canAddTrue = row("True", "", "flowOut");
+    const canAddFalse = row("False", "", "flowOut");
+    const canAddResult = row("canAdd", "bool", "output");
+    const addFlowIn = row("Enter", "", "flowIn");
+    const addFlowOut = row("Next", "", "flowOut");
+    const addItemIn = row("item", "ItemData", "input");
+    const refreshFlowIn = row("Enter", "", "flowIn");
+    const refreshFlowOut = row("Done", "", "flowOut");
 
     const nodes = [
       {
-        id: "door",
-        type: "object",
-        title: "Door",
-        description: "Porta interattiva. Si apre solo quando la chiave possiede lo stesso ID.",
-        pseudo: "if key.id == door.id\n  open = true\nelse\n  open = false",
-        x: 180, y: 170,
-        rows: [doorId, requiredKey, open, tryOpen]
-      },
-      {
-        id: "key",
-        type: "object",
-        title: "Key",
-        description: "Oggetto raccoglibile che espone l'identificativo della chiave.",
-        pseudo: "keyId = 3",
-        x: 180, y: 500,
-        rows: [keyId]
-      },
-      {
-        id: "compare",
-        type: "condition",
-        title: "ID Match?",
-        description: "Confronto concettuale tra porta e chiave.",
-        pseudo: "doorId == keyId",
-        x: 590, y: 310,
-        rows: [compareA, compareB, compareResult]
-      },
-      {
-        id: "game_manager",
-        type: "class",
-        title: "GameManager",
-        description: "Mantiene lo stato della partita e calcola il punteggio corrente.",
-        pseudo: "score = collected * multiplier",
-        x: 1030, y: 150,
-        rows: [score, multiplier, calc]
-      },
-      {
-        id: "calculate_score",
-        type: "function",
-        title: "Calculate Score",
-        description: "Esempio di funzione separata dal GameManager per rendere esplicito il flow.",
-        pseudo: "result = baseScore * multiplier\nreturn result",
-        x: 1030, y: 475,
-        rows: [calcInput, calcMultiplier, calcOutput]
-      },
-      {
-        id: "score_text",
-        type: "ui",
-        title: "Score Text",
-        description: "Elemento UI che visualizza il valore finale calcolato.",
-        pseudo: "Text = \"Score: \" + result",
-        x: 1450, y: 430,
-        rows: [uiText]
-      },
-      {
-        id: "note_intro",
-        type: "note",
-        title: "Concept first, code later",
-        description: "I collegamenti descrivono dipendenze e passaggi di dati. Non devono essere validi per un linguaggio specifico.",
+        id: "item_type",
+        type: "enum",
+        title: "ItemType",
+        description: "Categorie di gameplay usate per filtrare, equipaggiare e presentare gli item.",
         pseudo: "",
-        x: 1030, y: 760,
-        rows: []
+        x: 120, y: 120, rows: [],
+        enumVisibility: "public", enumUnderlyingType: "int", enumFlags: false,
+        enumValues: itemTypeValues
+      },
+      {
+        id: "item_rarity",
+        type: "enum",
+        title: "ItemRarity",
+        description: "Rarità usata da UI, loot table e bilanciamento.",
+        pseudo: "",
+        x: 120, y: 520, rows: [],
+        enumVisibility: "public", enumUnderlyingType: "int", enumFlags: false,
+        enumValues: rarityValues
+      },
+      {
+        id: "item_data",
+        type: "class",
+        title: "ItemData",
+        description: "Dati statici condivisi di un item. Concettualmente adatto a uno ScriptableObject Unity.",
+        pseudo: "",
+        x: 650, y: 120,
+        rows: itemDataRows,
+        classVisibility: "public", baseType: "ScriptableObject", instanceAccess: "scriptableObject", executionOrder: 0
+      },
+      {
+        id: "inventory_slot",
+        type: "class",
+        title: "InventorySlot",
+        description: "Stato runtime di uno slot: item assegnato e quantità corrente.",
+        pseudo: "",
+        x: 650, y: 650,
+        rows: [slotItem, slotQuantity, slotIsEmpty, slotCanStack],
+        classVisibility: "public", baseType: "Plain C#", instanceAccess: "value", executionOrder: 0
+      },
+      {
+        id: "inventory",
+        type: "class",
+        title: "Inventory",
+        description: "Responsabile di capacità, stacking, aggiunta/rimozione item e notifica dei cambiamenti.",
+        pseudo: "",
+        x: 1250, y: 170,
+        rows: [inventorySlots, inventoryCapacity, addItem, removeItem, containsItem, inventoryChanged],
+        classVisibility: "public", baseType: "MonoBehaviour", instanceAccess: "inspector", executionOrder: 0
+      },
+      {
+        id: "item_database",
+        type: "class",
+        title: "ItemDatabase",
+        description: "Lookup centrale degli ItemData tramite ID persistente.",
+        pseudo: "",
+        x: 1250, y: 820,
+        rows: [dbItems, getById],
+        classVisibility: "public", baseType: "ScriptableObject", instanceAccess: "scriptableObject", executionOrder: 0
+      },
+      {
+        id: "inventory_ui",
+        type: "class",
+        title: "InventoryUI",
+        description: "Presenter UI che ascolta l'inventario e aggiorna le view degli slot.",
+        pseudo: "",
+        x: 1850, y: 160,
+        rows: [uiInventoryRef, refreshMethod],
+        classVisibility: "public", baseType: "MonoBehaviour", instanceAccess: "inspector", executionOrder: 0
+      },
+      {
+        id: "player",
+        type: "object",
+        title: "Player",
+        description: "GameObject che contiene il componente Inventory.",
+        pseudo: "",
+        x: 1850, y: 690,
+        rows: [
+          componentRow("Transform", "core", "unity", { locked: true }),
+          playerInventoryComponent
+        ]
+      },
+      {
+        id: "item_pickup",
+        type: "class",
+        title: "ItemPickup",
+        description: "Oggetto nel mondo che espone ItemData e quantità da raccogliere.",
+        pseudo: "",
+        x: 2380, y: 160,
+        rows: [pickupItem, pickupAmount],
+        classVisibility: "public", baseType: "MonoBehaviour", instanceAccess: "inspector", executionOrder: 0
+      },
+      {
+        id: "pickup_event",
+        type: "event",
+        title: "OnItemPickup",
+        description: "Evento concettuale generato quando il player interagisce con un pickup.",
+        pseudo: "",
+        x: 2380, y: 630,
+        rows: [pickupEventOut, pickupDataOut],
+        eventKind: "trigger"
+      },
+      {
+        id: "can_add",
+        type: "condition",
+        title: "CanAddItem?",
+        description: "Controlla stacking e capacità prima di modificare l'inventario.",
+        pseudo: "inventory has compatible stack || free slot",
+        x: 2850, y: 600,
+        rows: [canAddIn, canAddItemIn, canAddTrue, canAddFalse, canAddResult]
+      },
+      {
+        id: "add_action",
+        type: "action",
+        title: "Add To Inventory",
+        description: "Chiama Inventory.AddItem con l'ItemData raccolto.",
+        pseudo: "",
+        x: 3330, y: 530,
+        rows: [addFlowIn, addFlowOut, addItemIn],
+        actionKind: "callMethod"
+      },
+      {
+        id: "refresh_action",
+        type: "action",
+        title: "Refresh Inventory UI",
+        description: "Aggiorna la UI dopo il cambiamento dell'inventario.",
+        pseudo: "",
+        x: 3800, y: 530,
+        rows: [refreshFlowIn, refreshFlowOut],
+        actionKind: "callMethod"
+      },
+      {
+        id: "inventory_note",
+        type: "note",
+        title: "Inventory architecture",
+        description: "ItemData = dati statici. InventorySlot = stato runtime. Inventory = regole. ItemDatabase = lookup. InventoryUI = presentazione. FLOW = comportamento del pickup.",
+        pseudo: "",
+        x: 2850, y: 950, rows: []
       }
     ];
 
     return {
       version: 1,
-      name: "Game Systems — Concept",
+      name: "Inventory System — Demo",
       nodes: nodes,
       connections: [
-        { id: uid("edge"), from: { nodeId: "door", rowId: doorId.id, side: "out" }, to: { nodeId: "compare", rowId: compareA.id, side: "in" } },
-        { id: uid("edge"), from: { nodeId: "key", rowId: keyId.id, side: "out" }, to: { nodeId: "compare", rowId: compareB.id, side: "in" } },
-        { id: uid("edge"), from: { nodeId: "compare", rowId: compareResult.id, side: "out" }, to: { nodeId: "door", rowId: open.id, side: "in" } },
-        { id: uid("edge"), from: { nodeId: "game_manager", rowId: score.id, side: "out" }, to: { nodeId: "calculate_score", rowId: calcInput.id, side: "in" } },
-        { id: uid("edge"), from: { nodeId: "game_manager", rowId: multiplier.id, side: "out" }, to: { nodeId: "calculate_score", rowId: calcMultiplier.id, side: "in" } },
-        { id: uid("edge"), from: { nodeId: "calculate_score", rowId: calcOutput.id, side: "out" }, to: { nodeId: "score_text", rowId: uiText.id, side: "in" } }
+        { id: uid("edge"), from: { nodeId: "pickup_event", rowId: pickupEventOut.id, side: "out", kind: "flow" }, to: { nodeId: "can_add", rowId: canAddIn.id, side: "in", kind: "flow" }, points: [], dataType: "__flow__" },
+        { id: uid("edge"), from: { nodeId: "pickup_event", rowId: pickupDataOut.id, side: "out", kind: "data" }, to: { nodeId: "can_add", rowId: canAddItemIn.id, side: "in", kind: "data" }, points: [], dataType: "ItemData" },
+        { id: uid("edge"), from: { nodeId: "can_add", rowId: canAddTrue.id, side: "out", kind: "flow" }, to: { nodeId: "add_action", rowId: addFlowIn.id, side: "in", kind: "flow" }, points: [], dataType: "__flow__" },
+        { id: uid("edge"), from: { nodeId: "pickup_event", rowId: pickupDataOut.id, side: "out", kind: "data" }, to: { nodeId: "add_action", rowId: addItemIn.id, side: "in", kind: "data" }, points: [], dataType: "ItemData" },
+        { id: uid("edge"), from: { nodeId: "add_action", rowId: addFlowOut.id, side: "out", kind: "flow" }, to: { nodeId: "refresh_action", rowId: refreshFlowIn.id, side: "in", kind: "flow" }, points: [], dataType: "__flow__" }
       ]
     };
   }
