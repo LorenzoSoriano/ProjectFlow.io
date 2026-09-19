@@ -4,7 +4,7 @@
   const STORAGE_KEY = "projectflow.project.v1";
   const VIEW_KEY = "projectflow.view.v1";
   const PANELS_KEY = "projectflow.panels.v1";
-  const NODE_WIDTH = 284;
+  const NODE_WIDTH = 332;
 
   const $ = (id) => document.getElementById(id);
   const nodeLayer = $("nodeLayer");
@@ -361,6 +361,7 @@
   let junctionDrag = null;
   let marqueeState = null;
   let panelResizeState = null;
+  let inspectorVisible = false;
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
@@ -410,6 +411,20 @@
     document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
     localStorage.setItem(PANELS_KEY, JSON.stringify(panelWidths));
+    requestAnimationFrame(() => {
+      renderEdges();
+      renderMinimap();
+    });
+  }
+
+  function setInspectorVisible(visible) {
+    inspectorVisible = !!visible;
+    const workspace = document.querySelector(".workspace");
+    if (workspace) workspace.classList.toggle("inspector-collapsed", !inspectorVisible);
+    $("inspectorPanel").classList.toggle("manual-hidden", !inspectorVisible);
+    if (window.innerWidth <= 850) {
+      $("inspectorPanel").classList.toggle("open", inspectorVisible && selectedNodeIds.size > 0);
+    }
     requestAnimationFrame(() => {
       renderEdges();
       renderMinimap();
@@ -661,7 +676,11 @@
     more.textContent = "•••";
     more.title = "Apri Inspector";
     more.addEventListener("pointerdown", (event) => event.stopPropagation());
-    more.addEventListener("click", () => selectNode(node.id));
+    more.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectNode(node.id, null, true);
+      setInspectorVisible(true);
+    });
 
     header.append(typeDot, heading, more, makePort(node.id, "__node__", "out", connectedPorts));
 
@@ -846,7 +865,7 @@
         const rowElement = document.createElement("div");
         rowElement.className = "node-row member-" + item.kind + " inline-edit-row";
         rowElement.dataset.rowId = item.id;
-        rowElement.draggable = true;
+        rowElement.draggable = false;
 
         rowElement.addEventListener("dragstart", (event) => {
           event.stopPropagation();
@@ -854,7 +873,10 @@
           event.dataTransfer.setData("text/projectflow-member", item.id);
           rowElement.classList.add("dragging");
         });
-        rowElement.addEventListener("dragend", () => rowElement.classList.remove("dragging"));
+        rowElement.addEventListener("dragend", () => {
+          rowElement.classList.remove("dragging");
+          rowElement.draggable = false;
+        });
         rowElement.addEventListener("dragover", (event) => {
           if (!event.dataTransfer.types.includes("text/projectflow-member")) return;
           event.preventDefault();
@@ -893,6 +915,13 @@
         dragHandle.className = "member-drag";
         dragHandle.textContent = "⋮⋮";
         dragHandle.title = "Trascina per riordinare";
+        dragHandle.addEventListener("pointerdown", (event) => {
+          event.stopPropagation();
+          rowElement.draggable = true;
+        });
+        dragHandle.addEventListener("pointerup", () => {
+          setTimeout(() => { rowElement.draggable = false; }, 0);
+        });
 
         const kind = document.createElement("span");
         kind.className = "row-kind";
@@ -1899,7 +1928,7 @@
 
     empty.style.display = node ? "none" : "block";
     $("inspectorContent").classList.toggle("hidden", !node);
-    $("inspectorPanel").classList.toggle("open", count > 0 && window.innerWidth <= 850);
+    $("inspectorPanel").classList.toggle("open", inspectorVisible && count > 0 && window.innerWidth <= 850);
 
     if (!node) {
       if (count > 1) {
@@ -2235,9 +2264,10 @@
     markDirty();
     showToast(TYPE_META[type].label + " aggiunto");
     setTimeout(() => {
-      if ($("nodeTitle")) {
-        $("nodeTitle").focus();
-        $("nodeTitle").select();
+      const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"] .node-title-inline');
+      if (element) {
+        element.focus();
+        element.select();
       }
     }, 20);
   }
@@ -2416,7 +2446,7 @@
 
   $("duplicateNode").addEventListener("click", duplicateSelected);
   $("deleteNode").addEventListener("click", removeSelected);
-  $("closeInspector").addEventListener("click", clearSelection);
+  $("closeInspector").addEventListener("click", () => setInspectorVisible(false));
   $("cancelConnection").addEventListener("click", cancelConnection);
 
   document.querySelectorAll(".block-template").forEach((button) => {
