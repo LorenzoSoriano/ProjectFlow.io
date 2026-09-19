@@ -2314,20 +2314,14 @@
   }
 
   function loadPanelWidths() {
-    let widths = { library: 285, inspector: 350 };
+    let widths = { inspector: 350 };
     try {
       const saved = JSON.parse(localStorage.getItem(PANELS_KEY) || "null");
-      if (saved && typeof saved.library === "number") widths.library = saved.library;
       if (saved && typeof saved.inspector === "number") widths.inspector = saved.inspector;
     } catch (error) {}
 
-    // Migrate the old compact defaults to the roomier v1.7 layout.
-    if (widths.library === 245) widths.library = 285;
     if (widths.inspector === 305) widths.inspector = 350;
-
-    widths.library = Math.max(240, Math.min(480, widths.library));
     widths.inspector = Math.max(300, Math.min(620, widths.inspector));
-    document.documentElement.style.setProperty("--library-width", widths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", widths.inspector + "px");
     return widths;
   }
@@ -2338,29 +2332,16 @@
     const workspace = document.querySelector(".workspace");
     if (!workspace) return;
 
-    if (window.innerWidth <= 850) {
-      if ($("libraryPanel").classList.contains("open") && $("inspectorPanel").classList.contains("open")) {
-        $("libraryPanel").classList.remove("open");
-      }
-      return;
-    }
+    if (window.innerWidth <= 850) return;
 
     const minCanvas = 520;
-    let available = window.innerWidth - panelWidths.library - (inspectorVisible ? panelWidths.inspector : 0);
+    let available = window.innerWidth - (inspectorVisible ? panelWidths.inspector : 0);
 
     if (inspectorVisible && available < minCanvas) {
       const shortage = minCanvas - available;
       const reducibleInspector = Math.max(0, panelWidths.inspector - 300);
-      const inspectorReduction = Math.min(shortage, reducibleInspector);
-      panelWidths.inspector -= inspectorReduction;
-      available += inspectorReduction;
-
-      if (available < minCanvas) {
-        const reducibleLibrary = Math.max(0, panelWidths.library - 240);
-        const libraryReduction = Math.min(minCanvas - available, reducibleLibrary);
-        panelWidths.library -= libraryReduction;
-        available += libraryReduction;
-      }
+      panelWidths.inspector -= Math.min(shortage, reducibleInspector);
+      available = window.innerWidth - panelWidths.inspector;
 
       if (available < 430) {
         inspectorVisible = false;
@@ -2369,13 +2350,11 @@
       }
     }
 
-    document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
   }
 
   function setPanelWidths() {
     reconcileWorkspacePanels();
-    document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
     localStorage.setItem(PANELS_KEY, JSON.stringify(panelWidths));
     requestAnimationFrame(() => {
@@ -2387,10 +2366,6 @@
   function setInspectorVisible(visible) {
     inspectorVisible = !!visible;
     const workspace = document.querySelector(".workspace");
-    if (window.innerWidth <= 850 && inspectorVisible) {
-      $("libraryPanel").classList.remove("open");
-    }
-
     if (workspace) workspace.classList.toggle("inspector-collapsed", !inspectorVisible);
     $("inspectorPanel").classList.toggle("manual-hidden", !inspectorVisible);
     if (window.innerWidth <= 850) {
@@ -6720,30 +6695,32 @@
   }
 
   function blockPaletteItems() {
-    const items = [];
-    const seen = new Set();
+    const items = [
+      { type: "object", category: "STRUTTURA", label: "Oggetto", description: "Entità, componente o istanza", icon: "◇" },
+      { type: "class", category: "STRUTTURA", label: "Classe", description: "Responsabilità e membri", icon: "C" },
+      { type: "function", category: "STRUTTURA", label: "Funzione", description: "Parametri, return e logica", icon: "ƒ" },
+      { type: "enum", category: "STRUTTURA", label: "Enum", description: "Stati, modalità e scelte nominate", icon: "E" },
 
-    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
-      const categoryNode = section.querySelector(".library-section-toggle span:last-child");
-      const category = categoryNode ? categoryNode.textContent.trim() : "BLOCCHI";
+      { type: "event", category: "GAME FLOW", label: "Evento", description: "Avvia il flusso di gameplay", icon: "⚡" },
+      { type: "action", category: "GAME FLOW", label: "Azione", description: "Esegue una modifica o un metodo", icon: "▶" },
+      { type: "condition", category: "GAME FLOW", label: "Condizione", description: "True / False con dati tipati", icon: "?" },
+      { type: "state", category: "GAME FLOW", label: "Stato", description: "Fase o modalità del gameplay", icon: "S" },
+      { type: "enumSwitch", category: "GAME FLOW", label: "Switch Enum", description: "Un'uscita flow per ogni valore", icon: "⇆" },
 
-      section.querySelectorAll(".block-template").forEach((button) => {
-        const type = button.dataset.template || "object";
-        const component = button.dataset.component || "";
-        const key = type + "::" + component;
-        if (seen.has(key)) return;
-        seen.add(key);
+      { type: "variable", category: "DATI", label: "Variabile", description: "Dato o stato condiviso", icon: "x" },
+      { type: "ui", category: "INTERFACCIA & NOTE", label: "Interfaccia", description: "Text, button, HUD, menu…", icon: "▣" },
+      { type: "note", category: "INTERFACCIA & NOTE", label: "Nota", description: "Regola, idea o TODO", icon: "≡" }
+    ];
 
-        const strong = button.querySelector("strong");
-        const small = button.querySelector("small");
-        const icon = button.querySelector(".template-icon");
+    UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
+      componentCategory.components.forEach((componentName) => {
         items.push({
-          type: type,
-          component: component,
-          category: category,
-          label: strong ? strong.textContent.trim() : (TYPE_META[type] || TYPE_META.object).label,
-          description: small ? small.textContent.trim() : "",
-          icon: icon ? icon.textContent.trim() : (TYPE_META[type] || TYPE_META.object).icon
+          type: "component",
+          component: componentName,
+          category: "UNITY COMPONENTS · " + componentCategory.label,
+          label: componentName,
+          description: "Componente Unity · " + componentCategory.label.toLowerCase(),
+          icon: componentName.charAt(0).toUpperCase()
         });
       });
     });
@@ -6820,7 +6797,10 @@
     $("addObjectTop").setAttribute("aria-expanded", "true");
     search.value = "";
     renderNewBlockPalette("");
-    requestAnimationFrame(() => search.focus());
+    requestAnimationFrame(() => {
+      search.focus();
+      search.select();
+    });
   }
 
   function closeNewBlockPalette() {
@@ -7035,45 +7015,6 @@
   $("closeInspector").addEventListener("click", () => setInspectorVisible(false));
   $("cancelConnection").addEventListener("click", cancelConnection);
 
-  function loadLibrarySections() {
-    let saved = {};
-    try {
-      saved = JSON.parse(localStorage.getItem(LIBRARY_KEY) || "{}") || {};
-    } catch (error) {}
-
-    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
-      const key = section.dataset.librarySection;
-      const collapsed = !!saved[key];
-      section.classList.toggle("collapsed", collapsed);
-      const toggle = section.querySelector(".library-section-toggle");
-      if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    });
-  }
-
-  function saveLibrarySections() {
-    const state = {};
-    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
-      state[section.dataset.librarySection] = section.classList.contains("collapsed");
-    });
-    localStorage.setItem(LIBRARY_KEY, JSON.stringify(state));
-  }
-
-  document.querySelectorAll(".library-section-toggle").forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      const section = toggle.closest(".library-section");
-      if (!section) return;
-      section.classList.toggle("collapsed");
-      toggle.setAttribute("aria-expanded", section.classList.contains("collapsed") ? "false" : "true");
-      saveLibrarySections();
-    });
-  });
-
-  loadLibrarySections();
-
-  document.querySelectorAll(".block-template").forEach((button) => {
-    button.addEventListener("click", () => addNode(button.dataset.template, button.dataset.component || ""));
-  });
-
   $("addObjectTop").addEventListener("click", (event) => {
     event.stopPropagation();
     const palette = $("newBlockPalette");
@@ -7132,7 +7073,7 @@
   });
 
   document.addEventListener("click", (event) => {
-    if (!event.target.closest(".new-block-wrap")) closeNewBlockPalette();
+    if (!event.target.closest("#newBlockPalette") && !event.target.closest("#addObjectTop")) closeNewBlockPalette();
     if (!event.target.closest(".toolbar-menu")) $("dataMenu").classList.remove("open");
     if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
       closeAccountMenu();
@@ -7189,19 +7130,6 @@
   $("projectName").addEventListener("input", () => {
     project.name = $("projectName").value;
     markDirty();
-  });
-
-  $("blockSearch").addEventListener("input", (event) => {
-    const query = event.target.value.toLowerCase().trim();
-    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
-      let hasMatch = false;
-      section.querySelectorAll(".block-template").forEach((button) => {
-        const match = !query || button.textContent.toLowerCase().includes(query);
-        button.style.display = match ? "" : "none";
-        if (match && query) hasMatch = true;
-      });
-      section.classList.toggle("search-open", !!query && hasMatch);
-    });
   });
 
   viewport.addEventListener("wheel", (event) => {
@@ -7312,14 +7240,13 @@
     renderMinimap();
   }
 
-  function startPanelResize(side, event) {
+  function startPanelResize(event) {
     if (window.innerWidth <= 850) return;
     event.preventDefault();
     event.stopPropagation();
     panelResizeState = {
-      side: side,
       startX: event.clientX,
-      startWidth: side === "library" ? panelWidths.library : panelWidths.inspector
+      startWidth: panelWidths.inspector
     };
     document.body.classList.add("resizing-panel");
     window.addEventListener("pointermove", movePanelResize);
@@ -7329,11 +7256,7 @@
   function movePanelResize(event) {
     if (!panelResizeState) return;
     const delta = event.clientX - panelResizeState.startX;
-    if (panelResizeState.side === "library") {
-      panelWidths.library = Math.max(240, Math.min(480, panelResizeState.startWidth + delta));
-    } else {
-      panelWidths.inspector = Math.max(300, Math.min(620, panelResizeState.startWidth - delta));
-    }
+    panelWidths.inspector = Math.max(300, Math.min(620, panelResizeState.startWidth - delta));
     setPanelWidths();
   }
 
@@ -7344,8 +7267,7 @@
     setPanelWidths();
   }
 
-  $("libraryResizer").addEventListener("pointerdown", (event) => startPanelResize("library", event));
-  $("inspectorResizer").addEventListener("pointerdown", (event) => startPanelResize("inspector", event));
+  $("inspectorResizer").addEventListener("pointerdown", startPanelResize);
 
   viewport.addEventListener("pointerdown", (event) => {
     if (event.target !== viewport && event.target !== world && event.target !== nodeLayer && event.target !== edgeLayer) return;
@@ -7462,14 +7384,6 @@
     const type = shortcuts[event.key.toLowerCase()];
     if (type) addNode(type);
   });
-
-  $("toggleLibrary").addEventListener("click", () => {
-    if (window.innerWidth <= 850) {
-      $("inspectorPanel").classList.remove("open");
-    }
-    $("libraryPanel").classList.add("open");
-  });
-  $("closeLibrary").addEventListener("click", () => $("libraryPanel").classList.remove("open"));
 
   $("backToProjects").addEventListener("click", () => {
     saveProject(false);
