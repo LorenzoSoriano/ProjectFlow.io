@@ -13,7 +13,8 @@
   const world = $("world");
 
   const TYPE_META = {
-    object: { label: "Oggetto", icon: "◇", color: "#9b8cff" },
+    object: { label: "GameObject", icon: "◇", color: "#9b8cff" },
+    component: { label: "Componente Unity", icon: "⬡", color: "#6ea8ff" },
     class: { label: "Classe", icon: "C", color: "#42d4df" },
     function: { label: "Funzione", icon: "ƒ", color: "#55d69e" },
     variable: { label: "Variabile", icon: "x", color: "#f3bd59" },
@@ -26,6 +27,7 @@
     variable: { icon: "x", label: "Variabile" },
     function: { icon: "ƒ", label: "Metodo" },
     unityEvent: { icon: "⚡", label: "UnityEvent" },
+    component: { icon: "⬡", label: "Componente" },
     property: { icon: "•", label: "Proprietà" },
     condition: { icon: "?", label: "Condizione" },
     input: { icon: "→", label: "Input" },
@@ -36,10 +38,66 @@
   const DATA_TYPES = [
     "bool", "int", "float", "double", "string",
     "Vector2", "Vector3", "Quaternion", "Color",
-    "GameObject", "Transform", "Rigidbody", "Collider",
-    "Animator", "AudioSource", "Camera", "SpriteRenderer",
-    "Texture2D", "Material", "AnimationClip"
+    "GameObject", "Transform", "Rigidbody", "Rigidbody2D", "Collider", "Collider2D",
+    "Animator", "Animation", "AudioSource", "AudioListener", "AudioClip",
+    "Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer",
+    "ParticleSystem", "TrailRenderer", "LineRenderer", "Canvas", "CanvasGroup",
+    "Texture2D", "Material", "AnimationClip", "RuntimeAnimatorController",
+    "LayerMask", "RectTransform"
   ];
+
+  const UNITY_COMPONENT_CATEGORIES = [
+    {
+      id: "core",
+      label: "CORE",
+      components: ["Transform"]
+    },
+    {
+      id: "physics",
+      label: "PHYSICS",
+      components: ["Rigidbody", "Rigidbody2D", "BoxCollider", "SphereCollider", "CapsuleCollider", "Collider2D"]
+    },
+    {
+      id: "animation",
+      label: "ANIMATION",
+      components: ["Animator", "Animation"]
+    },
+    {
+      id: "audio",
+      label: "AUDIO",
+      components: ["AudioSource", "AudioListener"]
+    },
+    {
+      id: "rendering",
+      label: "RENDERING",
+      components: ["Camera", "Light", "MeshRenderer", "SkinnedMeshRenderer", "SpriteRenderer"]
+    },
+    {
+      id: "ui",
+      label: "UI",
+      components: ["Canvas", "CanvasGroup", "RectTransform"]
+    },
+    {
+      id: "effects",
+      label: "EFFECTS",
+      components: ["ParticleSystem", "TrailRenderer", "LineRenderer"]
+    },
+    {
+      id: "navigation",
+      label: "NAVIGATION",
+      components: ["NavMeshAgent", "NavMeshObstacle"]
+    }
+  ];
+
+  function componentCategoryFor(type) {
+    const group = UNITY_COMPONENT_CATEGORIES.find((category) => category.components.includes(type));
+    return group ? group.id : "other";
+  }
+
+  function componentCategoryLabel(id) {
+    const group = UNITY_COMPONENT_CATEGORIES.find((category) => category.id === id);
+    return group ? group.label : (id === "scripts" ? "SCRIPTS" : "OTHER");
+  }
 
   const UNITY_LIFECYCLE = [
     { name: "Awake", parameters: "", returnType: "void" },
@@ -138,6 +196,69 @@
     });
   }
 
+  function componentRow(componentType, category, source, extra) {
+    return row(componentType || "Component", "", "component", Object.assign({
+      componentType: componentType || "Component",
+      componentCategory: category || componentCategoryFor(componentType),
+      componentSource: source || "unity",
+      componentClassId: "",
+      enabled: true,
+      locked: componentType === "Transform"
+    }, extra || {}));
+  }
+
+  function attachableScriptNodes() {
+    return project.nodes.filter((node) =>
+      node.type === "class" &&
+      node.baseType === "MonoBehaviour"
+    );
+  }
+
+  function componentPresetRows(componentType) {
+    const presets = {
+      Transform: [
+        variableRow("position", "Vector3", "public"),
+        variableRow("rotation", "Vector3", "public"),
+        variableRow("scale", "Vector3", "public")
+      ],
+      Rigidbody: [
+        variableRow("mass", "float", "public"),
+        variableRow("useGravity", "bool", "public"),
+        variableRow("isKinematic", "bool", "public")
+      ],
+      Rigidbody2D: [
+        variableRow("mass", "float", "public"),
+        variableRow("gravityScale", "float", "public")
+      ],
+      Animator: [
+        variableRow("controller", "RuntimeAnimatorController", "public"),
+        variableRow("speed", "float", "public"),
+        variableRow("applyRootMotion", "bool", "public")
+      ],
+      AudioSource: [
+        variableRow("clip", "AudioClip", "public"),
+        variableRow("volume", "float", "public"),
+        variableRow("loop", "bool", "public")
+      ],
+      Camera: [
+        variableRow("fieldOfView", "float", "public"),
+        variableRow("cullingMask", "LayerMask", "public")
+      ],
+      Light: [
+        variableRow("intensity", "float", "public"),
+        variableRow("color", "Color", "public")
+      ],
+      ParticleSystem: [
+        variableRow("playOnAwake", "bool", "public"),
+        variableRow("loop", "bool", "public")
+      ],
+      Canvas: [
+        variableRow("enabled", "bool", "public")
+      ]
+    };
+    return (presets[componentType] || []).map((item) => item);
+  }
+
   function publicClassNodes() {
     return project.nodes.filter((node) => node.type === "class" && node.classVisibility === "public");
   }
@@ -191,6 +312,16 @@
       if (typeof item.payloadType !== "string") item.payloadType = "void";
       if (typeof item.serialized !== "boolean") item.serialized = true;
     }
+
+    if (item.kind === "component") {
+      if (typeof item.componentType !== "string" || !item.componentType) item.componentType = item.label || "Component";
+      if (typeof item.componentCategory !== "string") item.componentCategory = componentCategoryFor(item.componentType);
+      if (typeof item.componentSource !== "string") item.componentSource = "unity";
+      if (typeof item.componentClassId !== "string") item.componentClassId = "";
+      if (typeof item.enabled !== "boolean") item.enabled = true;
+      if (typeof item.locked !== "boolean") item.locked = item.componentType === "Transform";
+      item.label = item.componentType;
+    }
     return item;
   }
 
@@ -198,6 +329,17 @@
     if (!Array.isArray(node.rows)) node.rows = [];
     node.rows.forEach(normalizeMember);
     if (!node.uiSections || typeof node.uiSections !== "object") node.uiSections = {};
+
+    if (node.type === "object") {
+      const hasTransform = node.rows.some((item) => item.kind === "component" && item.componentType === "Transform");
+      if (!hasTransform) node.rows.unshift(componentRow("Transform", "core", "unity", { locked: true }));
+    }
+
+    if (node.type === "component") {
+      if (typeof node.componentType !== "string" || !node.componentType) node.componentType = "Animator";
+      if (typeof node.componentCategory !== "string") node.componentCategory = componentCategoryFor(node.componentType);
+      if (typeof node.componentSource !== "string") node.componentSource = "unity";
+    }
 
     if (node.type === "class") {
       if (typeof node.classVisibility !== "string") node.classVisibility = "public";
