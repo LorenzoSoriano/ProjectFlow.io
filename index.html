@@ -293,7 +293,7 @@
               <h1>Come ProjectFlow tratta i dati.</h1>
               <p>Informativa trasparente sul funzionamento attuale del servizio. Prima di un lancio pubblico definitivo devono essere completati i dati del titolare e il contatto privacy.</p>
             </div>
-            <span class="privacy-updated">Versione: 19 settembre 2026</span>
+            <span class="privacy-updated">Versione: 20 settembre 2026</span>
           </header>
 
           <div class="privacy-compliance-warning">
@@ -317,11 +317,11 @@
             </article>
             <article>
               <span class="privacy-number">02</span>
-              <div><h3>Finalità</h3><p>Salvataggio locale dei diagrammi; autenticazione Google opzionale; sincronizzazione cloud dei progetti richiesti dall'utente; gestione della libreria personale.</p></div>
+              <div><h3>Finalità</h3><p>Salvataggio locale dei diagrammi; autenticazione Google opzionale; sincronizzazione cloud; condivisione persistente dei progetti; inviti tra utenti; presenza collaborativa e gestione della libreria personale.</p></div>
             </article>
             <article>
               <span class="privacy-number">03</span>
-              <div><h3>Dati trattati</h3><p>In modalità cloud possono essere trattati UID Firebase, nome/account Google visualizzato, email associata all'autenticazione e contenuto tecnico degli schemi salvati.</p></div>
+              <div><h3>Dati trattati</h3><p>In modalità cloud possono essere trattati UID Firebase, nome/account Google visualizzato, email associata all'autenticazione, email usate per gli inviti, contenuto tecnico degli schemi e degli Sketch, posizione del cursore nel canvas, attività collaborativa corrente e timestamp di presenza.</p></div>
             </article>
             <article>
               <span class="privacy-number">04</span>
@@ -329,11 +329,11 @@
             </article>
             <article>
               <span class="privacy-number">05</span>
-              <div><h3>Conservazione</h3><p>I dati locali restano finché l'utente elimina gli schemi o i dati del sito. I progetti cloud restano finché vengono eliminati dall'utente o finché il servizio/account viene mantenuto.</p></div>
+              <div><h3>Conservazione</h3><p>I dati locali restano finché l'utente elimina gli schemi o i dati del sito. I progetti cloud restano finché vengono eliminati o mantenuti nel servizio. Gli inviti restano validi finché il proprietario non li revoca; la presenza realtime è tecnica e temporanea.</p></div>
             </article>
             <article>
               <span class="privacy-number">06</span>
-              <div><h3>Fornitori e destinatari</h3><p>Per autenticazione e storage cloud ProjectFlow utilizza servizi Google/Firebase. La modalità locale non richiede la sincronizzazione dei diagrammi con Firebase.</p></div>
+              <div><h3>Fornitori e destinatari</h3><p>Per autenticazione, sincronizzazione, condivisione e presenza realtime ProjectFlow utilizza servizi Google/Firebase. I collaboratori autorizzati possono vedere e modificare il contenuto del progetto condiviso, inclusi gli Sketch; ogni destinatario può accedere soltanto con l'account invitato.</p></div>
             </article>
             <article>
               <span class="privacy-number">07</span>
@@ -348,12 +348,13 @@
           <section class="privacy-technical">
             <div>
               <span class="eyebrow">SICUREZZA TECNICA</span>
-              <h2>Accesso separato per utente.</h2>
-              <p>Gli schemi cloud sono organizzati sotto <code>users/{uid}/projects/{projectId}</code>. Le regole Firestore incluse nel repository verificano che l'UID autenticato corrisponda al proprietario del percorso.</p>
+              <h2>Accesso separato e collaborazione controllata.</h2>
+              <p>I progetti privati restano sotto <code>users/{uid}/projects/{projectId}</code>. I progetti condivisi usano <code>sharedProjects/{projectId}</code> con inviti separati per destinatario; il link non rende pubblico il progetto e l'accesso richiede l'account Google autorizzato.</p>
             </div>
             <ul>
               <li>Firebase Authentication per identificare l'utente.</li>
-              <li>Firestore Security Rules per limitare lettura e scrittura.</li>
+              <li>Firestore Security Rules per limitare lettura e scrittura, inclusi inviti, progetti condivisi e presenza.</li>
+              <li>Le email degli altri invitati non vengono incluse nel documento condiviso visibile ai collaboratori.</li>
               <li>Firebase App Check consigliato come ulteriore hardening prima del lancio.</li>
               <li>Nessuna chiave Admin SDK o service account nel client pubblico.</li>
             </ul>
