@@ -1414,6 +1414,7 @@
       surface.setAttribute("aria-hidden", "true");
       surface.style.marginLeft = "";
       surface.style.marginTop = "";
+      if (surface.id === "newBlockPalette") closeNewBlockFan();
       if (typeof surface._resetFanPopup === "function") surface._resetFanPopup();
       if (typeof surface._resetTypePicker === "function") surface._resetTypePicker();
     };
