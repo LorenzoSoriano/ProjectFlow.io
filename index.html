@@ -3,24 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0b1020" />
+  <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260919-2456" />
+  <link rel="stylesheet" href="styles.css?v=20260919-2527" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
     <header class="home-topbar">
-      <a class="brand home-brand" href="#" aria-label="ProjectFlow home">
+      <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v1.7</span>
-      </a>
+        <span class="build-badge" title="Build corrente">v1.8</span>
+      </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
-        <a href="#projects">Progetti</a>
-        <a href="#about">About</a>
-        <a href="#privacy">Privacy</a>
+        <button type="button" data-site-page-target="home">Home</button>
+        <button type="button" data-site-page-target="projects">Progetti</button>
+        <button type="button" data-site-page-target="guide">Guide / Demo</button>
+        <button type="button" data-site-page-target="about">About</button>
+        <button type="button" data-site-page-target="privacy">Privacy</button>
       </nav>
 
       <div class="home-account">
@@ -35,99 +37,228 @@
       </div>
     </header>
 
-    <main class="home-main">
-      <section class="home-hero">
-        <div>
-          <span class="eyebrow">PROJECT LIBRARY</span>
-          <h1>I tuoi schemi di gameplay e codice.</h1>
-          <p>Crea, importa e organizza flow di classi, dati, eventi e sistemi Unity prima di passare all'implementazione.</p>
-        </div>
-        <div class="home-hero-actions">
-          <button class="primary-button home-primary" id="createProjectHome" type="button">＋ Nuovo schema</button>
-          <button class="secondary-button home-secondary" id="uploadProjectHome" type="button">↥ Upload JSON</button>
-          <input id="homeUploadFile" type="file" accept=".json,application/json" hidden />
+    <main class="site-pages" id="sitePages">
+      <section class="site-page active" id="homePage" data-site-page="home">
+        <div class="site-page-inner">
+          <section class="home-hero unity-hero">
+            <div>
+              <span class="eyebrow">VISUAL GAME SYSTEMS WORKSPACE</span>
+              <h1>Progetta gameplay e architettura prima di scrivere codice.</h1>
+              <p>Organizza classi, GameObject, componenti Unity, eventi, stati, dati e funzioni in un unico flow leggibile. ProjectFlow separa esecuzione, dati e struttura per aiutarti a prototipare sistemi prima dell'implementazione.</p>
+              <div class="hero-feature-row">
+                <span><b>FLOW</b> esecuzione</span>
+                <span><b>DATA</b> valori tipati</span>
+                <span><b>STRUCTURE</b> dipendenze</span>
+              </div>
+            </div>
+            <div class="home-hero-actions">
+              <button class="primary-button home-primary" id="createProjectHome" type="button">＋ Nuovo schema</button>
+              <button class="secondary-button home-secondary site-nav-button" type="button" data-site-page-target="guide">▶ Guarda la demo</button>
+              <button class="secondary-button home-secondary" id="uploadProjectHome" type="button">↥ Upload JSON</button>
+              <input id="homeUploadFile" type="file" accept=".json,application/json" hidden />
+            </div>
+          </section>
+
+          <section class="home-overview-grid">
+            <article>
+              <span class="overview-index">01</span>
+              <h3>Disegna la struttura</h3>
+              <p>Classi, GameObject, componenti, enum e variabili diventano blocchi leggibili e collegabili.</p>
+            </article>
+            <article>
+              <span class="overview-index">02</span>
+              <h3>Costruisci il flow</h3>
+              <p>Event, Condition, Action e State descrivono il comportamento del sistema senza imporre codice compilabile.</p>
+            </article>
+            <article>
+              <span class="overview-index">03</span>
+              <h3>Scendi nel codice</h3>
+              <p>Metodi, parametri, return e pseudocode avvicinano il diagramma alla futura implementazione C#/Unity.</p>
+            </article>
+          </section>
+
+          <section class="home-demo-teaser">
+            <div>
+              <span class="eyebrow">DEFAULT WORKFLOW</span>
+              <h2>Un esempio completo è già pronto.</h2>
+              <p>Apri la guida per vedere come variabili, classi e flow lavorano insieme, oppure crea subito una copia del progetto demo.</p>
+            </div>
+            <div class="demo-teaser-actions">
+              <button class="secondary-button site-nav-button" type="button" data-site-page-target="guide">Esplora la guida</button>
+              <button class="primary-button" id="openDemoHome" type="button">Apri progetto demo</button>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section class="project-library-section" id="projects">
-        <div class="project-library-head">
-          <div>
-            <span class="eyebrow">LIBRERIA</span>
-            <h2>Progetti</h2>
-          </div>
-          <label class="home-search">
-            <span>⌕</span>
-            <input id="projectLibrarySearch" type="search" placeholder="Cerca uno schema…" autocomplete="off" />
-          </label>
-        </div>
+      <section class="site-page" id="projectsPage" data-site-page="projects" hidden>
+        <div class="site-page-inner">
+          <header class="site-page-heading">
+            <div>
+              <span class="eyebrow">PROJECT LIBRARY</span>
+              <h1>I tuoi schemi.</h1>
+              <p>Crea, importa, duplica e sincronizza i progetti senza mischiare i diversi sistemi.</p>
+            </div>
+            <div class="page-heading-actions">
+              <button class="primary-button" id="createProjectProjects" type="button">＋ Nuovo schema</button>
+              <button class="secondary-button" id="uploadProjectProjects" type="button">↥ Upload JSON</button>
+            </div>
+          </header>
 
-        <div class="project-library-grid" id="projectLibraryGrid"></div>
+          <section class="project-library-section" id="projects">
+            <div class="project-library-head">
+              <div>
+                <span class="eyebrow">LIBRERIA</span>
+                <h2>Progetti</h2>
+              </div>
+              <label class="home-search">
+                <span>⌕</span>
+                <input id="projectLibrarySearch" type="search" placeholder="Cerca uno schema…" autocomplete="off" />
+              </label>
+            </div>
 
-        <div class="project-library-empty hidden" id="projectLibraryEmpty">
-          <div class="empty-project-symbol">◇</div>
-          <h3>Nessuno schema</h3>
-          <p>Crea il tuo primo flow oppure importa un file JSON.</p>
-          <button class="primary-button" id="createProjectEmpty" type="button">＋ Crea schema</button>
+            <div class="project-library-grid" id="projectLibraryGrid"></div>
+
+            <div class="project-library-empty hidden" id="projectLibraryEmpty">
+              <div class="empty-project-symbol">◇</div>
+              <h3>Nessuno schema</h3>
+              <p>Crea il tuo primo flow oppure importa un file JSON.</p>
+              <button class="primary-button" id="createProjectEmpty" type="button">＋ Crea schema</button>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section class="home-info-grid" id="about">
-        <article class="home-info-card home-info-card-large">
-          <span class="eyebrow">ABOUT PROJECTFLOW</span>
-          <h2>Progetta il comportamento prima del codice.</h2>
-          <p>ProjectFlow è uno spazio visuale per prototipare sistemi di gameplay, classi, GameObject, componenti Unity, eventi, stati, enum, funzioni e relazioni tra dati prima di passare all'implementazione.</p>
-          <div class="about-pill-row">
-            <span>Game Design</span>
-            <span>Unity Architecture</span>
-            <span>Gameplay Flow</span>
-            <span>Code Planning</span>
-          </div>
-        </article>
+      <section class="site-page" id="guidePage" data-site-page="guide" hidden>
+        <div class="site-page-inner">
+          <header class="site-page-heading guide-heading">
+            <div>
+              <span class="eyebrow">GUIDE / DEFAULT DEMO</span>
+              <h1>Come si legge ProjectFlow.</h1>
+              <p>Un esempio di sistema di interazione mostra il rapporto tra struttura dati e flusso di gameplay.</p>
+            </div>
+            <button class="primary-button" id="openDemoGuide" type="button">▶ Apri progetto demo</button>
+          </header>
 
-        <article class="home-info-card">
-          <span class="eyebrow">COME FUNZIONA</span>
-          <h3>FLOW + DATA + STRUCTURE</h3>
-          <p><strong>FLOW</strong> descrive quando accade qualcosa. <strong>DATA</strong> mostra quali valori passano. <strong>STRUCTURE</strong> collega classi, enum, componenti e dipendenze.</p>
-        </article>
+          <section class="demo-workbench">
+            <div class="demo-flow-board">
+              <div class="demo-board-label">GAMEPLAY FLOW</div>
+              <div class="demo-flow-row">
+                <div class="demo-node demo-event"><small>EVENT</small><strong>OnInteract</strong></div>
+                <span class="demo-wire flow">→</span>
+                <div class="demo-node demo-condition"><small>CONDITION</small><strong>HasKey?</strong></div>
+                <span class="demo-wire flow">→ TRUE →</span>
+                <div class="demo-node demo-action"><small>ACTION</small><strong>OpenDoor</strong></div>
+              </div>
+              <div class="demo-data-row">
+                <div class="demo-node demo-class"><small>CLASS</small><strong>Player</strong><span>Key currentKey</span></div>
+                <span class="demo-wire data">······ DATA ······→</span>
+                <div class="demo-node demo-class"><small>CLASS</small><strong>Door</strong><span>DoorState state</span></div>
+                <span class="demo-wire type">·· TYPE ··→</span>
+                <div class="demo-node demo-enum"><small>ENUM</small><strong>DoorState</strong><span>Closed · Open</span></div>
+              </div>
+            </div>
 
-        <article class="home-info-card">
-          <span class="eyebrow">SALVATAGGIO</span>
-          <h3>Locale o sincronizzato.</h3>
-          <p>Senza account i progetti restano nel browser. Con Google login, gli schemi possono essere sincronizzati sul proprio spazio Firebase e riaperti da altri dispositivi.</p>
-        </article>
+            <aside class="demo-explanation">
+              <article>
+                <span class="demo-step">01</span>
+                <div><strong>FLOW</strong><p>Le connessioni di esecuzione mostrano cosa succede e in quale ordine.</p></div>
+              </article>
+              <article>
+                <span class="demo-step">02</span>
+                <div><strong>DATA</strong><p>Variabili e parametri portano valori tipati dentro condizioni e metodi.</p></div>
+              </article>
+              <article>
+                <span class="demo-step">03</span>
+                <div><strong>STRUCTURE</strong><p>Classi, enum e componenti creano relazioni automatiche senza trasformarle in flow.</p></div>
+              </article>
+              <article>
+                <span class="demo-step">04</span>
+                <div><strong>METHODS</strong><p>Chiusi sembrano firme C#; aperti mostrano parametri, commento, return e pseudocode.</p></div>
+              </article>
+            </aside>
+          </section>
+
+          <section class="guide-cards">
+            <article><span>◇</span><div><strong>Parti da una classe</strong><p>Definisci responsabilità, variabili e metodi.</p></div></article>
+            <article><span>⚡</span><div><strong>Aggiungi un evento</strong><p>Usalo come punto di ingresso del gameplay flow.</p></div></article>
+            <article><span>?</span><div><strong>Inserisci condizioni</strong><p>Collega dati tipati e separa i rami True / False.</p></div></article>
+            <article><span>▶</span><div><strong>Chiudi con un'azione</strong><p>Descrivi il risultato oppure collega un metodo reale.</p></div></article>
+          </section>
+        </div>
       </section>
 
-      <section class="privacy-section" id="privacy">
-        <div class="privacy-heading">
-          <div>
-            <span class="eyebrow">PRIVACY</span>
-            <h2>Controllo semplice dei tuoi schemi.</h2>
-          </div>
-          <span class="privacy-updated">Aggiornato: 19 settembre 2026</span>
-        </div>
+      <section class="site-page" id="aboutPage" data-site-page="about" hidden>
+        <div class="site-page-inner">
+          <header class="site-page-heading">
+            <div>
+              <span class="eyebrow">ABOUT PROJECTFLOW</span>
+              <h1>Dal game design alla struttura del codice.</h1>
+              <p>ProjectFlow nasce per colmare lo spazio tra una meccanica descritta a parole e la sua implementazione concreta in Unity/C#.</p>
+            </div>
+          </header>
 
-        <div class="privacy-grid">
-          <article>
-            <h3>Senza login</h3>
-            <p>Gli schemi vengono salvati nel <strong>localStorage</strong> del browser. Restano sul dispositivo e nel profilo browser utilizzato finché non vengono eliminati o cancellati i dati del sito.</p>
-          </article>
-          <article>
-            <h3>Con Google</h3>
-            <p>Firebase Authentication gestisce l'accesso Google. ProjectFlow usa l'identificativo dell'account per salvare gli schemi in Cloud Firestore sotto il percorso personale dell'utente.</p>
-          </article>
-          <article>
-            <h3>Dati salvati</h3>
-            <p>Il cloud contiene il nome dello schema, date di creazione/modifica e dati del diagramma. Il codice attuale non attiva Firebase Analytics.</p>
-          </article>
-          <article>
-            <h3>Eliminazione</h3>
-            <p>Il comando <strong>Elimina</strong> rimuove lo schema dalla libreria locale e, quando autenticato e sincronizzato, anche dal documento cloud corrispondente.</p>
-          </article>
+          <section class="home-info-grid about-page-grid">
+            <article class="home-info-card home-info-card-large">
+              <span class="eyebrow">OBIETTIVO</span>
+              <h2>Progetta il comportamento prima del codice.</h2>
+              <p>Lo strumento non prova a essere un compilatore o un diagramma UML rigido. Serve a ragionare velocemente su sistemi, responsabilità, dipendenze e comportamento mantenendo abbastanza struttura da avvicinarsi al codice reale.</p>
+              <div class="about-pill-row">
+                <span>Game Design</span>
+                <span>Unity Architecture</span>
+                <span>Gameplay Flow</span>
+                <span>Code Planning</span>
+              </div>
+            </article>
+            <article class="home-info-card">
+              <span class="eyebrow">LIVELLI</span>
+              <h3>FLOW + DATA + STRUCTURE</h3>
+              <p><strong>FLOW</strong> descrive quando accade qualcosa. <strong>DATA</strong> mostra i valori. <strong>STRUCTURE</strong> mantiene leggibili dipendenze, classi, enum e componenti.</p>
+            </article>
+            <article class="home-info-card">
+              <span class="eyebrow">WORKFLOW</span>
+              <h3>Da concetto a C#.</h3>
+              <p>Puoi partire da un evento di gameplay, definire i dati coinvolti e arrivare gradualmente a firme di metodo e pseudocode abbastanza precise da guidare l'implementazione.</p>
+            </article>
+          </section>
         </div>
+      </section>
 
-        <div class="privacy-note">
-          <span>ⓘ</span>
-          <p>Google e Firebase possono trattare dati tecnici necessari ai loro servizi secondo le rispettive informative. Le regole Firestore di ProjectFlow limitano i documenti degli schemi all'UID autenticato proprietario.</p>
+      <section class="site-page" id="privacyPage" data-site-page="privacy" hidden>
+        <div class="site-page-inner">
+          <header class="site-page-heading">
+            <div>
+              <span class="eyebrow">PRIVACY</span>
+              <h1>Controllo semplice dei tuoi schemi.</h1>
+              <p>La modalità locale funziona senza account; il cloud viene usato solo quando attivi il login Google.</p>
+            </div>
+            <span class="privacy-updated">Aggiornato: 19 settembre 2026</span>
+          </header>
+
+          <section class="privacy-section">
+            <div class="privacy-grid">
+              <article>
+                <h3>Senza login</h3>
+                <p>Gli schemi vengono salvati nel <strong>localStorage</strong> del browser. Restano sul dispositivo e nel profilo browser utilizzato finché non vengono eliminati o cancellati i dati del sito.</p>
+              </article>
+              <article>
+                <h3>Con Google</h3>
+                <p>Firebase Authentication gestisce l'accesso Google. ProjectFlow usa l'identificativo dell'account per salvare gli schemi in Cloud Firestore sotto il percorso personale dell'utente.</p>
+              </article>
+              <article>
+                <h3>Dati salvati</h3>
+                <p>Il cloud contiene il nome dello schema, date di creazione/modifica e dati del diagramma. Il codice attuale non attiva Firebase Analytics.</p>
+              </article>
+              <article>
+                <h3>Eliminazione</h3>
+                <p>Il comando <strong>Elimina</strong> rimuove lo schema dalla libreria locale e, quando autenticato e sincronizzato, anche dal documento cloud corrispondente.</p>
+              </article>
+            </div>
+            <div class="privacy-note">
+              <span>ⓘ</span>
+              <p>Google e Firebase possono trattare dati tecnici necessari ai loro servizi secondo le rispettive informative. Le regole Firestore di ProjectFlow limitano i documenti degli schemi all'UID autenticato proprietario.</p>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -140,14 +271,14 @@
           <small>Visual game systems workspace</small>
         </div>
       </div>
-
       <nav class="footer-links" aria-label="Link footer">
-        <a href="#projects">Progetti</a>
-        <a href="#about">About</a>
-        <a href="#privacy">Privacy</a>
+        <button type="button" data-site-page-target="home">Home</button>
+        <button type="button" data-site-page-target="projects">Progetti</button>
+        <button type="button" data-site-page-target="guide">Guide / Demo</button>
+        <button type="button" data-site-page-target="about">About</button>
+        <button type="button" data-site-page-target="privacy">Privacy</button>
         <a href="https://github.com/LorenzoSoriano/ProjectFlow.io" target="_blank" rel="noreferrer">GitHub ↗</a>
       </nav>
-
       <div class="footer-copy">© 2026 ProjectFlow.io · Concept by Lorenzo Soriano</div>
     </footer>
   </section>
@@ -159,7 +290,7 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.7</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.8</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -450,7 +581,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="firebase-config.js?v=20260919-2456"></script>
-  <script src="app.js?v=20260919-2456"></script>
+  <script src="firebase-config.js?v=20260919-2527"></script>
+  <script src="app.js?v=20260919-2527"></script>
 </body>
 </html>
