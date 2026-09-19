@@ -2113,8 +2113,11 @@
 
     const noProjects = projectLibrary.length === 0;
     const noMatches = matches.length === 0;
+    const createTopButton = $("createProjectProjects");
+
     empty.classList.toggle("hidden", !noProjects);
     grid.classList.toggle("empty-search", !noProjects && noMatches);
+    if (createTopButton) createTopButton.hidden = noProjects;
 
     let noResults = $("projectLibraryNoResults");
     if (!noResults && grid.parentElement) {
