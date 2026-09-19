@@ -2095,6 +2095,7 @@
           item.kind === "variable" ||
           item.kind === "property" ||
           item.kind === "unityEvent" ||
+          item.kind === "flowIn" ||
           item.kind === "condition" ||
           item.kind === "input";
         const allowOutput =
@@ -2102,6 +2103,7 @@
           item.kind === "property" ||
           item.kind === "unityEvent" ||
           item.kind === "component" ||
+          item.kind === "flowOut" ||
           item.kind === "condition" ||
           item.kind === "output";
 
@@ -2344,6 +2346,16 @@
 
           topLine.append(access, payload, name);
           editor.appendChild(topLine);
+        } else if (item.kind === "flowIn" || item.kind === "flowOut") {
+          rowElement.classList.add("flow-member-row");
+          const flowLabel = document.createElement("div");
+          flowLabel.className = "flow-member-label";
+          const strong = document.createElement("strong");
+          strong.textContent = item.label || (item.kind === "flowIn" ? "Enter" : "Next");
+          const small = document.createElement("small");
+          small.textContent = item.kind === "flowIn" ? "FLOW INPUT" : "FLOW OUTPUT";
+          flowLabel.append(strong, small);
+          editor.appendChild(flowLabel);
         } else if (item.kind === "component") {
           rowElement.classList.add("unity-component-row");
           rowElement.dataset.componentCategory = item.componentCategory;
