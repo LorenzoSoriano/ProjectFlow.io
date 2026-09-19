@@ -4,6 +4,7 @@
   const STORAGE_KEY = "projectflow.project.v1";
   const VIEW_KEY = "projectflow.view.v1";
   const PANELS_KEY = "projectflow.panels.v1";
+  const LIBRARY_KEY = "projectflow.library.v1";
   const NODE_WIDTH = 360;
 
   const $ = (id) => document.getElementById(id);
@@ -1328,10 +1329,10 @@
             });
             returnCollection.appendChild(length);
           } else if (node.returnCollectionKind === "dictionary") {
-            returnCollection.appendChild(compactSelect(node.returnDictionaryKeyType, availableDataTypes(), (value) => {
+            returnCollection.appendChild(typePicker(node.returnDictionaryKeyType, (value) => {
               node.returnDictionaryKeyType = value;
               rerenderNode();
-            }, "inline-key-type-select"));
+            }, "inline-key-type-picker"));
           }
 
           const preview = document.createElement("span");
@@ -1526,10 +1527,10 @@
             });
             collectionLine.appendChild(count);
           } else if (item.collectionKind === "dictionary") {
-            const keyType = compactSelect(item.dictionaryKeyType, availableDataTypes(), (value) => {
+            const keyType = typePicker(item.dictionaryKeyType, (value) => {
               item.dictionaryKeyType = value;
               rerenderNode();
-            }, "inline-key-type-select");
+            }, "inline-key-type-picker");
             keyType.title = "Tipo della chiave";
             collectionLine.appendChild(keyType);
           }
@@ -1623,10 +1624,10 @@
               });
               returnCollection.appendChild(length);
             } else if (item.returnCollectionKind === "dictionary") {
-              returnCollection.appendChild(compactSelect(item.returnDictionaryKeyType, availableDataTypes(), (value) => {
+              returnCollection.appendChild(typePicker(item.returnDictionaryKeyType, (value) => {
                 item.returnDictionaryKeyType = value;
                 rerenderNode();
-              }, "inline-key-type-select"));
+              }, "inline-key-type-picker"));
             }
 
             const preview = document.createElement("span");
@@ -3587,6 +3588,41 @@
   $("closeInspector").addEventListener("click", () => setInspectorVisible(false));
   $("cancelConnection").addEventListener("click", cancelConnection);
 
+  function loadLibrarySections() {
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(LIBRARY_KEY) || "{}") || {};
+    } catch (error) {}
+
+    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
+      const key = section.dataset.librarySection;
+      const collapsed = !!saved[key];
+      section.classList.toggle("collapsed", collapsed);
+      const toggle = section.querySelector(".library-section-toggle");
+      if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    });
+  }
+
+  function saveLibrarySections() {
+    const state = {};
+    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
+      state[section.dataset.librarySection] = section.classList.contains("collapsed");
+    });
+    localStorage.setItem(LIBRARY_KEY, JSON.stringify(state));
+  }
+
+  document.querySelectorAll(".library-section-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const section = toggle.closest(".library-section");
+      if (!section) return;
+      section.classList.toggle("collapsed");
+      toggle.setAttribute("aria-expanded", section.classList.contains("collapsed") ? "false" : "true");
+      saveLibrarySections();
+    });
+  });
+
+  loadLibrarySections();
+
   document.querySelectorAll(".block-template").forEach((button) => {
     button.addEventListener("click", () => addNode(button.dataset.template, button.dataset.component || ""));
   });
@@ -3658,8 +3694,14 @@
 
   $("blockSearch").addEventListener("input", (event) => {
     const query = event.target.value.toLowerCase().trim();
-    document.querySelectorAll(".block-template").forEach((button) => {
-      button.style.display = !query || button.textContent.toLowerCase().includes(query) ? "" : "none";
+    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
+      let hasMatch = false;
+      section.querySelectorAll(".block-template").forEach((button) => {
+        const match = !query || button.textContent.toLowerCase().includes(query);
+        button.style.display = match ? "" : "none";
+        if (match && query) hasMatch = true;
+      });
+      section.classList.toggle("search-open", !!query && hasMatch);
     });
   });
 
