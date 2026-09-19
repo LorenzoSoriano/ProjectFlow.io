@@ -1014,13 +1014,72 @@
     $("connectionBanner").classList.remove("show");
   }
 
-  function showProjectHome() {
+  const SITE_PAGE_NAMES = new Set(["home", "projects", "guide", "about", "privacy"]);
+  let currentSitePage = "home";
+
+  function normalizedSitePage(name) {
+    return SITE_PAGE_NAMES.has(name) ? name : "home";
+  }
+
+  function updateSiteNavigation(pageName) {
+    document.querySelectorAll("[data-site-page-target]").forEach((control) => {
+      const active = control.dataset.sitePageTarget === pageName;
+      control.classList.toggle("active", active);
+      if (active) control.setAttribute("aria-current", "page");
+      else control.removeAttribute("aria-current");
+    });
+  }
+
+  function navigateSitePage(name, options) {
+    const opts = options || {};
+    const pageName = normalizedSitePage(name);
+    const next = document.querySelector('[data-site-page="' + pageName + '"]');
+    if (!next) return;
+
+    const current = document.querySelector(".site-page.active");
+    currentSitePage = pageName;
+
+    if (current && current !== next) {
+      current.classList.remove("active", "page-entering");
+      current.classList.add("page-leaving");
+      setTimeout(() => {
+        current.hidden = true;
+        current.classList.remove("page-leaving");
+      }, 150);
+    }
+
+    next.hidden = false;
+    next.classList.remove("page-leaving", "page-entering", "active");
+    void next.offsetWidth;
+    next.classList.add("active", "page-entering");
+    setTimeout(() => next.classList.remove("page-entering"), 320);
+
+    updateSiteNavigation(pageName);
+    if (pageName === "projects") renderProjectLibrary();
+
+    if (opts.updateHash !== false) {
+      const hash = "#" + pageName;
+      if (window.location.hash !== hash) {
+        if (opts.replaceHash) history.replaceState(null, "", hash);
+        else history.pushState(null, "", hash);
+      }
+    }
+
+    if (opts.scroll !== false) {
+      window.scrollTo({ top: 0, behavior: opts.instant ? "auto" : "smooth" });
+    }
+  }
+
+  function showProjectHome(pageName) {
     const home = $("projectHome");
     const editor = $("editorView");
     if (home) home.classList.remove("hidden");
     if (editor) editor.classList.add("hidden");
     document.body.classList.add("home-mode");
-    renderProjectLibrary();
+    navigateSitePage(
+      pageName || normalizedSitePage(window.location.hash.replace(/^#/, "")),
+      { updateHash: true, replaceHash: !window.location.hash, instant: true }
+    );
   }
 
   function showEditorView() {
@@ -1062,6 +1121,19 @@
     resetEditorSelection();
     showEditorView();
     requestAnimationFrame(() => fitView());
+  }
+
+  function openDemoProject() {
+    const demo = normalizeProject(cloneProjectData(sampleProject()));
+    demo.name = "ProjectFlow Demo — Gameplay Basics";
+
+    const record = upsertLocalProject(demo, uid("project"));
+    setActiveProjectId(record.id);
+    project = normalizeProject(cloneProjectData(record.data));
+    queueCloudSave(record);
+    resetEditorSelection();
+    showEditorView();
+    requestAnimationFrame(() => requestAnimationFrame(fitView));
   }
 
   function duplicateLibraryProject(id) {
@@ -6168,13 +6240,32 @@
 
   $("backToProjects").addEventListener("click", () => {
     saveProject(false);
-    showProjectHome();
+    showProjectHome("projects");
   });
 
+  document.querySelectorAll("[data-site-page-target]").forEach((control) => {
+    control.addEventListener("click", () => {
+      navigateSitePage(control.dataset.sitePageTarget);
+    });
+  });
+
+  window.addEventListener("hashchange", () => {
+    if (!$("projectHome") || $("projectHome").classList.contains("hidden")) return;
+    navigateSitePage(window.location.hash.replace(/^#/, ""), {
+      updateHash: false,
+      scroll: true
+    });
+  });
+
+  $("openDemoHome").addEventListener("click", openDemoProject);
+  $("openDemoGuide").addEventListener("click", openDemoProject);
+
   $("createProjectHome").addEventListener("click", createProjectFromHome);
+  $("createProjectProjects").addEventListener("click", createProjectFromHome);
   $("createProjectEmpty").addEventListener("click", createProjectFromHome);
 
   $("uploadProjectHome").addEventListener("click", () => $("homeUploadFile").click());
+  $("uploadProjectProjects").addEventListener("click", () => $("homeUploadFile").click());
   $("homeUploadFile").addEventListener("change", (event) => {
     importLibraryFile(event.target.files[0]);
     event.target.value = "";
