@@ -7,6 +7,7 @@
   const LIBRARY_KEY = "projectflow.library.v1";
   const PROJECT_LIBRARY_KEY = "projectflow.projects.v1";
   const ACTIVE_PROJECT_KEY = "projectflow.active-project.v1";
+  const CLOUD_OPT_IN_KEY = "projectflow.cloud-opt-in.v1";
   const FIREBASE_SDK_VERSION = "12.19.0";
   const NODE_WIDTH = 440;
 
@@ -1129,13 +1130,129 @@
   const cloudState = {
     configured: !!(window.PROJECTFLOW_FIREBASE_CONFIG && window.PROJECTFLOW_FIREBASE_CONFIG.projectId),
     ready: false,
+    loadingPromise: null,
     user: null,
     auth: null,
     db: null,
     provider: null,
     api: null,
-    saveTimer: null
+    saveTimer: null,
+    accountAnchor: null
   };
+
+  function setAutosaveState(state, label) {
+    const indicator = $("editorAutosaveIndicator");
+    if (!indicator) return;
+    indicator.classList.remove("saving", "saved", "cloud", "error");
+    indicator.classList.add(state || "saved");
+    const copy = indicator.querySelector("span:last-child");
+    if (copy) copy.textContent = label || (state === "saving" ? "Salvataggio…" : "Autosave");
+  }
+
+  function showProjectLoading(title, detail) {
+    const overlay = $("projectLoadingOverlay");
+    if (!overlay) return performance.now();
+    $("projectLoadingTitle").textContent = title || "Apertura progetto…";
+    $("projectLoadingDetail").textContent = detail || "Preparazione blocchi, connessioni e viewport";
+    overlay.classList.add("show");
+    overlay.setAttribute("aria-hidden", "false");
+    return performance.now();
+  }
+
+  function hideProjectLoading(startTime) {
+    const overlay = $("projectLoadingOverlay");
+    if (!overlay) return;
+    const elapsed = performance.now() - (startTime || 0);
+    const wait = Math.max(0, 420 - elapsed);
+    setTimeout(() => {
+      overlay.classList.remove("show");
+      overlay.setAttribute("aria-hidden", "true");
+    }, wait);
+  }
+
+  async function withProjectLoading(title, task, detail) {
+    const started = showProjectLoading(title, detail);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    try {
+      return await task();
+    } finally {
+      hideProjectLoading(started);
+    }
+  }
+
+  function closeInterfaceSurfaces(except) {
+    const closeSurface = (surface) => {
+      if (!surface || surface === except) return;
+      surface.classList.remove("open");
+      surface.classList.remove("show");
+      surface.setAttribute("aria-hidden", "true");
+      surface.style.marginLeft = "";
+      surface.style.marginTop = "";
+      if (typeof surface._resetFanPopup === "function") surface._resetFanPopup();
+      if (typeof surface._resetTypePicker === "function") surface._resetTypePicker();
+    };
+
+    closeSurface($("dataMenu"));
+    closeSurface($("accountMenu"));
+    document.querySelectorAll(".section-add-popup.open, .type-picker-popup.open").forEach(closeSurface);
+
+    if ($("editorAuthButton") && except !== $("accountMenu")) {
+      $("editorAuthButton").setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function keepSurfaceInViewport(surface, padding) {
+    if (!surface) return;
+    const safe = Number(padding) || 12;
+    surface.style.marginLeft = "";
+    surface.style.marginTop = "";
+
+    requestAnimationFrame(() => {
+      const rect = surface.getBoundingClientRect();
+      let dx = 0;
+      let dy = 0;
+      if (rect.left < safe) dx += safe - rect.left;
+      if (rect.right > window.innerWidth - safe) dx -= rect.right - (window.innerWidth - safe);
+      if (rect.top < safe) dy += safe - rect.top;
+      if (rect.bottom > window.innerHeight - safe) dy -= rect.bottom - (window.innerHeight - safe);
+
+      const scale = surface.closest(".world") ? Math.max(0.01, view.scale) : 1;
+      if (dx) surface.style.marginLeft = (dx / scale) + "px";
+      if (dy) surface.style.marginTop = (dy / scale) + "px";
+    });
+  }
+
+  function positionAccountMenu(anchor) {
+    const menu = $("accountMenu");
+    if (!menu || !anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    menu.classList.add("open");
+    menu.setAttribute("aria-hidden", "false");
+
+    requestAnimationFrame(() => {
+      const menuRect = menu.getBoundingClientRect();
+      const left = Math.max(12, Math.min(window.innerWidth - menuRect.width - 12, rect.right - menuRect.width));
+      const topCandidate = rect.bottom + 8;
+      const top = topCandidate + menuRect.height <= window.innerHeight - 12
+        ? topCandidate
+        : Math.max(12, rect.top - menuRect.height - 8);
+      menu.style.left = Math.round(left) + "px";
+      menu.style.top = Math.round(top) + "px";
+    });
+  }
+
+  function closeAccountMenu() {
+    const menu = $("accountMenu");
+    if (!menu) return;
+    menu.classList.remove("open");
+    menu.setAttribute("aria-hidden", "true");
+    if ($("editorAuthButton")) $("editorAuthButton").setAttribute("aria-expanded", "false");
+    cloudState.accountAnchor = null;
+  }
+
+  $("projectName").value = project.name;
 
   $("projectName").value = project.name;
 
