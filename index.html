@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
+  <title>ProjectFlow.io — Visual logic workspace</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-group">
+        <button class="icon-button mobile-only" id="toggleLibrary" aria-label="Apri libreria">☰</button>
+        <a class="brand" href="#" aria-label="ProjectFlow home">
+          <span class="brand-mark">PF</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
+        </a>
+        <span class="top-divider"></span>
+        <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
+      </div>
+      <div class="top-actions">
+        <button class="toolbar-button" id="fitView" title="Centra il diagramma">⌗ <span>Centra</span></button>
+        <button class="toolbar-button" id="saveProject" title="Salva nel browser">⌘ <span>Salva</span></button>
+        <div class="toolbar-menu">
+          <button class="toolbar-button" id="dataMenuButton">↥ <span>Dati</span> ▾</button>
+          <div class="menu-popover" id="dataMenu">
+            <button id="exportProject">Esporta JSON</button>
+            <button id="importProject">Importa JSON</button>
+            <button id="resetProject" class="danger-text">Ripristina esempio</button>
+          </div>
+        </div>
+        <input id="importFile" type="file" accept=".json,application/json" hidden />
+        <button class="primary-button" id="addObjectTop">＋ Nuovo blocco</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="library-panel" id="libraryPanel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">LIBRERIA</span>
+            <h2>Blocchi</h2>
+          </div>
+          <button class="icon-button mobile-only" id="closeLibrary" aria-label="Chiudi libreria">×</button>
+        </div>
+
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="blockSearch" type="search" placeholder="Cerca un blocco…" autocomplete="off" />
+        </label>
+
+        <div class="library-section">
+          <div class="section-label">STRUTTURA</div>
+          <div class="block-list">
+            <button class="block-template" data-template="object">
+              <span class="template-icon object-icon">◇</span>
+              <span><strong>Oggetto</strong><small>Entità, componente o istanza</small></span>
+              <kbd>O</kbd>
+            </button>
+            <button class="block-template" data-template="class">
+              <span class="template-icon class-icon">C</span>
+              <span><strong>Classe</strong><small>Responsabilità e membri</small></span>
+              <kbd>C</kbd>
+            </button>
+            <button class="block-template" data-template="function">
+              <span class="template-icon function-icon">ƒ</span>
+              <span><strong>Funzione</strong><small>Input, logica e risultato</small></span>
+              <kbd>F</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="library-section">
+          <div class="section-label">LOGICA</div>
+          <div class="block-list">
+            <button class="block-template" data-template="variable">
+              <span class="template-icon variable-icon">x</span>
+              <span><strong>Variabile</strong><small>Dato o stato condiviso</small></span>
+              <kbd>V</kbd>
+            </button>
+            <button class="block-template" data-template="condition">
+              <span class="template-icon condition-icon">?</span>
+              <span><strong>Condizione</strong><small>Confronto o decisione</small></span>
+              <kbd>D</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="library-section">
+          <div class="section-label">INTERFACCIA & NOTE</div>
+          <div class="block-list">
+            <button class="block-template" data-template="ui">
+              <span class="template-icon ui-icon">▣</span>
+              <span><strong>Interfaccia</strong><small>Text, button, HUD, menu…</small></span>
+              <kbd>U</kbd>
+            </button>
+            <button class="block-template" data-template="note">
+              <span class="template-icon note-icon">≡</span>
+              <span><strong>Nota</strong><small>Regola, idea o TODO</small></span>
+              <kbd>N</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="library-tip">
+          <span>↗</span>
+          <p><strong>Concettuale, non compilato.</strong> Scrivi nomi, tipi e pseudocodice come preferisci: ProjectFlow serve a rendere chiaro il sistema prima dell'implementazione.</p>
+        </div>
+      </aside>
+
+      <section class="canvas-panel">
+        <div class="canvas-toolbar">
+          <div class="tool-group">
+            <button class="canvas-tool active" id="selectTool" title="Seleziona">↖</button>
+            <button class="canvas-tool" id="connectTool" title="Collega blocchi">⌁</button>
+            <span class="tool-separator"></span>
+            <button class="canvas-tool" id="zoomOut" title="Riduci zoom">−</button>
+            <button class="zoom-readout" id="zoomReadout">100%</button>
+            <button class="canvas-tool" id="zoomIn" title="Aumenta zoom">＋</button>
+          </div>
+          <div class="canvas-status">
+            <span class="status-dot"></span>
+            <span id="saveStatus">Salvato localmente</span>
+          </div>
+        </div>
+
+        <div class="canvas-viewport" id="canvasViewport" tabindex="0">
+          <div class="world" id="world">
+            <svg class="edge-layer" id="edgeLayer" aria-hidden="true"></svg>
+            <div class="node-layer" id="nodeLayer"></div>
+          </div>
+
+          <div class="canvas-hint" id="canvasHint">
+            <strong>Trascina per muovere i blocchi.</strong>
+            <span>Clicca un connettore e poi un altro per creare un collegamento. Alt + trascina per spostare la vista.</span>
+          </div>
+
+          <div class="connection-banner" id="connectionBanner">
+            <span class="pulse-dot"></span>
+            <span>Collegamento attivo: scegli un connettore di destinazione</span>
+            <button id="cancelConnection">Annulla</button>
+          </div>
+
+          <div class="minimap" id="minimap">
+            <div class="minimap-title">MAPPA</div>
+            <svg id="minimapSvg" viewBox="0 0 180 110"></svg>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector-panel" id="inspectorPanel">
+        <div class="empty-inspector" id="emptyInspector">
+          <div class="empty-symbol">↖</div>
+          <h3>Seleziona un blocco</h3>
+          <p>Qui puoi modificarne contenuto, pseudocodice e campi senza imporre una sintassi.</p>
+        </div>
+
+        <div class="inspector-content hidden" id="inspectorContent">
+          <div class="panel-heading inspector-heading">
+            <div>
+              <span class="eyebrow">ISPETTORE</span>
+              <h2 id="inspectorTitle">Blocco</h2>
+            </div>
+            <button class="icon-button" id="closeInspector" title="Deseleziona">×</button>
+          </div>
+
+          <div class="inspector-scroll">
+            <label class="field-label">TIPO
+              <select id="nodeType">
+                <option value="object">Oggetto</option>
+                <option value="class">Classe</option>
+                <option value="function">Funzione</option>
+                <option value="variable">Variabile</option>
+                <option value="condition">Condizione</option>
+                <option value="ui">Interfaccia</option>
+                <option value="note">Nota</option>
+              </select>
+            </label>
+
+            <label class="field-label">NOME
+              <input id="nodeTitle" type="text" />
+            </label>
+
+            <label class="field-label">DESCRIZIONE
+              <textarea id="nodeDescription" rows="3" placeholder="Che responsabilità ha questo blocco?"></textarea>
+            </label>
+
+            <div class="inspector-section-head">
+              <div>
+                <span class="field-label static">CONTENUTO</span>
+                <small>Variabili, funzioni, proprietà o testo libero.</small>
+              </div>
+              <button class="mini-button" id="addRow">＋ Riga</button>
+            </div>
+            <div class="row-editor-list" id="rowEditorList"></div>
+
+            <label class="field-label pseudo-label">PSEUDOCODICE
+              <textarea id="nodePseudo" class="code-area" rows="8" spellcheck="false" placeholder="// Qualsiasi sintassi va bene&#10;if key.id == door.id&#10;  door.open = true"></textarea>
+            </label>
+          </div>
+
+          <div class="inspector-footer">
+            <button class="secondary-button" id="duplicateNode">Duplica</button>
+            <button class="danger-button" id="deleteNode">Elimina</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
