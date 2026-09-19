@@ -1488,7 +1488,7 @@
     railDot.className = "backbone-main-dot";
     const label = document.createElement("span");
     label.className = "backbone-title";
-    label.textContent = node.uiBackboneCollapsed ? String(relations.length) : "FLOW";
+    label.textContent = node.uiBackboneCollapsed ? String(relations.length) : "LINKS";
     toggle.append(railDot, label);
     backbone.appendChild(toggle);
 
