@@ -6376,3 +6376,120 @@ body,
     min-width:112px;
   }
 }
+
+
+/* v2.8 — left block drawer, resizable map, owner-only names, smoother collaboration */
+.new-block-palette.block-drawer{
+  left:14px;
+  right:auto;
+  transform:translateX(-18px);
+}
+.new-block-palette.block-drawer.open{
+  transform:translateX(0);
+}
+@media(max-width:850px){
+  .new-block-palette.block-drawer{
+    left:10px;
+    right:auto;
+  }
+}
+
+.project-name.owner-locked{
+  color:#737e8f;
+  cursor:default;
+  background:transparent;
+}
+.project-name.owner-locked:hover,
+.project-name.owner-locked:focus{
+  color:#737e8f;
+  background:transparent;
+  box-shadow:none;
+}
+
+.minimap{
+  min-width:220px;
+  min-height:160px;
+  max-width:520px;
+  max-height:380px;
+}
+.minimap-header{
+  position:relative;
+  z-index:3;
+}
+#minimapSvg{
+  height:calc(100% - 42px);
+}
+.minimap-resize-handle{
+  position:absolute;
+  left:3px;
+  top:3px;
+  z-index:5;
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:rgba(10,14,24,.64);
+  color:#56657b;
+  cursor:nwse-resize;
+  font-size:10px;
+  opacity:.18;
+  transition:opacity .14s ease,background .14s ease,border-color .14s ease;
+}
+.minimap:hover .minimap-resize-handle,
+.resizing-minimap .minimap-resize-handle{
+  opacity:1;
+}
+.minimap-resize-handle:hover{
+  border-color:#39485e;
+  background:#151d2b;
+  color:#b4c0d0;
+}
+.resizing-minimap{
+  cursor:nwse-resize!important;
+  user-select:none;
+}
+.resizing-minimap *{
+  cursor:nwse-resize!important;
+}
+
+.remote-cursor{
+  transition:left .13s linear,top .13s linear;
+}
+.remote-node-preview{
+  position:absolute;
+  z-index:2;
+  box-sizing:border-box;
+  border:2px solid color-mix(in srgb,var(--preview-accent,#6fa1bf) 76%,#fff 8%);
+  border-radius:12px;
+  background:color-mix(in srgb,var(--preview-accent,#6fa1bf) 9%,rgba(12,18,26,.74));
+  box-shadow:0 10px 24px rgba(0,0,0,.18);
+  opacity:.68;
+  pointer-events:none;
+  transition:left .12s linear,top .12s linear,width .12s linear,height .12s linear;
+}
+.remote-node-preview-title{
+  position:absolute;
+  left:10px;
+  top:8px;
+  max-width:calc(100% - 20px);
+  overflow:hidden;
+  color:#dce7ef;
+  font-size:10px;
+  font-weight:850;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.remote-node-preview-user{
+  position:absolute;
+  right:7px;
+  bottom:6px;
+  padding:3px 5px;
+  border-radius:5px;
+  background:rgba(13,20,28,.82);
+  color:#9fb5c5;
+  font-size:7px;
+  font-weight:800;
+}
