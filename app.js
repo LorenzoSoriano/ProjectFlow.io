@@ -2073,11 +2073,25 @@
             detailOptions.className = "fan-detail-options";
             detailView.append(detailHeader, detailOptions);
 
+            const positionFanPopup = () => {
+              const buttonRect = addButton.getBoundingClientRect();
+              const viewportRect = viewport.getBoundingClientRect();
+              const availableAbove = Math.max(120, buttonRect.top - viewportRect.top - 14);
+              const availableBelow = Math.max(120, viewportRect.bottom - buttonRect.bottom - 14);
+              const openDown = availableBelow > availableAbove;
+              const available = openDown ? availableBelow : availableAbove;
+              const maxHeight = Math.max(180, Math.min(560, Math.floor(available)));
+
+              popup.classList.toggle("open-down", openDown);
+              popup.style.setProperty("--popup-inverse-scale", String(1 / Math.max(0.01, view.scale)));
+              popup.style.setProperty("--popup-max-height", maxHeight + "px");
+            };
+
             const updatePopupOverflow = () => {
               popup.classList.remove("needs-scroll");
+              positionFanPopup();
               requestAnimationFrame(() => {
-                const maxHeight = Math.min(390, Math.max(220, window.innerHeight - 140));
-                popup.style.setProperty("--popup-max-height", maxHeight + "px");
+                const maxHeight = parseFloat(getComputedStyle(popup).getPropertyValue("--popup-max-height")) || 560;
                 popup.classList.toggle("needs-scroll", popup.scrollHeight > maxHeight + 2);
               });
             };
@@ -2086,12 +2100,14 @@
               popup.classList.remove("detail-mode");
               detailTitle.textContent = "";
               detailOptions.innerHTML = "";
+              popup.scrollTop = 0;
               updatePopupOverflow();
             };
 
             backButton.addEventListener("click", (event) => {
               event.stopPropagation();
               resetFanPopup();
+              popup.scrollTop = 0;
             });
 
             groups.forEach((groupData, index) => {
@@ -2122,6 +2138,7 @@
                 });
 
                 popup.classList.add("detail-mode");
+                popup.scrollTop = 0;
                 updatePopupOverflow();
               });
               homeView.appendChild(categoryButton);
@@ -2168,6 +2185,7 @@
             popup.classList.toggle("open", willOpen);
 
             if (willOpen && typeof popup._updatePopupOverflow === "function") {
+              popup.scrollTop = 0;
               popup._updatePopupOverflow();
             }
           });
