@@ -2940,6 +2940,8 @@
 
         body.appendChild(makeParameterSection(node, node.methodAccess));
 
+        body.appendChild(makeMethodMiniHeading("COMMENT", "summary"));
+
         const methodNotes = document.createElement("textarea");
         methodNotes.className = "method-description-inline standalone-method-description";
         methodNotes.value = node.methodDescription || "";
@@ -2962,12 +2964,12 @@
 
         const logicSection = document.createElement("div");
         logicSection.className = "method-logic-section";
-        logicSection.appendChild(makeMethodMiniHeading("LOGIC", "optional"));
+        logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
 
         const logic = document.createElement("textarea");
         logic.className = "node-pseudo-inline method-logic-editor";
         logic.value = node.methodLogic || node.pseudo || "";
-        logic.placeholder = "Pseudocodice, passaggi o regole interne…";
+        logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
         logic.spellcheck = false;
         logic.addEventListener("pointerdown", (event) => event.stopPropagation());
         logic.addEventListener("input", () => {
@@ -3385,6 +3387,8 @@
 
           editor.appendChild(makeParameterSection(item, item.access));
 
+          editor.appendChild(makeMethodMiniHeading("COMMENT", "summary"));
+
           const description = document.createElement("textarea");
           description.className = "method-description-inline";
           description.value = item.methodDescription || "";
@@ -3407,12 +3411,12 @@
 
           const logicSection = document.createElement("div");
           logicSection.className = "method-logic-section";
-          logicSection.appendChild(makeMethodMiniHeading("LOGIC", "optional"));
+          logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
 
           const logic = document.createElement("textarea");
           logic.className = "method-logic-inline";
           logic.value = item.methodLogic || "";
-          logic.placeholder = "Pseudocodice o passaggi interni del metodo…";
+          logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
           logic.spellcheck = false;
           logic.addEventListener("pointerdown", (event) => event.stopPropagation());
           logic.addEventListener("input", () => {
