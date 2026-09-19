@@ -182,6 +182,135 @@
     return Object.assign(item, extra || {});
   }
 
+  function functionParameter(name, dataType, extra) {
+    return Object.assign({
+      id: uid("param"),
+      kind: "parameter",
+      name: name || "value",
+      label: name || "value",
+      dataType: dataType || "int",
+      collectionKind: "single",
+      arrayLength: 0,
+      listInitialCount: 0,
+      dictionaryKeyType: "string",
+      mode: "value",
+      access: "public"
+    }, extra || {});
+  }
+
+  function parseTypeDescriptor(text) {
+    const raw = String(text || "int").trim();
+    const dictionary = raw.match(/^Dictionary<\s*([^,]+)\s*,\s*(.+)\s*>$/i);
+    if (dictionary) {
+      return {
+        dataType: dictionary[2].trim(),
+        collectionKind: "dictionary",
+        dictionaryKeyType: dictionary[1].trim()
+      };
+    }
+
+    const list = raw.match(/^List<\s*(.+)\s*>$/i);
+    if (list) {
+      return { dataType: list[1].trim(), collectionKind: "list" };
+    }
+
+    const array = raw.match(/^(.+)\[\s*\]$/);
+    if (array) {
+      return { dataType: array[1].trim(), collectionKind: "array" };
+    }
+
+    return { dataType: raw || "int", collectionKind: "single" };
+  }
+
+  function parseParameterString(text, access) {
+    const source = String(text || "").trim();
+    if (!source) return [];
+
+    return source.split(",").map((part, index) => {
+      const tokens = part.trim().split(/\s+/).filter(Boolean);
+      let mode = "value";
+      if (["ref", "out", "in"].includes(tokens[0])) mode = tokens.shift();
+
+      const typeToken = tokens.shift() || "int";
+      const name = tokens.join(" ") || ("value" + (index + 1));
+      const descriptor = parseTypeDescriptor(typeToken);
+      return functionParameter(name, descriptor.dataType, {
+        collectionKind: descriptor.collectionKind,
+        dictionaryKeyType: descriptor.dictionaryKeyType || "string",
+        mode: mode,
+        access: access || "public"
+      });
+    });
+  }
+
+  function parameterTypeLabel(parameter) {
+    return collectionTypeLabel(
+      parameter.collectionKind,
+      parameter.dataType,
+      parameter.dictionaryKeyType,
+      parameter.arrayLength
+    );
+  }
+
+  function parameterTypeKey(parameter) {
+    return collectionTypeKey(
+      parameter.collectionKind,
+      parameter.dataType,
+      parameter.dictionaryKeyType
+    );
+  }
+
+  function syncLegacyParameters(target) {
+    if (!target || !Array.isArray(target.methodParameters)) return;
+    target.parameters = target.methodParameters.map((parameter) => {
+      const prefix = parameter.mode && parameter.mode !== "value" ? parameter.mode + " " : "";
+      return prefix + parameterTypeKey(parameter) + " " + (parameter.name || parameter.label || "value");
+    }).join(", ");
+  }
+
+  function ensureFunctionSignature(target, accessFallback) {
+    if (!target) return;
+    const access = target.access || target.methodAccess || accessFallback || "public";
+
+    if (!Array.isArray(target.methodParameters)) {
+      target.methodParameters = parseParameterString(target.parameters || "", access);
+    }
+
+    target.methodParameters = target.methodParameters.map((parameter, index) => {
+      if (!parameter || typeof parameter !== "object") {
+        return functionParameter("value" + (index + 1), "int", { access: access });
+      }
+      if (!parameter.id) parameter.id = uid("param");
+      parameter.kind = "parameter";
+      if (typeof parameter.name !== "string" || !parameter.name) parameter.name = parameter.label || ("value" + (index + 1));
+      parameter.label = parameter.name;
+      if (typeof parameter.dataType !== "string" || !parameter.dataType) parameter.dataType = "int";
+      if (typeof parameter.collectionKind !== "string") parameter.collectionKind = "single";
+      if (!["single", "array", "list", "dictionary"].includes(parameter.collectionKind)) parameter.collectionKind = "single";
+      if (typeof parameter.arrayLength !== "number") parameter.arrayLength = 0;
+      if (typeof parameter.listInitialCount !== "number") parameter.listInitialCount = 0;
+      if (typeof parameter.dictionaryKeyType !== "string" || !parameter.dictionaryKeyType) parameter.dictionaryKeyType = "string";
+      if (!["value", "ref", "out", "in"].includes(parameter.mode)) parameter.mode = "value";
+      parameter.access = access;
+      return parameter;
+    });
+
+    if (!target.returnPortId) target.returnPortId = uid("return");
+    if (typeof target.returnName !== "string" || !target.returnName) target.returnName = "result";
+    if (typeof target.methodLogic !== "string") target.methodLogic = "";
+    syncLegacyParameters(target);
+  }
+
+  function applyLifecyclePreset(target, preset) {
+    if (!target || !preset) return;
+    target.label = target.label !== undefined ? preset.name : target.label;
+    if (target.title !== undefined) target.title = preset.name;
+    target.returnType = preset.returnType || "void";
+    target.returnCollectionKind = "single";
+    target.methodParameters = parseParameterString(preset.parameters || "", target.access || target.methodAccess || "private");
+    syncLegacyParameters(target);
+  }
+
   function variableRow(label, dataType, access) {
     return row(label || "value", "", "variable", {
       dataType: dataType || "int",
@@ -205,7 +334,11 @@
       returnArrayLength: 0,
       returnDictionaryKeyType: "string",
       parameters: "",
-      methodDescription: ""
+      methodParameters: [],
+      returnPortId: uid("return"),
+      returnName: "result",
+      methodDescription: "",
+      methodLogic: ""
     });
   }
 
@@ -327,6 +460,7 @@
       if (typeof item.returnDictionaryKeyType !== "string" || !item.returnDictionaryKeyType) item.returnDictionaryKeyType = "string";
       if (typeof item.parameters !== "string") item.parameters = "";
       if (typeof item.methodDescription !== "string") item.methodDescription = "";
+      ensureFunctionSignature(item, item.access);
     }
 
     if (item.kind === "unityEvent") {
@@ -382,6 +516,34 @@
       if (typeof node.returnDictionaryKeyType !== "string" || !node.returnDictionaryKeyType) node.returnDictionaryKeyType = "string";
       if (typeof node.parameters !== "string") node.parameters = "";
       if (typeof node.methodDescription !== "string") node.methodDescription = node.description || "";
+
+      if (!Array.isArray(node.methodParameters)) {
+        const legacyInputs = node.rows.filter((item) => item.kind === "input");
+        if (legacyInputs.length) {
+          node.methodParameters = legacyInputs.map((item) => {
+            const descriptor = parseTypeDescriptor(item.value && item.value !== "input" ? item.value : "int");
+            return functionParameter(item.label || "value", descriptor.dataType, {
+              collectionKind: descriptor.collectionKind,
+              dictionaryKeyType: descriptor.dictionaryKeyType || "string",
+              access: node.methodAccess
+            });
+          });
+        }
+      }
+
+      const legacyOutput = node.rows.find((item) => item.kind === "output");
+      if (legacyOutput) {
+        if ((!node.returnType || node.returnType === "void") && legacyOutput.value && !["value", "output"].includes(legacyOutput.value)) {
+          const descriptor = parseTypeDescriptor(legacyOutput.value);
+          node.returnType = descriptor.dataType;
+          node.returnCollectionKind = descriptor.collectionKind;
+          node.returnDictionaryKeyType = descriptor.dictionaryKeyType || "string";
+        }
+        if (!node.returnName || node.returnName === "result") node.returnName = legacyOutput.label || "result";
+      }
+
+      node.rows = node.rows.filter((item) => item.kind !== "input" && item.kind !== "output");
+      ensureFunctionSignature(node, node.methodAccess);
     }
   }
 
@@ -1692,10 +1854,7 @@
             item.methodKind = value;
             if (value === "lifecycle") {
               const preset = UNITY_LIFECYCLE[0];
-              item.label = preset.name;
-              item.returnType = preset.returnType;
-              item.returnCollectionKind = "single";
-              item.parameters = preset.parameters;
+              applyLifecyclePreset(item, preset);
             }
             rerenderNode();
           }, "inline-method-kind");
@@ -2826,9 +2985,7 @@
         node.methodKind = value;
         if (value === "lifecycle") {
           const preset = UNITY_LIFECYCLE[0];
-          node.title = preset.name;
-          node.returnType = preset.returnType;
-          node.parameters = preset.parameters;
+          applyLifecyclePreset(node, preset);
           $("nodeTitle").value = node.title;
         }
         renderNodes();
@@ -3058,9 +3215,7 @@
         item.methodKind = value;
         if (value === "lifecycle") {
           const preset = UNITY_LIFECYCLE[0];
-          item.label = preset.name;
-          item.returnType = preset.returnType;
-          item.parameters = preset.parameters;
+          applyLifecyclePreset(item, preset);
         }
         renderNodes();
         renderInspector();
@@ -3457,8 +3612,8 @@
       function: {
         title: "NewMethod",
         description: "Metodo concettuale con firma C#/Unity.",
-        rows: [row("input", "value", "input"), row("result", "value", "output")],
-        pseudo: "return result",
+        rows: [],
+        pseudo: "",
         extra: {
           ownerClassId: "",
           methodAccess: "public",
@@ -3468,7 +3623,11 @@
           returnArrayLength: 0,
           returnDictionaryKeyType: "string",
           parameters: "",
-          methodDescription: ""
+          methodParameters: [],
+          returnPortId: uid("return"),
+          returnName: "result",
+          methodDescription: "",
+          methodLogic: ""
         }
       },
       variable: {
