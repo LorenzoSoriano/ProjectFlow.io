@@ -1941,7 +1941,47 @@
 
   let panelWidths = loadPanelWidths();
 
+  function reconcileWorkspacePanels() {
+    const workspace = document.querySelector(".workspace");
+    if (!workspace) return;
+
+    if (window.innerWidth <= 850) {
+      if ($("libraryPanel").classList.contains("open") && $("inspectorPanel").classList.contains("open")) {
+        $("libraryPanel").classList.remove("open");
+      }
+      return;
+    }
+
+    const minCanvas = 520;
+    let available = window.innerWidth - panelWidths.library - (inspectorVisible ? panelWidths.inspector : 0);
+
+    if (inspectorVisible && available < minCanvas) {
+      const shortage = minCanvas - available;
+      const reducibleInspector = Math.max(0, panelWidths.inspector - 300);
+      const inspectorReduction = Math.min(shortage, reducibleInspector);
+      panelWidths.inspector -= inspectorReduction;
+      available += inspectorReduction;
+
+      if (available < minCanvas) {
+        const reducibleLibrary = Math.max(0, panelWidths.library - 240);
+        const libraryReduction = Math.min(minCanvas - available, reducibleLibrary);
+        panelWidths.library -= libraryReduction;
+        available += libraryReduction;
+      }
+
+      if (available < 430) {
+        inspectorVisible = false;
+        workspace.classList.add("inspector-collapsed");
+        $("inspectorPanel").classList.add("manual-hidden");
+      }
+    }
+
+    document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
+    document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
+  }
+
   function setPanelWidths() {
+    reconcileWorkspacePanels();
     document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
     localStorage.setItem(PANELS_KEY, JSON.stringify(panelWidths));
@@ -1954,11 +1994,18 @@
   function setInspectorVisible(visible) {
     inspectorVisible = !!visible;
     const workspace = document.querySelector(".workspace");
+    if (window.innerWidth <= 850 && inspectorVisible) {
+      $("libraryPanel").classList.remove("open");
+    }
+
     if (workspace) workspace.classList.toggle("inspector-collapsed", !inspectorVisible);
     $("inspectorPanel").classList.toggle("manual-hidden", !inspectorVisible);
     if (window.innerWidth <= 850) {
       $("inspectorPanel").classList.toggle("open", inspectorVisible && selectedNodeIds.size > 0);
     }
+
+    reconcileWorkspacePanels();
+
     requestAnimationFrame(() => {
       renderEdges();
       renderMinimap();
@@ -6535,9 +6582,9 @@
     if (!panelResizeState) return;
     const delta = event.clientX - panelResizeState.startX;
     if (panelResizeState.side === "library") {
-      panelWidths.library = Math.max(180, Math.min(420, panelResizeState.startWidth + delta));
+      panelWidths.library = Math.max(240, Math.min(480, panelResizeState.startWidth + delta));
     } else {
-      panelWidths.inspector = Math.max(240, Math.min(520, panelResizeState.startWidth - delta));
+      panelWidths.inspector = Math.max(300, Math.min(620, panelResizeState.startWidth - delta));
     }
     setPanelWidths();
   }
