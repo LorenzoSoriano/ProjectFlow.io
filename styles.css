@@ -6849,3 +6849,13 @@ body,
 .collaboration-layer{
   z-index:6;
 }
+
+
+/* v2.15 — prevent lateral New Block flyout from flashing at 0,0 */
+.new-block-fan.positioning{
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transform:none!important;
+  transition:none!important;
+}
