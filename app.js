@@ -569,6 +569,25 @@
     return { ok: true, from: pair.from, to: pair.to, outputType, inputType };
   }
 
+  function dataTypeColor(type) {
+    const value = normalizedType(type);
+    if (value === "bool") return "#ff966d";
+    if (["int", "float", "double"].includes(value)) return "#f3bd59";
+    if (value === "string") return "#e979c6";
+    if (["Vector2", "Vector3", "Quaternion", "Color"].includes(value)) return "#42d4df";
+    if (["GameObject", "Transform", "Rigidbody", "Collider", "Animator", "AudioSource", "Camera", "SpriteRenderer"].includes(value)) return "#55d69e";
+    if (value === "void") return "#68748a";
+    if (publicClassNodes().some((node) => node.title === value)) return "#9b8cff";
+    return "#7d8aa3";
+  }
+
+  function decoratePort(port, type) {
+    const color = dataTypeColor(type);
+    port.style.setProperty("--port-color", color);
+    port.dataset.dataType = normalizedType(type);
+    return port;
+  }
+
   function makePort(nodeId, rowId, side, connectedPorts) {
     const port = document.createElement("button");
     port.className = "port " + side;
@@ -615,25 +634,46 @@
     typeDot.textContent = meta.icon;
 
     const heading = document.createElement("div");
-    heading.className = "node-heading";
-    const title = document.createElement("strong");
-    title.textContent = node.title;
+    heading.className = "node-heading inline-heading";
+
+    const titleInput = document.createElement("input");
+    titleInput.className = "node-title-inline";
+    titleInput.value = node.title;
+    titleInput.setAttribute("aria-label", "Nome blocco");
+    titleInput.addEventListener("pointerdown", (event) => event.stopPropagation());
+    titleInput.addEventListener("input", () => {
+      node.title = titleInput.value;
+      markDirty();
+    });
+    titleInput.addEventListener("change", () => {
+      renderInspector();
+      renderNodes();
+      renderEdges();
+    });
+
     const label = document.createElement("small");
     label.textContent = nodeSubtitle(node);
-    heading.append(title, label);
+    heading.append(titleInput, label);
 
     const more = document.createElement("button");
     more.className = "node-more";
     more.type = "button";
     more.textContent = "•••";
-    more.title = "Seleziona e modifica";
+    more.title = "Apri Inspector";
     more.addEventListener("pointerdown", (event) => event.stopPropagation());
     more.addEventListener("click", () => selectNode(node.id));
 
     header.append(typeDot, heading, more, makePort(node.id, "__node__", "out", connectedPorts));
 
     header.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || event.target.closest(".port") || event.target.closest("button")) return;
+      if (
+        event.button !== 0 ||
+        event.target.closest(".port") ||
+        event.target.closest("button") ||
+        event.target.closest("input") ||
+        event.target.closest("select") ||
+        event.target.closest("textarea")
+      ) return;
       event.preventDefault();
       event.stopPropagation();
 
@@ -647,6 +687,49 @@
 
     const body = document.createElement("div");
     body.className = "node-body";
+
+    const rerenderNode = () => {
+      renderNodes();
+      renderEdges();
+      renderMinimap();
+      renderInspector();
+      markDirty();
+    };
+
+    const compactSelect = (value, options, onChange, className) => {
+      const select = document.createElement("select");
+      select.className = className || "inline-member-select";
+      options.forEach((optionValue) => {
+        const pair = Array.isArray(optionValue) ? optionValue : [optionValue, optionValue];
+        const option = document.createElement("option");
+        option.value = pair[0];
+        option.textContent = pair[1];
+        select.appendChild(option);
+      });
+      if (value && !Array.from(select.options).some((option) => option.value === value)) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      }
+      select.value = value || select.options[0]?.value || "";
+      select.addEventListener("pointerdown", (event) => event.stopPropagation());
+      select.addEventListener("change", () => onChange(select.value));
+      return select;
+    };
+
+    const inlineInput = (value, placeholder, onInput, className) => {
+      const input = document.createElement("input");
+      input.className = className || "inline-member-input";
+      input.value = value || "";
+      input.placeholder = placeholder || "";
+      input.addEventListener("pointerdown", (event) => event.stopPropagation());
+      input.addEventListener("input", () => {
+        onInput(input.value);
+        markDirty();
+      });
+      return input;
+    };
 
     if (node.type === "note") {
       const noteEditor = document.createElement("textarea");
@@ -686,79 +769,398 @@
 
       if (node.type === "class") {
         const classMeta = document.createElement("div");
-        classMeta.className = "node-meta-strip";
-        const accessLabel = REFERENCE_MODE_LABELS[node.instanceAccess] || node.instanceAccess;
-        classMeta.innerHTML =
-          '<span class="meta-chip">' + node.classVisibility + '</span>' +
-          '<span class="meta-chip">' + node.baseType + '</span>' +
-          '<span class="meta-chip muted">' + accessLabel + '</span>';
+        classMeta.className = "node-meta-inline";
+        classMeta.append(
+          compactSelect(node.classVisibility, [["public", "public"], ["internal", "internal"]], (value) => {
+            node.classVisibility = value;
+            rerenderNode();
+          }, "node-meta-select"),
+          compactSelect(node.baseType, [["MonoBehaviour", "MonoBehaviour"], ["ScriptableObject", "ScriptableObject"], ["Plain C#", "Plain C#"]], (value) => {
+            node.baseType = value;
+            if (value === "ScriptableObject") node.instanceAccess = "scriptableObject";
+            rerenderNode();
+          }, "node-meta-select"),
+          compactSelect(node.instanceAccess, [
+            ["inspector", "Inspector"],
+            ["getComponent", "GetComponent"],
+            ["instance", "Instance"],
+            ["findFirst", "FindFirst"],
+            ["scriptableObject", "SO Asset"],
+            ["value", "Local"]
+          ], (value) => {
+            node.instanceAccess = value;
+            rerenderNode();
+          }, "node-meta-select")
+        );
         body.appendChild(classMeta);
       }
 
       if (node.type === "function") {
         const functionMeta = document.createElement("div");
-        functionMeta.className = "node-function-signature";
-        const owner = ownerClassName(node);
-        const kind = METHOD_KIND_LABELS[node.methodKind] || "Custom";
-        const ownerText = owner ? owner + "  ·  " : "";
-        functionMeta.innerHTML =
-          '<span class="function-owner">' + ownerText + kind + '</span>' +
-          '<code>' + node.methodAccess + " " + node.returnType + " " + node.title + "(" + (node.parameters || "") + ")" + '</code>';
+        functionMeta.className = "node-function-inline";
+        functionMeta.append(
+          compactSelect(node.methodAccess, ["public", "private", "protected", "internal"], (value) => {
+            node.methodAccess = value;
+            rerenderNode();
+          }),
+          compactSelect(node.returnType, ["void"].concat(availableDataTypes()), (value) => {
+            node.returnType = value;
+            rerenderNode();
+          }),
+          inlineInput(node.parameters, "parametri", (value) => {
+            node.parameters = value;
+          }, "inline-params-input")
+        );
         body.appendChild(functionMeta);
       }
 
+      const removeMember = (item) => {
+        node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
+        project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
+        rerenderNode();
+      };
+
+      const moveMemberBefore = (sourceId, targetId) => {
+        if (sourceId === targetId) return;
+        const sourceIndex = node.rows.findIndex((item) => item.id === sourceId);
+        const targetIndex = node.rows.findIndex((item) => item.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+        const sourceItem = node.rows[sourceIndex];
+        const targetItem = node.rows[targetIndex];
+        const sameGroup =
+          (["variable", "property"].includes(sourceItem.kind) && ["variable", "property"].includes(targetItem.kind)) ||
+          sourceItem.kind === targetItem.kind;
+        if (!sameGroup) {
+          showToast("Riordina variabili, metodi ed eventi dentro la propria sezione.");
+          return;
+        }
+        node.rows.splice(sourceIndex, 1);
+        const freshTargetIndex = node.rows.findIndex((item) => item.id === targetId);
+        node.rows.splice(freshTargetIndex, 0, sourceItem);
+        rerenderNode();
+      };
+
       const makeRowElement = (item) => {
+        normalizeMember(item);
         const itemMeta = ROW_META[item.kind] || ROW_META.variable;
         const rowElement = document.createElement("div");
-        rowElement.className = "node-row member-" + item.kind;
+        rowElement.className = "node-row member-" + item.kind + " inline-edit-row";
         rowElement.dataset.rowId = item.id;
+        rowElement.draggable = true;
+
+        rowElement.addEventListener("dragstart", (event) => {
+          event.stopPropagation();
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/projectflow-member", item.id);
+          rowElement.classList.add("dragging");
+        });
+        rowElement.addEventListener("dragend", () => rowElement.classList.remove("dragging"));
+        rowElement.addEventListener("dragover", (event) => {
+          if (!event.dataTransfer.types.includes("text/projectflow-member")) return;
+          event.preventDefault();
+          rowElement.classList.add("drop-target");
+        });
+        rowElement.addEventListener("dragleave", () => rowElement.classList.remove("drop-target"));
+        rowElement.addEventListener("drop", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          rowElement.classList.remove("drop-target");
+          moveMemberBefore(event.dataTransfer.getData("text/projectflow-member"), item.id);
+        });
+
+        const inputType = memberInputType(item);
+        const outputType = memberOutputType(item);
+        const allowInput =
+          item.kind === "variable" ||
+          item.kind === "property" ||
+          item.kind === "unityEvent" ||
+          item.kind === "condition" ||
+          item.kind === "input" ||
+          (item.kind === "function" && firstParameterType(item.parameters) !== "any");
+        const allowOutput =
+          item.kind === "variable" ||
+          item.kind === "property" ||
+          item.kind === "unityEvent" ||
+          item.kind === "condition" ||
+          item.kind === "output" ||
+          (item.kind === "function" && normalizedType(item.returnType) !== "void");
+
+        if (allowInput) {
+          rowElement.appendChild(decoratePort(makePort(node.id, item.id, "in", connectedPorts), inputType));
+        }
+
+        const dragHandle = document.createElement("span");
+        dragHandle.className = "member-drag";
+        dragHandle.textContent = "⋮⋮";
+        dragHandle.title = "Trascina per riordinare";
 
         const kind = document.createElement("span");
         kind.className = "row-kind";
         kind.textContent = itemMeta.icon;
 
-        const copy = document.createElement("div");
-        copy.className = "row-copy";
-        const rowTitle = document.createElement("strong");
-        rowTitle.textContent = item.label;
-        const rowValue = document.createElement("small");
-        rowValue.textContent = memberSummary(item);
-        copy.append(rowTitle, rowValue);
+        const editor = document.createElement("div");
+        editor.className = "inline-member-editor";
 
-        rowElement.append(
-          makePort(node.id, item.id, "in", connectedPorts),
-          kind,
-          copy,
-          makePort(node.id, item.id, "out", connectedPorts)
-        );
+        const topLine = document.createElement("div");
+        topLine.className = "inline-member-top";
+
+        if (item.kind === "variable" || item.kind === "property") {
+          const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
+            item.access = value;
+            if (value === "public") item.serialized = true;
+            rerenderNode();
+          }, "inline-access-select");
+
+          const type = compactSelect(item.dataType, availableDataTypes(), (value) => {
+            item.dataType = value;
+            if (publicClassNodes().some((classNode) => classNode.title === value) && item.referenceMode === "value") {
+              item.referenceMode = "inspector";
+            }
+            rerenderNode();
+          }, "inline-type-select");
+
+          const name = inlineInput(item.label, "nome", (value) => {
+            item.label = value;
+          }, "inline-name-input");
+
+          topLine.append(access, type, name);
+
+          const second = document.createElement("div");
+          second.className = "inline-member-bottom";
+          const reference = compactSelect(item.referenceMode, [
+            ["value", "Valore"],
+            ["inspector", "Inspector"],
+            ["getComponent", "GetComponent"],
+            ["instance", "Instance"],
+            ["findFirst", "FindFirst"],
+            ["scriptableObject", "SO Asset"]
+          ], (value) => {
+            item.referenceMode = value;
+            rerenderNode();
+          }, "inline-reference-select");
+
+          const defaultValue = inlineInput(item.defaultValue, "default", (value) => {
+            item.defaultValue = value;
+          }, "inline-default-input");
+
+          const serialized = document.createElement("button");
+          serialized.type = "button";
+          serialized.className = "inline-flag" + (item.serialized ? " active" : "");
+          serialized.textContent = "S";
+          serialized.title = "SerializeField / Inspector";
+          serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
+          serialized.addEventListener("click", (event) => {
+            event.stopPropagation();
+            item.serialized = !item.serialized;
+            rerenderNode();
+          });
+
+          second.append(reference, defaultValue, serialized);
+          editor.append(topLine, second);
+        } else if (item.kind === "function") {
+          const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
+            item.access = value;
+            rerenderNode();
+          }, "inline-access-select");
+
+          const returnType = compactSelect(item.returnType, ["void"].concat(availableDataTypes()), (value) => {
+            item.returnType = value;
+            rerenderNode();
+          }, "inline-type-select");
+
+          const name = inlineInput(item.label, "Metodo", (value) => {
+            item.label = value;
+          }, "inline-name-input");
+
+          topLine.append(access, returnType, name);
+
+          const second = document.createElement("div");
+          second.className = "inline-member-bottom";
+
+          const methodKind = compactSelect(item.methodKind, [
+            ["custom", "Custom"],
+            ["lifecycle", "Unity"],
+            ["eventHandler", "Handler"],
+            ["unityEventListener", "Listener"],
+            ["coroutine", "Coroutine"]
+          ], (value) => {
+            item.methodKind = value;
+            if (value === "lifecycle") {
+              const preset = UNITY_LIFECYCLE[0];
+              item.label = preset.name;
+              item.returnType = preset.returnType;
+              item.parameters = preset.parameters;
+            }
+            rerenderNode();
+          }, "inline-method-kind");
+
+          const params = inlineInput(item.parameters, "parametri: int score, Player player", (value) => {
+            item.parameters = value;
+          }, "inline-params-input");
+
+          second.append(methodKind, params);
+          editor.append(topLine, second);
+        } else if (item.kind === "unityEvent") {
+          const access = compactSelect(item.access, ["public", "private", "protected"], (value) => {
+            item.access = value;
+            rerenderNode();
+          }, "inline-access-select");
+
+          const payload = compactSelect(item.payloadType, ["void"].concat(availableDataTypes()), (value) => {
+            item.payloadType = value;
+            rerenderNode();
+          }, "inline-type-select");
+
+          const name = inlineInput(item.label, "OnEvent", (value) => {
+            item.label = value;
+          }, "inline-name-input");
+
+          topLine.append(access, payload, name);
+          editor.appendChild(topLine);
+        } else {
+          const name = inlineInput(item.label, "nome", (value) => {
+            item.label = value;
+          }, "inline-name-input");
+          const value = inlineInput(item.value, "tipo / valore", (next) => {
+            item.value = next;
+          }, "inline-default-input");
+          topLine.append(name, value);
+          editor.appendChild(topLine);
+        }
+
+        const remove = document.createElement("button");
+        remove.className = "inline-remove-member";
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.title = "Rimuovi membro";
+        remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+        remove.addEventListener("click", (event) => {
+          event.stopPropagation();
+          removeMember(item);
+        });
+
+        rowElement.append(dragHandle, kind, editor, remove);
+
+        if (allowOutput) {
+          rowElement.appendChild(decoratePort(makePort(node.id, item.id, "out", connectedPorts), outputType));
+        }
+
         return rowElement;
       };
 
-      const appendSection = (titleText, items) => {
-        if (!items.length) return;
+      const addMemberFromAction = (action) => {
+        if (action === "variable") node.rows.push(variableRow("newVariable", "int", "private"));
+        if (action === "method") node.rows.push(methodRow("NewMethod", "void", "custom"));
+        if (action === "lifecycle") node.rows.push(methodRow("Start", "void", "lifecycle"));
+        if (action === "coroutine") {
+          const method = methodRow("NewCoroutine", "IEnumerator", "coroutine");
+          node.rows.push(method);
+        }
+        if (action === "event") node.rows.push(eventRow("OnEvent", "void"));
+        if (action.startsWith("class:")) {
+          const className = action.slice(6);
+          const variable = variableRow(className.charAt(0).toLowerCase() + className.slice(1), className, "private");
+          variable.referenceMode = "inspector";
+          variable.serialized = true;
+          node.rows.push(variable);
+        }
+        rerenderNode();
+      };
+
+      const appendSection = (titleText, items, actions) => {
         const section = document.createElement("div");
         section.className = "node-member-section";
         const sectionTitle = document.createElement("div");
-        sectionTitle.className = "node-member-title";
-        sectionTitle.textContent = titleText;
+        sectionTitle.className = "node-member-title section-title-row";
+        const titleSpan = document.createElement("span");
+        titleSpan.textContent = titleText;
+        sectionTitle.appendChild(titleSpan);
         section.appendChild(sectionTitle);
+
         items.forEach((item) => section.appendChild(makeRowElement(item)));
+
+        if (actions && actions.length) {
+          const addWrap = document.createElement("div");
+          addWrap.className = "section-add-wrap";
+
+          const addButton = document.createElement("button");
+          addButton.type = "button";
+          addButton.className = "section-add-button";
+          addButton.textContent = "＋";
+          addButton.title = "Aggiungi a " + titleText.toLowerCase();
+          addButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+          const popup = document.createElement("div");
+          popup.className = "section-add-popup";
+
+          actions.forEach((action) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "section-add-option";
+            button.textContent = action.label;
+            button.addEventListener("pointerdown", (event) => event.stopPropagation());
+            button.addEventListener("click", (event) => {
+              event.stopPropagation();
+              addMemberFromAction(action.value);
+            });
+            popup.appendChild(button);
+          });
+
+          addButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            element.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
+              if (openPopup !== popup) openPopup.classList.remove("open");
+            });
+            popup.classList.toggle("open");
+          });
+
+          addWrap.append(addButton, popup);
+          section.appendChild(addWrap);
+        }
+
         body.appendChild(section);
       };
 
       if (node.type === "class") {
-        appendSection("VARIABLES", node.rows.filter((item) => item.kind === "variable" || item.kind === "property"));
-        appendSection("METHODS", node.rows.filter((item) => item.kind === "function"));
-        appendSection("UNITY EVENTS", node.rows.filter((item) => item.kind === "unityEvent"));
-        appendSection("OTHER", node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind)));
+        const classReferences = publicClassNodes()
+          .filter((classNode) => classNode.id !== node.id)
+          .map((classNode) => ({ label: "Reference · " + classNode.title, value: "class:" + classNode.title }));
+
+        appendSection(
+          "VARIABLES",
+          node.rows.filter((item) => item.kind === "variable" || item.kind === "property"),
+          [{ label: "Variable", value: "variable" }].concat(classReferences)
+        );
+        appendSection(
+          "METHODS",
+          node.rows.filter((item) => item.kind === "function"),
+          [
+            { label: "Custom method", value: "method" },
+            { label: "Unity callback", value: "lifecycle" },
+            { label: "Coroutine", value: "coroutine" }
+          ]
+        );
+        appendSection(
+          "UNITY EVENTS",
+          node.rows.filter((item) => item.kind === "unityEvent"),
+          [{ label: "UnityEvent", value: "event" }]
+        );
+        const otherItems = node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind));
+        if (otherItems.length) appendSection("OTHER", otherItems, []);
       } else {
         node.rows.forEach((item) => body.appendChild(makeRowElement(item)));
       }
 
       if (node.pseudo) {
-        const pseudo = document.createElement("pre");
-        pseudo.className = "node-pseudo";
-        pseudo.textContent = node.pseudo;
+        const pseudo = document.createElement("textarea");
+        pseudo.className = "node-pseudo-inline";
+        pseudo.value = node.pseudo;
+        pseudo.spellcheck = false;
+        pseudo.addEventListener("pointerdown", (event) => event.stopPropagation());
+        pseudo.addEventListener("input", () => {
+          node.pseudo = pseudo.value;
+          markDirty();
+        });
         body.appendChild(pseudo);
       }
     }
@@ -766,7 +1168,15 @@
     element.append(header, body);
 
     element.addEventListener("pointerdown", (event) => {
-      if (!event.target.closest(".port") && !event.target.closest(".node-header") && !event.target.closest(".node-note-editor")) {
+      if (
+        !event.target.closest(".port") &&
+        !event.target.closest(".node-header") &&
+        !event.target.closest(".node-note-editor") &&
+        !event.target.closest("input") &&
+        !event.target.closest("select") &&
+        !event.target.closest("textarea") &&
+        !event.target.closest("button")
+      ) {
         event.stopPropagation();
         selectNode(node.id, event);
         selectedEdgeId = null;
@@ -774,10 +1184,13 @@
     });
 
     element.addEventListener("dblclick", (event) => {
-      if (event.target.closest(".node-note-editor")) return;
+      if (
+        event.target.closest(".node-note-editor") ||
+        event.target.closest("input") ||
+        event.target.closest("select") ||
+        event.target.closest("textarea")
+      ) return;
       selectNode(node.id, null, true);
-      $("nodeTitle").focus();
-      $("nodeTitle").select();
     });
 
     return element;
@@ -1030,7 +1443,11 @@
       const route = [a].concat(edge.points, [b]);
       const routePath = pathForRoute(route);
       const sourceNode = nodeById(edge.from.nodeId);
-      const edgeColor = sourceNode ? typeMeta(sourceNode.type).color : "#7c6cff";
+      const sourceMember = memberByRef(edge.from);
+      const edgeType = edge.dataType || memberOutputType(sourceMember);
+      const edgeColor = edgeType && edgeType !== "any"
+        ? dataTypeColor(edgeType)
+        : (sourceNode ? typeMeta(sourceNode.type).color : "#7c6cff");
 
       const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
       glow.setAttribute("d", routePath);
