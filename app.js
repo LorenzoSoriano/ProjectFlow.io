@@ -9,6 +9,7 @@
   const ACTIVE_PROJECT_KEY = "projectflow.active-project.v1";
   const CLOUD_OPT_IN_KEY = "projectflow.cloud-opt-in.v1";
   const FIREBASE_SDK_VERSION = "12.19.0";
+  const MINIMAP_SIZE_KEY = "projectflow.minimap-size.v1";
   const NODE_WIDTH = 440;
 
   function nodeWidthFor(nodeOrType) {
@@ -1189,8 +1190,22 @@
     return { x: 70, y: 60, scale: 1 };
   }
 
+  function loadMinimapSize() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(MINIMAP_SIZE_KEY) || "null");
+      if (saved && typeof saved.width === "number" && typeof saved.height === "number") {
+        return {
+          width: Math.max(220, Math.min(520, saved.width)),
+          height: Math.max(160, Math.min(380, saved.height))
+        };
+      }
+    } catch (error) {}
+    return { width: 262, height: 196 };
+  }
+
   let project = loadProject();
   let view = loadView();
+  let minimapSize = loadMinimapSize();
   let selectedNodeId = null;
   let selectedNodeIds = new Set();
   let selectedEdgeId = null;
@@ -1203,6 +1218,7 @@
   let marqueeState = null;
   let minimapProjection = null;
   let minimapDrag = false;
+  let minimapResizeState = null;
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -1244,6 +1260,8 @@
     presenceWriteTimer: null,
     presenceCursor: null,
     presenceActivity: "Attivo",
+    presencePreview: null,
+    presencePreviewClearTimer: null,
     presenceLastWrite: 0,
     remotePresence: new Map(),
     applyingRemote: false,
@@ -1743,6 +1761,8 @@
       }
     });
 
+    const group = groupById(groupDrag.groupId);
+    broadcastDragPreview(group ? group.nodeIds.map(nodeById).filter(Boolean) : [], "Sposta gruppo");
     scheduleInteractionRender(true, true);
   }
 
@@ -1760,6 +1780,7 @@
     renderEdges();
     renderMinimap();
     markDirty();
+    finishDragPreview();
   }
 
   function projectStats(data) {
@@ -1870,6 +1891,24 @@
     );
   }
 
+  function canRenameCurrentProject() {
+    const record = projectRecordById(currentProjectId);
+    if (!record || !record.sharedProjectId) return true;
+    if (record.sharedRole === "owner") return true;
+    return !!(cloudState.user && record.ownerId && record.ownerId === cloudState.user.uid);
+  }
+
+  function updateProjectNameAccess() {
+    const input = $("projectName");
+    if (!input) return;
+    const allowed = canRenameCurrentProject();
+    input.readOnly = !allowed;
+    input.classList.toggle("owner-locked", !allowed);
+    input.title = allowed
+      ? "Rinomina progetto"
+      : "Solo il proprietario può rinominare questo progetto condiviso";
+  }
+
   function showEditorView() {
     const home = $("projectHome");
     const editor = $("editorView");
@@ -1878,6 +1917,7 @@
     document.body.classList.remove("home-mode");
 
     $("projectName").value = project.name || "Untitled Flow";
+    updateProjectNameAccess();
     resetHistory();
     requestAnimationFrame(() => {
       render();
@@ -2630,46 +2670,109 @@
   }
 
   function renderRemotePresence() {
-    if (collaborationLayer) collaborationLayer.innerHTML = "";
     const toolbar = $("collabPresence");
     if (toolbar) {
       toolbar.innerHTML = "";
       toolbar.hidden = true;
     }
-    if (!cloudState.sharedProjectId || !cloudState.user) return;
+
+    if (!cloudState.sharedProjectId || !cloudState.user) {
+      if (collaborationLayer) collaborationLayer.innerHTML = "";
+      return;
+    }
 
     const now = Date.now();
     const active = Array.from(cloudState.remotePresence.values())
       .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry.updatedAt || 0) < 45000);
+    const activeKeys = new Set();
+
+    const getPresenceElement = (key, className) => {
+      if (!collaborationLayer) return null;
+      let element = collaborationLayer.querySelector('[data-presence-key="' + key + '"]');
+      if (!element) {
+        element = document.createElement("div");
+        element.dataset.presenceKey = key;
+        element.className = className;
+        collaborationLayer.appendChild(element);
+      }
+      activeKeys.add(key);
+      return element;
+    };
 
     active.forEach((entry) => {
-      if (collaborationLayer && entry.cursor && typeof entry.cursor.x === "number" && typeof entry.cursor.y === "number") {
-        const cursor = document.createElement("div");
-        cursor.className = "remote-cursor";
-        cursor.style.left = entry.cursor.x + "px";
-        cursor.style.top = entry.cursor.y + "px";
+      const userLabel = entry.name || entry.email || "Collaboratore";
 
-        const pointer = document.createElement("span");
-        pointer.className = "remote-cursor-pointer";
-        const label = document.createElement("span");
-        label.className = "remote-cursor-label";
-        label.textContent = entry.name || entry.email || "Collaboratore";
-        const activity = document.createElement("small");
-        activity.textContent = entry.activity || "Attivo";
-        label.appendChild(activity);
-        cursor.append(pointer, label);
-        collaborationLayer.appendChild(cursor);
+      if (entry.cursor && typeof entry.cursor.x === "number" && typeof entry.cursor.y === "number") {
+        const key = "cursor:" + entry.uid;
+        const cursor = getPresenceElement(key, "remote-cursor");
+        if (cursor) {
+          cursor.style.left = entry.cursor.x + "px";
+          cursor.style.top = entry.cursor.y + "px";
+          if (!cursor.firstChild) {
+            const pointer = document.createElement("span");
+            pointer.className = "remote-cursor-pointer";
+            const label = document.createElement("span");
+            label.className = "remote-cursor-label";
+            const activity = document.createElement("small");
+            label.appendChild(activity);
+            cursor.append(pointer, label);
+          }
+          const label = cursor.querySelector(".remote-cursor-label");
+          const activity = cursor.querySelector("small");
+          if (label) label.firstChild && label.firstChild.nodeType === Node.TEXT_NODE
+            ? label.firstChild.nodeValue = userLabel
+            : label.insertBefore(document.createTextNode(userLabel), label.firstChild);
+          if (activity) activity.textContent = entry.activity || "Attivo";
+        }
+      }
+
+      const preview = entry.preview;
+      if (preview && preview.kind === "nodes" && Array.isArray(preview.positions) && now - Number(preview.updatedAt || entry.updatedAt || 0) < 5000) {
+        preview.positions.forEach((position) => {
+          const node = nodeById(position.id);
+          if (!node || typeof position.x !== "number" || typeof position.y !== "number") return;
+          const key = "preview:" + entry.uid + ":" + node.id;
+          const ghost = getPresenceElement(key, "remote-node-preview");
+          if (!ghost) return;
+          const source = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+          ghost.style.left = position.x + "px";
+          ghost.style.top = position.y + "px";
+          ghost.style.width = (source ? source.offsetWidth : nodeWidthFor(node)) + "px";
+          ghost.style.height = (source ? source.offsetHeight : 120) + "px";
+          ghost.style.setProperty("--preview-accent", typeMeta(node.type).color);
+
+          let title = ghost.querySelector(".remote-node-preview-title");
+          if (!title) {
+            title = document.createElement("span");
+            title.className = "remote-node-preview-title";
+            ghost.appendChild(title);
+          }
+          title.textContent = node.title || typeMeta(node.type).label;
+
+          let by = ghost.querySelector(".remote-node-preview-user");
+          if (!by) {
+            by = document.createElement("span");
+            by.className = "remote-node-preview-user";
+            ghost.appendChild(by);
+          }
+          by.textContent = userLabel;
+        });
       }
 
       if (toolbar) {
         const avatar = document.createElement("span");
         avatar.className = "collab-presence-avatar";
-        avatar.textContent = (entry.name || entry.email || "?").trim().charAt(0).toUpperCase();
-        avatar.title = (entry.name || entry.email || "Collaboratore") + " · " + (entry.activity || "Attivo");
+        avatar.textContent = userLabel.trim().charAt(0).toUpperCase();
+        avatar.title = userLabel + " · " + (entry.activity || "Attivo");
         toolbar.appendChild(avatar);
       }
     });
 
+    if (collaborationLayer) {
+      collaborationLayer.querySelectorAll("[data-presence-key]").forEach((element) => {
+        if (!activeKeys.has(element.dataset.presenceKey)) element.remove();
+      });
+    }
     if (toolbar) toolbar.hidden = active.length === 0;
   }
 
@@ -2693,6 +2796,7 @@
         email: normalizeShareEmail(cloudState.user.email),
         photoURL: cloudState.user.photoURL || "",
         cursor: cloudState.presenceCursor,
+        preview: cloudState.presencePreview,
         activity: cloudState.presenceActivity || "Attivo",
         updatedAt: Date.now()
       }, { merge: true });
@@ -2701,15 +2805,46 @@
     }
   }
 
-  function queuePresenceWrite(immediate) {
+  function queuePresenceWrite(immediate, realtime) {
     if (!cloudState.sharedProjectId || !cloudState.user) return;
+    const interval = realtime ? 140 : 260;
     const elapsed = Date.now() - cloudState.presenceLastWrite;
-    if (immediate || elapsed >= 400) {
+    if (immediate || elapsed >= interval) {
       writePresenceNow();
       return;
     }
     if (cloudState.presenceWriteTimer) return;
-    cloudState.presenceWriteTimer = setTimeout(writePresenceNow, Math.max(50, 400 - elapsed));
+    cloudState.presenceWriteTimer = setTimeout(writePresenceNow, Math.max(35, interval - elapsed));
+  }
+
+  function broadcastDragPreview(nodes, activity) {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    const positions = (nodes || []).filter(Boolean).map((node) => ({
+      id: node.id,
+      x: Math.round(node.x),
+      y: Math.round(node.y)
+    }));
+    if (!positions.length) return;
+    cloudState.presencePreview = {
+      kind: "nodes",
+      positions: positions,
+      updatedAt: Date.now()
+    };
+    cloudState.presenceActivity = activity || "Sposta blocchi";
+    queuePresenceWrite(false, true);
+  }
+
+  function finishDragPreview() {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    clearTimeout(cloudState.presencePreviewClearTimer);
+    clearTimeout(saveTimer);
+    saveProject(false);
+    cloudState.presencePreviewClearTimer = setTimeout(() => {
+      cloudState.presencePreviewClearTimer = null;
+      cloudState.presencePreview = null;
+      cloudState.presenceActivity = "Nel progetto";
+      queuePresenceWrite(true, true);
+    }, 900);
   }
 
   function broadcastActivity(text) {
@@ -2724,6 +2859,7 @@
     if (cloudState.presenceUnsubscribe) cloudState.presenceUnsubscribe();
     clearInterval(cloudState.presenceHeartbeat);
     clearTimeout(cloudState.presenceWriteTimer);
+    clearTimeout(cloudState.presencePreviewClearTimer);
 
     if (previousId && cloudState.user && cloudState.api && cloudState.db) {
       try {
@@ -2742,9 +2878,11 @@
     cloudState.presenceUnsubscribe = null;
     cloudState.presenceHeartbeat = null;
     cloudState.presenceWriteTimer = null;
+    cloudState.presencePreviewClearTimer = null;
     cloudState.sharedProjectId = "";
     cloudState.remotePresence = new Map();
     cloudState.presenceCursor = null;
+    cloudState.presencePreview = null;
     cloudState.presenceActivity = "Attivo";
     renderRemotePresence();
   }
@@ -2791,6 +2929,7 @@
         }
         persistProjectLibrary();
         $("projectName").value = value.name || project.name || "Untitled Flow";
+        updateProjectNameAccess();
         render();
         resetHistory();
       } finally {
@@ -2905,6 +3044,7 @@
       if (active && $("editorView") && !$("editorView").classList.contains("hidden")) {
         project = normalizeProject(cloneProjectData(active.data));
         $("projectName").value = project.name;
+        updateProjectNameAccess();
         render();
         if (active.sharedProjectId) startSharedProjectSession(active);
       }
@@ -2973,12 +3113,15 @@
     if (!record || !record.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
     try {
       const ref = sharedProjectRef(record.sharedProjectId);
-      await cloudState.api.setDoc(ref, {
-        name: record.name,
+      const payload = {
         updatedAt: record.updatedAt,
         updatedBy: cloudState.user.uid,
         data: record.data
-      }, { merge: true });
+      };
+      if (record.sharedRole === "owner" || record.ownerId === cloudState.user.uid) {
+        payload.name = record.name;
+      }
+      await cloudState.api.setDoc(ref, payload, { merge: true });
     } catch (error) {
       console.warn("ProjectFlow: salvataggio progetto condiviso non riuscito.", error);
       setAutosaveState("error", "Sync condivisa non riuscita");
@@ -3268,7 +3411,11 @@
   }
 
   function saveProject(showMessage) {
-    project.name = $("projectName").value.trim() || "Untitled Flow";
+    if (canRenameCurrentProject()) {
+      project.name = $("projectName").value.trim() || "Untitled Flow";
+    } else {
+      $("projectName").value = project.name || "Untitled Flow";
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
 
     const record = upsertLocalProject(project, currentProjectId || uid("project"));
@@ -6800,6 +6947,48 @@
     }
   }
 
+  function applyMinimapSize(renderNow) {
+    const minimap = $("minimap");
+    if (!minimap) return;
+    minimap.style.width = Math.round(minimapSize.width) + "px";
+    minimap.style.height = Math.round(minimapSize.height) + "px";
+    if (renderNow !== false) requestAnimationFrame(renderMinimap);
+  }
+
+  function startMinimapResize(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    minimapResizeState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: minimapSize.width,
+      height: minimapSize.height
+    };
+    document.body.classList.add("resizing-minimap");
+    window.addEventListener("pointermove", moveMinimapResize);
+    window.addEventListener("pointerup", endMinimapResize, { once: true });
+  }
+
+  function moveMinimapResize(event) {
+    if (!minimapResizeState) return;
+    const dx = event.clientX - minimapResizeState.startX;
+    const dy = event.clientY - minimapResizeState.startY;
+    minimapSize.width = Math.max(220, Math.min(520, minimapResizeState.width - dx));
+    minimapSize.height = Math.max(160, Math.min(380, minimapResizeState.height - dy));
+    applyMinimapSize(false);
+    scheduleMinimapRender(35);
+  }
+
+  function endMinimapResize() {
+    window.removeEventListener("pointermove", moveMinimapResize);
+    document.body.classList.remove("resizing-minimap");
+    minimapResizeState = null;
+    localStorage.setItem(MINIMAP_SIZE_KEY, JSON.stringify(minimapSize));
+    renderMinimap();
+  }
+
   function renderMinimap() {
     const svg = $("minimapSvg");
     svg.innerHTML = "";
@@ -7563,6 +7752,7 @@
       }
     });
 
+    broadcastDragPreview(selectedNodes(), "Sposta blocchi");
     scheduleInteractionRender(true, true);
   }
 
@@ -7579,6 +7769,7 @@
     renderEdges();
     renderMinimap();
     markDirty();
+    finishDragPreview();
   }
 
   function handlePortClick(ref) {
@@ -8264,6 +8455,8 @@
   $("zoomOut").addEventListener("click", () => setZoom(view.scale - 0.1));
   $("zoomReadout").addEventListener("click", () => setZoom(1));
   $("minimapSvg").addEventListener("pointerdown", startMinimapNavigation);
+  $("minimapResizeHandle").addEventListener("pointerdown", startMinimapResize);
+  applyMinimapSize(false);
 
   $("connectTool").addEventListener("click", () => {
     connectMode = !connectMode;
@@ -8334,6 +8527,11 @@
   });
 
   $("projectName").addEventListener("input", () => {
+    if (!canRenameCurrentProject()) {
+      $("projectName").value = project.name || "Untitled Flow";
+      showToast("Solo il proprietario può rinominare il progetto");
+      return;
+    }
     project.name = $("projectName").value;
     markDirty();
   });
@@ -8351,7 +8549,7 @@
         x: Math.round(point.x),
         y: Math.round(point.y)
       };
-      queuePresenceWrite(false);
+      queuePresenceWrite(false, true);
     });
   });
 
