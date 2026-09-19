@@ -378,7 +378,12 @@
       if (event.button !== 0 || event.target.closest(".port") || event.target.closest("button")) return;
       event.preventDefault();
       event.stopPropagation();
-      selectNode(node.id, event);
+
+      const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+      if (!isNodeSelected(node.id) || additive || selectedNodeIds.size <= 1) {
+        selectNode(node.id, event);
+      }
+
       if (isNodeSelected(node.id)) startNodeDrag(event, node);
     });
 
