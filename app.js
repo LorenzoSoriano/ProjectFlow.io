@@ -8359,8 +8359,12 @@
   function closeNewBlockFan() {
     const fan = $("newBlockFan");
     if (!fan) return;
-    fan.classList.remove("open");
+    fan._positionToken = (fan._positionToken || 0) + 1;
+    fan.classList.remove("open", "positioning");
     fan.setAttribute("aria-hidden", "true");
+    fan.style.left = "";
+    fan.style.top = "";
+    fan.style.width = "";
     fan.innerHTML = "";
     activeBlockFanCategory = "";
     document.querySelectorAll(".new-block-category.active").forEach((button) => {
@@ -8373,36 +8377,48 @@
     const fan = $("newBlockFan");
     if (!fan || !anchor) return;
 
-    fan.style.left = "0px";
-    fan.style.top = "0px";
-    fan.style.width = "";
-    fan.classList.add("open");
-    fan.setAttribute("aria-hidden", "false");
+    const token = (fan._positionToken || 0) + 1;
+    fan._positionToken = token;
+
+    const safe = 12;
+    const gap = 8;
+    const maxAvailable = Math.max(240, window.innerWidth - safe * 2);
+    const desiredWidth = Math.min(340, maxAvailable);
+
+    // Measure completely off-screen and invisible. The flyout is made visible
+    // only after its final coordinates are known, preventing the 0,0 flash.
+    fan.classList.remove("open");
+    fan.classList.add("positioning");
+    fan.setAttribute("aria-hidden", "true");
+    fan.style.width = desiredWidth + "px";
+    fan.style.left = "-10000px";
+    fan.style.top = "-10000px";
 
     requestAnimationFrame(() => {
+      if (fan._positionToken !== token || !anchor.isConnected) return;
+
       const anchorRect = anchor.getBoundingClientRect();
-      const fanRect = fan.getBoundingClientRect();
-      const safe = 12;
-      const gap = 8;
-      const maxAvailable = Math.max(240, window.innerWidth - safe * 2);
-      const desiredWidth = Math.min(340, maxAvailable);
-      fan.style.width = desiredWidth + "px";
+      const measured = fan.getBoundingClientRect();
+
+      let left = anchorRect.right + gap;
+      if (left + measured.width > window.innerWidth - safe) {
+        left = Math.max(safe, window.innerWidth - measured.width - safe);
+      }
+
+      let top = anchorRect.top;
+      if (top + measured.height > window.innerHeight - safe) {
+        top = Math.max(safe, window.innerHeight - measured.height - safe);
+      }
+      if (top < safe) top = safe;
+
+      fan.style.left = Math.round(left) + "px";
+      fan.style.top = Math.round(top) + "px";
 
       requestAnimationFrame(() => {
-        const measured = fan.getBoundingClientRect();
-        let left = anchorRect.right + gap;
-        if (left + measured.width > window.innerWidth - safe) {
-          left = Math.max(safe, window.innerWidth - measured.width - safe);
-        }
-
-        let top = anchorRect.top;
-        if (top + measured.height > window.innerHeight - safe) {
-          top = Math.max(safe, window.innerHeight - measured.height - safe);
-        }
-        if (top < safe) top = safe;
-
-        fan.style.left = Math.round(left) + "px";
-        fan.style.top = Math.round(top) + "px";
+        if (fan._positionToken !== token || !anchor.isConnected) return;
+        fan.classList.remove("positioning");
+        fan.classList.add("open");
+        fan.setAttribute("aria-hidden", "false");
       });
     });
   }
