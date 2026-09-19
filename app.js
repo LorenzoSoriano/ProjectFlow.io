@@ -4288,7 +4288,18 @@
         if (event.button !== 0 && event.pointerType !== "pen" && event.pointerType !== "touch") return;
         event.preventDefault();
         event.stopPropagation();
-        if (!isNodeSelected(node.id)) selectNode(node.id, null, true);
+        if (!isNodeSelected(node.id)) {
+          selectedNodeIds = new Set([node.id]);
+          syncPrimarySelection();
+          selectedEdgeId = null;
+          selectedJunctionIds.clear();
+          selectedGroupId = null;
+          element.classList.add("selected");
+          renderEdges();
+          renderInspector();
+          renderMinimap();
+          updateGroupActionUI();
+        }
         pointerId = event.pointerId;
         if (canvas.setPointerCapture) canvas.setPointerCapture(pointerId);
         draft = {
