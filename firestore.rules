@@ -2,9 +2,79 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return signedIn() && request.auth.token.email != null
+        ? request.auth.token.email
+        : "";
+    }
+
+    function isSharedOwner(projectId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
+    function hasSharedInvite(projectId) {
+      return signedIn()
+        && authEmail() != ""
+        && exists(/databases/$(database)/documents/shareInvites/$(authEmail())/projects/$(projectId));
+    }
+
+    function canAccessShared(projectId) {
+      return isSharedOwner(projectId) || hasSharedInvite(projectId);
+    }
+
     match /users/{userId}/projects/{projectId} {
       allow read, create, update, delete:
-        if request.auth != null && request.auth.uid == userId;
+        if signedIn() && request.auth.uid == userId;
+    }
+
+    match /sharedProjects/{projectId} {
+      allow get, list:
+        if signedIn()
+        && (resource.data.ownerId == request.auth.uid || hasSharedInvite(projectId));
+
+      allow create:
+        if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerEmail == authEmail();
+
+      allow update:
+        if canAccessShared(projectId)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && (
+          resource.data.ownerId == request.auth.uid
+          || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['name', 'updatedAt', 'updatedBy', 'data'])
+        );
+
+      allow delete:
+        if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      match /presence/{presenceUserId} {
+        allow read:
+          if canAccessShared(projectId);
+
+        allow create, update, delete:
+          if canAccessShared(projectId)
+          && request.auth.uid == presenceUserId;
+      }
+
+      match /invites/{inviteId} {
+        allow read, create, update, delete:
+          if isSharedOwner(projectId);
+      }
+    }
+
+    match /shareInvites/{inviteEmail}/projects/{projectId} {
+      allow read:
+        if signedIn() && authEmail() == inviteEmail;
+
+      allow create, update, delete:
+        if isSharedOwner(projectId);
     }
   }
 }
