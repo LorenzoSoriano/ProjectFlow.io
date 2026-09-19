@@ -1549,25 +1549,41 @@
       object: {
         title: "New Object",
         description: "Entità o componente del sistema.",
-        rows: [row("id", "int", "variable"), row("state", "value", "property")],
+        rows: [variableRow("id", "int", "public"), variableRow("state", "bool", "private")],
         pseudo: ""
       },
       class: {
-        title: "New Class",
-        description: "Responsabilità, proprietà e funzioni principali.",
-        rows: [row("property", "type", "property"), row("Method()", "returns value", "function")],
-        pseudo: ""
+        title: "NewClass",
+        description: "Responsabilità, stato, metodi ed eventi della classe.",
+        rows: [
+          variableRow("value", "int", "private"),
+          methodRow("Start", "void", "lifecycle")
+        ],
+        pseudo: "",
+        extra: {
+          classVisibility: "public",
+          baseType: "MonoBehaviour",
+          instanceAccess: "inspector",
+          executionOrder: 0
+        }
       },
       function: {
-        title: "New Function",
-        description: "Trasforma degli input in un risultato.",
+        title: "NewMethod",
+        description: "Metodo concettuale con firma C#/Unity.",
         rows: [row("input", "value", "input"), row("result", "value", "output")],
-        pseudo: "result = input\nreturn result"
+        pseudo: "return result",
+        extra: {
+          ownerClassId: "",
+          methodAccess: "public",
+          methodKind: "custom",
+          returnType: "void",
+          parameters: ""
+        }
       },
       variable: {
         title: "Variable",
-        description: "Dato, configurazione o stato condiviso.",
-        rows: [row("value", "type", "variable")],
+        description: "Dato, configurazione o riferimento condiviso.",
+        rows: [variableRow("value", "int", "private")],
         pseudo: ""
       },
       condition: {
@@ -1584,14 +1600,14 @@
       },
       note: {
         title: "Note",
-        description: "Scrivi una regola, un vincolo, un'idea o un TODO.",
+        description: "",
         rows: [],
         pseudo: ""
       }
     };
 
     const source = templates[type] || templates.object;
-    return {
+    const node = {
       id: uid("node"),
       type: type,
       title: source.title,
@@ -1601,6 +1617,9 @@
       x: Math.round(x),
       y: Math.round(y)
     };
+    Object.assign(node, source.extra || {});
+    ensureNodeMeta(node);
+    return node;
   }
 
   function viewportCenterWorld() {
