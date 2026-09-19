@@ -2974,6 +2974,85 @@
         rerenderNode();
       };
 
+      const makeCustomScrollRail = (scroller) => {
+        const rail = document.createElement("div");
+        rail.className = "custom-scroll-rail";
+        const thumb = document.createElement("div");
+        thumb.className = "custom-scroll-thumb";
+        rail.appendChild(thumb);
+
+        const refresh = () => {
+          const scrollable = scroller.classList.contains("scrollable") &&
+            scroller.scrollHeight > scroller.clientHeight + 1;
+
+          rail.classList.toggle("visible", scrollable);
+          if (!scrollable) {
+            thumb.style.height = "0px";
+            thumb.style.transform = "translateY(0)";
+            return;
+          }
+
+          const viewportHeight = scroller.clientHeight;
+          const contentHeight = scroller.scrollHeight;
+          const railHeight = Math.max(1, rail.clientHeight);
+          const thumbHeight = Math.max(34, Math.round(railHeight * viewportHeight / contentHeight));
+          const maxThumbTop = Math.max(0, railHeight - thumbHeight);
+          const maxScroll = Math.max(1, contentHeight - viewportHeight);
+          const thumbTop = maxThumbTop * scroller.scrollTop / maxScroll;
+
+          thumb.style.height = thumbHeight + "px";
+          thumb.style.transform = "translateY(" + thumbTop + "px)";
+        };
+
+        scroller._refreshCustomScroll = refresh;
+        scroller.addEventListener("scroll", refresh, { passive: true });
+
+        rail.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.target === thumb) return;
+
+          const rect = rail.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)));
+          scroller.scrollTop = ratio * Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          refresh();
+        });
+
+        thumb.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const startY = event.clientY;
+          const startScroll = scroller.scrollTop;
+          const maxScroll = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
+          const railHeight = Math.max(1, rail.clientHeight);
+          const thumbHeight = Math.max(34, thumb.offsetHeight);
+          const maxThumbTop = Math.max(1, railHeight - thumbHeight);
+
+          const move = (moveEvent) => {
+            moveEvent.preventDefault();
+            const screenDelta = moveEvent.clientY - startY;
+            const localDelta = screenDelta / Math.max(0.01, view.scale);
+            scroller.scrollTop = Math.max(0, Math.min(
+              maxScroll,
+              startScroll + localDelta * (maxScroll / maxThumbTop)
+            ));
+            refresh();
+          };
+
+          const end = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", end);
+          };
+
+          window.addEventListener("pointermove", move, { passive: false });
+          window.addEventListener("pointerup", end, { once: true });
+        });
+
+        requestAnimationFrame(refresh);
+        return rail;
+      };
+
       const appendSection = (titleText, items, actions) => {
         const sectionKey = titleText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
         const collapsed = !!node.uiSections[sectionKey];
@@ -3059,6 +3138,9 @@
               const needsScroll = memberList.scrollHeight > limit;
               memberList.classList.toggle("scrollable", needsScroll);
               if (!needsScroll) memberList.scrollTop = 0;
+              if (typeof memberList._refreshCustomScroll === "function") {
+                requestAnimationFrame(memberList._refreshCustomScroll);
+              }
               renderEdges();
             });
           };
@@ -3135,7 +3217,10 @@
               memberList.appendChild(rowElement);
             });
           }
-          content.appendChild(memberList);
+          const scrollShell = document.createElement("div");
+          scrollShell.className = "section-scroll-shell";
+          scrollShell.append(memberList, makeCustomScrollRail(memberList));
+          content.appendChild(scrollShell);
           updateMemberScroll();
         } else {
           const emptyState = document.createElement("div");
