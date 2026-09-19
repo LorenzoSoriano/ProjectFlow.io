@@ -1398,43 +1398,53 @@
     });
   }
 
-  function activateProject(id, fitAfterOpen) {
+  async function activateProject(id, fitAfterOpen) {
     const record = projectRecordById(id);
     if (!record) return;
 
-    setActiveProjectId(record.id);
-    project = normalizeProject(cloneProjectData(record.data));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-    resetEditorSelection();
-    showEditorView();
+    return withProjectLoading("Apertura di " + record.name, async () => {
+      closeInterfaceSurfaces();
+      setActiveProjectId(record.id);
+      project = normalizeProject(cloneProjectData(record.data));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      resetEditorSelection();
+      showEditorView();
 
-    if (fitAfterOpen !== false) {
-      requestAnimationFrame(() => requestAnimationFrame(fitView));
-    }
+      if (fitAfterOpen !== false) {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        fitView();
+      }
+    });
   }
 
-  function createProjectFromHome() {
-    const data = blankProject("Nuovo schema");
-    const record = upsertLocalProject(data, uid("project"));
-    setActiveProjectId(record.id);
-    project = normalizeProject(cloneProjectData(record.data));
-    queueCloudSave(record);
-    resetEditorSelection();
-    showEditorView();
-    requestAnimationFrame(() => fitView());
+  async function createProjectFromHome() {
+    return withProjectLoading("Creazione nuovo schema…", async () => {
+      const data = blankProject("Nuovo schema");
+      const record = upsertLocalProject(data, uid("project"));
+      setActiveProjectId(record.id);
+      project = normalizeProject(cloneProjectData(record.data));
+      queueCloudSave(record);
+      resetEditorSelection();
+      showEditorView();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fitView();
+    }, "Preparazione canvas e autosave");
   }
 
-  function openDemoProject() {
-    const demo = normalizeProject(cloneProjectData(sampleProject()));
-    demo.name = "ProjectFlow Demo — Gameplay Basics";
+  async function openDemoProject() {
+    return withProjectLoading("Caricamento Inventory Demo…", async () => {
+      const demo = normalizeProject(cloneProjectData(sampleProject()));
+      demo.name = "Inventory System — Demo";
 
-    const record = upsertLocalProject(demo, uid("project"));
-    setActiveProjectId(record.id);
-    project = normalizeProject(cloneProjectData(record.data));
-    queueCloudSave(record);
-    resetEditorSelection();
-    showEditorView();
-    requestAnimationFrame(() => requestAnimationFrame(fitView));
+      const record = upsertLocalProject(demo, uid("project"));
+      setActiveProjectId(record.id);
+      project = normalizeProject(cloneProjectData(record.data));
+      queueCloudSave(record);
+      resetEditorSelection();
+      showEditorView();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      fitView();
+    }, "Creazione ItemType, ItemData, Inventory, flow pickup e UI");
   }
 
   function duplicateLibraryProject(id) {
@@ -1909,7 +1919,8 @@
   }
 
   function markDirty() {
-    $("saveStatus").textContent = "Modifiche non salvate";
+    $("saveStatus").textContent = "Salvataggio automatico…";
+    setAutosaveState("saving", "Salvataggio…");
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveProject, 350);
   }
@@ -1922,11 +1933,13 @@
     setActiveProjectId(record.id);
     queueCloudSave(record);
 
-    $("saveStatus").textContent = cloudState.user ? "Salvato · sync cloud" : "Salvato localmente";
+    const cloud = !!cloudState.user;
+    $("saveStatus").textContent = cloud ? "Autosave · cloud" : "Autosave · locale";
+    setAutosaveState(cloud ? "cloud" : "saved", cloud ? "Autosave · Cloud" : "Autosave");
     if ($("projectHome") && !$("projectHome").classList.contains("hidden")) renderProjectLibrary();
 
     if (showMessage) {
-      showToast(cloudState.user ? "Progetto salvato e sincronizzato" : "Progetto salvato nel browser");
+      showToast(cloud ? "Progetto sincronizzato" : "Progetto salvato automaticamente");
     }
   }
 
