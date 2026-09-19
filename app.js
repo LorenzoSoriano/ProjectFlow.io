@@ -24,12 +24,54 @@
 
   const ROW_META = {
     variable: { icon: "x", label: "Variabile" },
-    function: { icon: "ƒ", label: "Funzione" },
+    function: { icon: "ƒ", label: "Metodo" },
+    unityEvent: { icon: "⚡", label: "UnityEvent" },
     property: { icon: "•", label: "Proprietà" },
     condition: { icon: "?", label: "Condizione" },
     input: { icon: "→", label: "Input" },
     output: { icon: "←", label: "Output" },
     text: { icon: "T", label: "Testo" }
+  };
+
+  const DATA_TYPES = [
+    "bool", "int", "float", "double", "string",
+    "Vector2", "Vector3", "Quaternion", "Color",
+    "GameObject", "Transform", "Rigidbody", "Collider",
+    "Animator", "AudioSource", "Camera", "SpriteRenderer",
+    "Texture2D", "Material", "AnimationClip"
+  ];
+
+  const UNITY_LIFECYCLE = [
+    { name: "Awake", parameters: "", returnType: "void" },
+    { name: "OnEnable", parameters: "", returnType: "void" },
+    { name: "Start", parameters: "", returnType: "void" },
+    { name: "Update", parameters: "", returnType: "void" },
+    { name: "FixedUpdate", parameters: "", returnType: "void" },
+    { name: "LateUpdate", parameters: "", returnType: "void" },
+    { name: "OnDisable", parameters: "", returnType: "void" },
+    { name: "OnDestroy", parameters: "", returnType: "void" },
+    { name: "OnValidate", parameters: "", returnType: "void" },
+    { name: "OnTriggerEnter", parameters: "Collider other", returnType: "void" },
+    { name: "OnTriggerExit", parameters: "Collider other", returnType: "void" },
+    { name: "OnCollisionEnter", parameters: "Collision collision", returnType: "void" },
+    { name: "OnCollisionExit", parameters: "Collision collision", returnType: "void" }
+  ];
+
+  const METHOD_KIND_LABELS = {
+    custom: "Custom",
+    lifecycle: "Unity lifecycle",
+    eventHandler: "Event handler",
+    unityEventListener: "UnityEvent listener",
+    coroutine: "Coroutine"
+  };
+
+  const REFERENCE_MODE_LABELS = {
+    value: "Valore",
+    inspector: "Inspector reference",
+    getComponent: "GetComponent",
+    instance: "Instance / Singleton",
+    findFirst: "FindFirstObjectByType",
+    scriptableObject: "ScriptableObject asset"
   };
 
   const uid = (prefix) => prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -52,8 +94,108 @@
     return connected;
   }
 
-  function row(label, value, kind) {
-    return { id: uid("row"), label: label || "value", value: value || "", kind: kind || "variable" };
+  function row(label, value, kind, extra) {
+    const item = {
+      id: uid("row"),
+      label: label || "value",
+      value: value || "",
+      kind: kind || "variable"
+    };
+    return Object.assign(item, extra || {});
+  }
+
+  function variableRow(label, dataType, access) {
+    return row(label || "value", "", "variable", {
+      dataType: dataType || "int",
+      access: access || "private",
+      serialized: false,
+      referenceMode: "value",
+      defaultValue: ""
+    });
+  }
+
+  function methodRow(label, returnType, methodKind) {
+    return row(label || "Method", "", "function", {
+      access: "private",
+      methodKind: methodKind || "custom",
+      returnType: returnType || "void",
+      parameters: ""
+    });
+  }
+
+  function eventRow(label, payloadType) {
+    return row(label || "OnEvent", "", "unityEvent", {
+      access: "public",
+      payloadType: payloadType || "void",
+      serialized: true
+    });
+  }
+
+  function publicClassNodes() {
+    return project.nodes.filter((node) => node.type === "class" && node.classVisibility === "public");
+  }
+
+  function allClassNodes() {
+    return project.nodes.filter((node) => node.type === "class");
+  }
+
+  function availableDataTypes() {
+    return DATA_TYPES.concat(publicClassNodes().map((node) => node.title)).filter((value, index, array) => array.indexOf(value) === index);
+  }
+
+  function normalizeMember(item) {
+    if (!item.id) item.id = uid("row");
+    if (!ROW_META[item.kind]) item.kind = "variable";
+    if (typeof item.label !== "string") item.label = "value";
+    if (typeof item.value !== "string") item.value = "";
+
+    if (item.kind === "variable" || item.kind === "property") {
+      if (typeof item.access !== "string") item.access = item.kind === "property" ? "public" : "private";
+      if (typeof item.dataType !== "string" || !item.dataType) {
+        const guess = item.value.split("=")[0].trim();
+        item.dataType = guess && guess.length < 32 ? guess : "int";
+      }
+      if (typeof item.serialized !== "boolean") item.serialized = item.access === "public";
+      if (typeof item.referenceMode !== "string") item.referenceMode = "value";
+      if (typeof item.defaultValue !== "string") item.defaultValue = "";
+    }
+
+    if (item.kind === "function") {
+      if (typeof item.access !== "string") item.access = "private";
+      if (typeof item.methodKind !== "string") item.methodKind = "custom";
+      if (typeof item.returnType !== "string" || !item.returnType) {
+        const match = item.value.match(/returns?\s+([^\s]+)/i);
+        item.returnType = match ? match[1] : "void";
+      }
+      if (typeof item.parameters !== "string") item.parameters = "";
+    }
+
+    if (item.kind === "unityEvent") {
+      if (typeof item.access !== "string") item.access = "public";
+      if (typeof item.payloadType !== "string") item.payloadType = "void";
+      if (typeof item.serialized !== "boolean") item.serialized = true;
+    }
+    return item;
+  }
+
+  function ensureNodeMeta(node) {
+    if (!Array.isArray(node.rows)) node.rows = [];
+    node.rows.forEach(normalizeMember);
+
+    if (node.type === "class") {
+      if (typeof node.classVisibility !== "string") node.classVisibility = "public";
+      if (typeof node.baseType !== "string") node.baseType = "MonoBehaviour";
+      if (typeof node.instanceAccess !== "string") node.instanceAccess = "inspector";
+      if (typeof node.executionOrder !== "number") node.executionOrder = 0;
+    }
+
+    if (node.type === "function") {
+      if (typeof node.ownerClassId !== "string") node.ownerClassId = "";
+      if (typeof node.methodAccess !== "string") node.methodAccess = "public";
+      if (typeof node.methodKind !== "string") node.methodKind = "custom";
+      if (typeof node.returnType !== "string") node.returnType = "void";
+      if (typeof node.parameters !== "string") node.parameters = "";
+    }
   }
 
   function sampleProject() {
@@ -182,12 +324,8 @@
       if (typeof node.title !== "string") node.title = TYPE_META[node.type].label;
       if (typeof node.description !== "string") node.description = "";
       if (typeof node.pseudo !== "string") node.pseudo = "";
-      node.rows.forEach((item) => {
-        if (!item.id) item.id = uid("row");
-        if (!ROW_META[item.kind]) item.kind = "variable";
-        if (typeof item.label !== "string") item.label = "value";
-        if (typeof item.value !== "string") item.value = "";
-      });
+      node.rows.forEach(normalizeMember);
+      ensureNodeMeta(node);
     });
     if (typeof base.name !== "string") base.name = "Untitled Flow";
     return base;
@@ -314,6 +452,38 @@
 
   function typeMeta(type) {
     return TYPE_META[type] || TYPE_META.object;
+  }
+
+  function ownerClassName(node) {
+    const owner = node && node.ownerClassId ? nodeById(node.ownerClassId) : null;
+    return owner ? owner.title : "";
+  }
+
+  function memberSummary(item) {
+    if (item.kind === "function") {
+      const kind = METHOD_KIND_LABELS[item.methodKind] || "Custom";
+      return item.access + " " + (item.returnType || "void") + " (" + (item.parameters || "") + ") · " + kind;
+    }
+    if (item.kind === "unityEvent") {
+      return item.access + " UnityEvent" + (item.payloadType && item.payloadType !== "void" ? "<" + item.payloadType + ">" : "");
+    }
+    if (item.kind === "variable" || item.kind === "property") {
+      const reference = item.referenceMode && item.referenceMode !== "value" ? " · " + (REFERENCE_MODE_LABELS[item.referenceMode] || item.referenceMode) : "";
+      const inspector = item.serialized ? " · Inspector" : "";
+      return item.access + " " + (item.dataType || "value") + inspector + reference;
+    }
+    return item.value || "";
+  }
+
+  function nodeSubtitle(node) {
+    if (node.type === "class") {
+      return node.classVisibility + " " + node.baseType + (node.instanceAccess === "instance" ? " · Instance" : "");
+    }
+    if (node.type === "function") {
+      const owner = ownerClassName(node);
+      return (owner ? owner + " · " : "") + node.methodAccess + " " + node.returnType;
+    }
+    return typeMeta(node.type).label;
   }
 
   function makePort(nodeId, rowId, side, connectedPorts) {
