@@ -1359,7 +1359,7 @@
       return group.nodeIds.length > 0;
     });
 
-    project.groups.forEach((group) => {
+    (project.groups || []).forEach((group) => {
       const bounds = groupWorldBounds(group);
       if (!bounds) return;
 
@@ -1382,9 +1382,6 @@
       title.value = group.title || "Gruppo";
       title.setAttribute("aria-label", "Nome gruppo");
       title.addEventListener("pointerdown", (event) => event.stopPropagation());
-      title.addEventListener("focus", () => {
-        if (selectedGroupId !== group.id) selectGroup(group.id);
-      });
       title.addEventListener("input", () => {
         group.title = title.value || "Gruppo";
         markDirty();
@@ -1424,7 +1421,7 @@
     }
 
     const selected = new Set(ids);
-    project.groups.forEach((group) => {
+    (project.groups || []).forEach((group) => {
       group.nodeIds = group.nodeIds.filter((id) => !selected.has(id));
     });
     project.groups = project.groups.filter((group) => group.nodeIds.length);
@@ -5291,7 +5288,8 @@
     event.stopPropagation();
 
     const key = junctionSelectionKey(edgeId, pointId);
-    if (!selectedJunctionIds.has(key) || !(event.ctrlKey || event.metaKey || event.shiftKey)) {
+    const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+    if (!selectedJunctionIds.has(key) || additive) {
       selectJunction(event, edgeId, pointId);
     }
     if (!selectedJunctionIds.has(key)) return;
@@ -5380,6 +5378,7 @@
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", routePath);
       path.setAttribute("class", "edge" + (isFlowEdge ? " flow-edge" : "") + (isInternalEdge ? " internal-edge" : "") + (selectedEdgeId === edge.id ? " selected" : ""));
+      path.dataset.edgeId = edge.id;
       path.style.stroke = edgeColor;
       path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
       edgeLayer.appendChild(path);
@@ -5396,8 +5395,16 @@
         selectedNodeIds.clear();
         selectedNodeId = null;
         selectedGroupId = null;
-        renderNodes();
-        renderEdges();
+
+        nodeLayer.querySelectorAll(".flow-node.selected").forEach((nodeElement) => nodeElement.classList.remove("selected"));
+        groupLayer.querySelectorAll(".graph-group.selected").forEach((groupElement) => groupElement.classList.remove("selected"));
+        edgeLayer.querySelectorAll(".edge").forEach((edgeElement) => {
+          const active = edgeElement.dataset.edgeId === edge.id;
+          edgeElement.classList.toggle("selected", active);
+          edgeElement.style.opacity = active ? "1" : ".72";
+        });
+        edgeLayer.querySelectorAll(".edge-junction.selected").forEach((pointElement) => pointElement.classList.remove("selected"));
+
         renderInspector();
         renderMinimap();
       });
@@ -5482,7 +5489,7 @@
     const offsetX = (180 - width * scale) / 2;
     const offsetY = (100 - height * scale) / 2 + 2;
 
-    project.groups.forEach((group) => {
+    (project.groups || []).forEach((group) => {
       const bounds = groupWorldBounds(group);
       if (!bounds) return;
       const groupRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -6304,7 +6311,7 @@
     project.connections = project.connections.filter((edge) =>
       !ids.has(edge.from.nodeId) && !ids.has(edge.to.nodeId)
     );
-    project.groups.forEach((group) => {
+    (project.groups || []).forEach((group) => {
       group.nodeIds = group.nodeIds.filter((id) => !ids.has(id));
     });
     project.groups = project.groups.filter((group) => group.nodeIds.length);
@@ -6542,7 +6549,7 @@
       return;
     }
     const rect = viewport.getBoundingClientRect();
-    const groupBounds = project.groups.map(groupWorldBounds).filter(Boolean);
+    const groupBounds = (project.groups || []).map(groupWorldBounds).filter(Boolean);
     const minX = Math.min.apply(null, project.nodes.map((node) => node.x).concat(groupBounds.map((bounds) => bounds.x)));
     const minY = Math.min.apply(null, project.nodes.map((node) => node.y).concat(groupBounds.map((bounds) => bounds.y)));
     const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)).concat(groupBounds.map((bounds) => bounds.x + bounds.width)));
