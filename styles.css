@@ -939,7 +939,7 @@ body.resizing-panel *{
   position:relative;
 }
 .section-member-list.scrollable{
-  max-height:270px;
+  max-height:var(--member-scroll-limit,430px);
   overflow-y:auto;
   overscroll-behavior:contain;
   scrollbar-width:thin;
@@ -2528,4 +2528,100 @@ body.resizing-panel *{
 /* Method order: Parameters → Description → Return → Logic */
 .method-parameters-section + .method-description-inline{
   margin-top:7px;
+}
+
+
+/* Adaptive node sizing + inferred type links v1.4 */
+.flow-node{
+  min-width:390px;
+  max-width:520px;
+}
+.type-object,
+.type-class{
+  max-width:520px;
+}
+.type-function{
+  max-width:490px;
+}
+.type-enum{
+  max-width:460px;
+}
+.inline-member-top{
+  grid-template-columns:82px 104px minmax(0,1fr);
+}
+.inline-member-bottom{
+  grid-template-columns:122px minmax(0,1fr) 30px;
+}
+.method-member-row .inline-member-top{
+  grid-template-columns:82px 102px minmax(0,1fr);
+}
+.method-parameter-main{
+  grid-template-columns:64px 106px minmax(0,1fr) 25px;
+}
+.method-parameter-detail{
+  grid-template-columns:108px 92px minmax(0,1fr);
+}
+.method-return-content{
+  grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 104px;
+}
+.node-meta-inline{
+  grid-template-columns:.8fr 1.2fr 1fr;
+}
+.node-backbone{
+  left:calc(100% + 14px);
+}
+
+/* Inferred class/enum relationships are not manual wires. */
+.auto-type-edge,
+.auto-type-glow{
+  fill:none;
+  pointer-events:none;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.auto-type-edge{
+  stroke-width:1.7;
+  stroke-dasharray:4 6;
+  opacity:.62;
+}
+.auto-type-glow{
+  stroke-width:7;
+  opacity:.08;
+}
+.auto-type-edge.enum-link{
+  stroke-dasharray:3 5;
+}
+.auto-type-edge.class-link{
+  stroke-dasharray:7 6;
+}
+.backbone-relation.type-link{
+  border-left:2px solid var(--relation-color,#9b8cff);
+  background:
+    linear-gradient(90deg,color-mix(in srgb,var(--relation-color,#9b8cff) 7%,transparent),transparent),
+    rgba(10,15,26,.94);
+}
+.backbone-relation.type-link::before{
+  background:color-mix(in srgb,var(--relation-color,#9b8cff) 45%,#35415a);
+}
+.backbone-relation.type-link .backbone-copy small{
+  color:#827d9d;
+}
+
+/* Let complex blocks breathe before local scrolling starts. */
+.section-member-list.scrollable{
+  max-height:var(--member-scroll-limit,430px);
+}
+.section-member-list{
+  scrollbar-gutter:stable;
+}
+.section-tools{
+  position:sticky;
+  top:0;
+  z-index:4;
+}
+@media(max-width:850px){
+  .flow-node{
+    min-width:340px;
+    max-width:440px;
+  }
 }
