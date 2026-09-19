@@ -18,6 +18,10 @@
     component: { label: "Componente Unity", icon: "⬡", color: "#6ea8ff" },
     class: { label: "Classe", icon: "C", color: "#42d4df" },
     function: { label: "Funzione", icon: "ƒ", color: "#55d69e" },
+    enum: { label: "Enum", icon: "E", color: "#c58cff" },
+    event: { label: "Evento", icon: "⚡", color: "#ffcf66" },
+    action: { label: "Azione", icon: "▶", color: "#6fe0a7" },
+    state: { label: "Stato", icon: "S", color: "#72b5ff" },
     variable: { label: "Variabile", icon: "x", color: "#f3bd59" },
     condition: { label: "Condizione", icon: "?", color: "#ff966d" },
     ui: { label: "Interfaccia", icon: "▣", color: "#e979c6" },
@@ -31,6 +35,8 @@
     component: { icon: "⬡", label: "Componente" },
     property: { icon: "•", label: "Proprietà" },
     condition: { icon: "?", label: "Condizione" },
+    flowIn: { icon: "▷", label: "Flow In" },
+    flowOut: { icon: "▶", label: "Flow Out" },
     input: { icon: "→", label: "Input" },
     output: { icon: "←", label: "Output" },
     text: { icon: "T", label: "Testo" }
@@ -112,6 +118,9 @@
       { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform"] },
       { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] }
     ];
+
+    const enums = enumNodes().map((node) => node.title);
+    if (enums.length) groups.push({ id: "enums", label: "ENUMS", values: enums });
 
     const custom = publicClassNodes().map((node) => node.title);
     if (custom.length) groups.push({ id: "classes", label: "CUSTOM CLASSES", values: custom });
@@ -350,6 +359,22 @@
     });
   }
 
+  function enumValue(name, value) {
+    return {
+      id: uid("enum"),
+      name: name || "Value",
+      value: typeof value === "number" ? value : 0
+    };
+  }
+
+  function enumNodes() {
+    return project.nodes.filter((node) => node.type === "enum");
+  }
+
+  function enumByName(name) {
+    return enumNodes().find((node) => node.title === name) || null;
+  }
+
   function componentRow(componentType, category, source, extra) {
     return row(componentType || "Component", "", "component", Object.assign({
       componentType: componentType || "Component",
@@ -422,7 +447,10 @@
   }
 
   function availableDataTypes() {
-    return DATA_TYPES.concat(publicClassNodes().map((node) => node.title)).filter((value, index, array) => array.indexOf(value) === index);
+    return DATA_TYPES
+      .concat(publicClassNodes().map((node) => node.title))
+      .concat(enumNodes().map((node) => node.title))
+      .filter((value, index, array) => array.indexOf(value) === index);
   }
 
   function normalizeMember(item) {
@@ -496,6 +524,30 @@
       if (typeof node.componentType !== "string" || !node.componentType) node.componentType = "Animator";
       if (typeof node.componentCategory !== "string") node.componentCategory = componentCategoryFor(node.componentType);
       if (typeof node.componentSource !== "string") node.componentSource = "unity";
+    }
+
+    if (node.type === "enum") {
+      if (typeof node.enumVisibility !== "string") node.enumVisibility = "public";
+      if (typeof node.enumUnderlyingType !== "string") node.enumUnderlyingType = "int";
+      if (typeof node.enumFlags !== "boolean") node.enumFlags = false;
+      if (!Array.isArray(node.enumValues)) node.enumValues = [enumValue("None", 0), enumValue("ValueA", 1)];
+      node.enumValues = node.enumValues.map((item, index) => ({
+        id: item && item.id ? item.id : uid("enum"),
+        name: item && typeof item.name === "string" ? item.name : "Value" + index,
+        value: item && typeof item.value === "number" ? item.value : index
+      }));
+    }
+
+    if (node.type === "event") {
+      if (typeof node.eventKind !== "string") node.eventKind = "custom";
+    }
+
+    if (node.type === "action") {
+      if (typeof node.actionKind !== "string") node.actionKind = "custom";
+    }
+
+    if (node.type === "state") {
+      if (typeof node.stateKind !== "string") node.stateKind = "normal";
     }
 
     if (node.type === "class") {
@@ -1092,7 +1144,9 @@
       "LineRenderer", "Canvas", "CanvasGroup", "RectTransform",
       "NavMeshAgent", "NavMeshObstacle"
     ].includes(value)) return "#55d69e";
+    if (value === "__flow__") return "#a99fff";
     if (value === "void") return "#68748a";
+    if (enumByName(value)) return "#c58cff";
     if (publicClassNodes().some((node) => node.title === value)) return "#9b8cff";
     return "#7d8aa3";
   }
