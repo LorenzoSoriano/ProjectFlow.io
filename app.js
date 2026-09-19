@@ -1361,7 +1361,11 @@
     closeSurface($("dataMenu"));
     closeSurface($("accountMenu"));
     closeSurface($("newBlockPalette"));
+    closeSurface($("sharePanel"));
+    closeSurface($("sketchPanel"));
     if ($("addObjectTop")) $("addObjectTop").setAttribute("aria-expanded", "false");
+    if ($("shareProjectButton")) $("shareProjectButton").setAttribute("aria-expanded", "false");
+    if ($("sketchTool")) $("sketchTool").classList.remove("active");
     document.querySelectorAll(".section-add-popup.open, .type-picker-popup.open").forEach(closeSurface);
 
     if ($("editorAuthButton") && except !== $("accountMenu")) {
@@ -1959,7 +1963,9 @@
     title.textContent = record.name || "Untitled Flow";
     const localBadge = document.createElement("span");
     localBadge.className = "project-storage-badge";
-    localBadge.textContent = cloudState.user ? "Cloud" : "Local";
+    localBadge.textContent = record.sharedProjectId
+      ? (record.sharedRole === "owner" ? "Condiviso" : "Condiviso con me")
+      : (cloudState.user ? "Cloud" : "Local");
     titleRow.append(title, localBadge);
 
     const meta = document.createElement("p");
@@ -2160,8 +2166,12 @@
             await mergeCloudLibrary();
             renderProjectLibrary();
             setAutosaveState("cloud", "Autosave · Cloud");
+            if (sharedProjectIdFromLocation()) await openSharedProjectFromLink();
+            renderSharePanel();
           } else {
+            stopSharedProjectSession();
             setAutosaveState("saved", "Autosave");
+            renderSharePanel();
           }
         });
         return true;
@@ -2294,9 +2304,21 @@
         }
       }
 
+      const sharedRecords = await fetchSharedProjects();
+      const sharedIds = new Set();
+      sharedRecords.forEach((remote) => {
+        sharedIds.add(remote.id);
+        mergeSharedRecord(remote);
+      });
+
       persistProjectLibrary();
 
       for (const local of projectLibrary) {
+        if (local.sharedProjectId) {
+          const remote = sharedRecords.find((entry) => entry.id === local.sharedProjectId);
+          if (remote && local.updatedAt > remote.updatedAt) await cloudWriteSharedProject(local);
+          continue;
+        }
         const remote = cloudMap.get(local.id);
         if (!remote || local.updatedAt > remote.updatedAt) {
           await cloudWriteProject(local);
@@ -2308,6 +2330,7 @@
         project = normalizeProject(cloneProjectData(active.data));
         $("projectName").value = project.name;
         render();
+        if (active.sharedProjectId) startSharedProjectSession(active);
       }
     } catch (error) {
       console.warn("ProjectFlow: sincronizzazione cloud non riuscita.", error);
@@ -2338,7 +2361,11 @@
   function queueCloudSave(record) {
     if (!record || !cloudState.user) return;
     clearTimeout(cloudState.saveTimer);
-    cloudState.saveTimer = setTimeout(() => cloudWriteProject(record), 550);
+    const delay = record.sharedProjectId ? 180 : 550;
+    cloudState.saveTimer = setTimeout(() => {
+      if (record.sharedProjectId) cloudWriteSharedProject(record);
+      else cloudWriteProject(record);
+    }, delay);
   }
 
   async function cloudDeleteProject(id) {
@@ -2354,6 +2381,161 @@
       await cloudState.api.deleteDoc(ref);
     } catch (error) {
       console.warn("ProjectFlow: eliminazione cloud non riuscita.", error);
+    }
+  }
+
+  function normalizeShareEmail(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function sharedProjectRef(id) {
+    if (!id || !cloudState.api || !cloudState.db) return null;
+    return cloudState.api.doc(cloudState.db, "sharedProjects", id);
+  }
+
+  async function cloudWriteSharedProject(record) {
+    if (!record || !record.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    try {
+      const ref = sharedProjectRef(record.sharedProjectId);
+      await cloudState.api.setDoc(ref, {
+        name: record.name,
+        updatedAt: record.updatedAt,
+        updatedBy: cloudState.user.uid,
+        data: record.data
+      }, { merge: true });
+    } catch (error) {
+      console.warn("ProjectFlow: salvataggio progetto condiviso non riuscito.", error);
+      setAutosaveState("error", "Sync condivisa non riuscita");
+    }
+  }
+
+  async function ensureSharedProject(record) {
+    if (!record || !cloudState.user) return null;
+    await initCloud(true);
+    if (!cloudState.user || !cloudState.api || !cloudState.db) return null;
+
+    const id = record.sharedProjectId || record.id;
+    const ref = sharedProjectRef(id);
+    const existing = await cloudState.api.getDoc(ref);
+
+    if (!existing.exists()) {
+      await cloudState.api.setDoc(ref, {
+        ownerId: cloudState.user.uid,
+        ownerName: cloudState.user.displayName || "",
+        ownerEmail: normalizeShareEmail(cloudState.user.email),
+        invitedEmails: [],
+        name: record.name,
+        createdAt: record.createdAt || Date.now(),
+        updatedAt: record.updatedAt || Date.now(),
+        updatedBy: cloudState.user.uid,
+        data: record.data
+      });
+    } else {
+      const value = existing.data() || {};
+      if (value.ownerId && value.ownerId !== cloudState.user.uid && record.sharedRole !== "editor") {
+        throw new Error("Solo il proprietario può gestire la condivisione.");
+      }
+    }
+
+    record.sharedProjectId = id;
+    record.ownerId = record.ownerId || cloudState.user.uid;
+    record.ownerName = record.ownerName || cloudState.user.displayName || "";
+    record.ownerEmail = record.ownerEmail || normalizeShareEmail(cloudState.user.email);
+    record.sharedRole = record.ownerId === cloudState.user.uid ? "owner" : (record.sharedRole || "editor");
+    persistProjectLibrary();
+    return ref;
+  }
+
+  function sharedRecordFromSnapshot(docSnapshot) {
+    const value = docSnapshot && docSnapshot.data ? docSnapshot.data() : null;
+    if (!value || !value.data) return null;
+    const owner = cloudState.user && value.ownerId === cloudState.user.uid;
+    return {
+      id: docSnapshot.id,
+      name: value.name || value.data.name || "Untitled Flow",
+      createdAt: Number(value.createdAt) || Date.now(),
+      updatedAt: Number(value.updatedAt) || Date.now(),
+      sharedProjectId: docSnapshot.id,
+      sharedRole: owner ? "owner" : "editor",
+      ownerId: value.ownerId || "",
+      ownerName: value.ownerName || "",
+      ownerEmail: value.ownerEmail || "",
+      data: normalizeProject(value.data)
+    };
+  }
+
+  function mergeSharedRecord(remote) {
+    if (!remote) return null;
+    let local = projectRecordById(remote.id);
+    if (!local) {
+      projectLibrary.push(remote);
+      return remote;
+    }
+
+    local.sharedProjectId = remote.sharedProjectId;
+    local.sharedRole = remote.sharedRole;
+    local.ownerId = remote.ownerId;
+    local.ownerName = remote.ownerName;
+    local.ownerEmail = remote.ownerEmail;
+    local.createdAt = remote.createdAt || local.createdAt;
+
+    if (!local.updatedAt || remote.updatedAt >= local.updatedAt || local.sharedRole !== "owner") {
+      local.name = remote.name;
+      local.updatedAt = remote.updatedAt;
+      local.data = normalizeProject(cloneProjectData(remote.data));
+    }
+    return local;
+  }
+
+  async function fetchSharedProjects() {
+    if (!cloudState.user || !cloudState.api || !cloudState.db) return [];
+    const collectionRef = cloudState.api.collection(cloudState.db, "sharedProjects");
+    const results = new Map();
+    const email = normalizeShareEmail(cloudState.user.email);
+
+    const queries = [
+      cloudState.api.query(collectionRef, cloudState.api.where("ownerId", "==", cloudState.user.uid))
+    ];
+    if (email) {
+      queries.push(cloudState.api.query(collectionRef, cloudState.api.where("invitedEmails", "array-contains", email)));
+    }
+
+    for (const queryRef of queries) {
+      const snapshot = await cloudState.api.getDocs(queryRef);
+      snapshot.forEach((docSnapshot) => {
+        const remote = sharedRecordFromSnapshot(docSnapshot);
+        if (remote) results.set(remote.id, remote);
+      });
+    }
+    return Array.from(results.values());
+  }
+
+  function sharedProjectIdFromLocation() {
+    try {
+      return new URL(window.location.href).searchParams.get("shared") || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function openSharedProjectFromLink() {
+    const id = sharedProjectIdFromLocation();
+    if (!id || !cloudState.user || !cloudState.api || !cloudState.db) return false;
+
+    try {
+      const snapshot = await cloudState.api.getDoc(sharedProjectRef(id));
+      if (!snapshot.exists()) return false;
+      const remote = sharedRecordFromSnapshot(snapshot);
+      if (!remote) return false;
+      mergeSharedRecord(remote);
+      persistProjectLibrary();
+      renderProjectLibrary();
+      await activateProject(remote.id, true);
+      return true;
+    } catch (error) {
+      console.warn("ProjectFlow: link condiviso non accessibile.", error);
+      showToast("Questo account non ha accesso al progetto condiviso");
+      return false;
     }
   }
 
