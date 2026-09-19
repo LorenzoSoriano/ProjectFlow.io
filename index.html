@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260920-4520" />
+  <link rel="stylesheet" href="styles.css?v=20260920-5210" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.4</span>
+        <span class="build-badge" title="Build corrente">v2.5</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -395,7 +395,7 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.4</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.5</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -435,7 +435,7 @@
             <button class="canvas-tool history-tool" id="undoAction" type="button" title="Annulla (Ctrl/Cmd+Z)" disabled>↶</button>
             <button class="canvas-tool history-tool" id="redoAction" type="button" title="Ripristina (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
             <span class="tool-separator"></span>
-            <button class="canvas-tool" id="sketchTool" type="button" title="Apri Sketch">✎ <span>Sketch</span></button>
+            <button class="canvas-tool" id="sketchTool" type="button" title="Aggiungi nodo Sketch">✎ <span>Sketch</span></button>
           </div>
           <div class="canvas-right-actions">
             <div class="collab-presence" id="collabPresence" hidden></div>
@@ -491,26 +491,6 @@
               <p class="share-footnote">L’accesso resta attivo finché il proprietario non lo revoca. Il link richiede comunque l’account Google invitato.</p>
             </div>
           </div>
-        </aside>
-
-        <aside class="side-work-panel sketch-panel" id="sketchPanel" aria-hidden="true">
-          <div class="side-work-panel-head">
-            <div>
-              <span class="eyebrow">SKETCH</span>
-              <strong>Appunti disegnati</strong>
-            </div>
-            <button class="new-block-close" id="closeSketchPanel" type="button" aria-label="Chiudi">×</button>
-          </div>
-          <div class="sketch-toolbar">
-            <label>Colore <input id="sketchColor" type="color" value="#9fb7ff" /></label>
-            <label>Tratto <input id="sketchSize" type="range" min="1" max="10" value="3" /></label>
-            <button id="sketchUndoStroke" type="button">↶ Ultimo</button>
-            <button id="sketchClear" type="button">Pulisci</button>
-          </div>
-          <div class="sketch-paper">
-            <canvas id="sketchCanvas" width="720" height="480"></canvas>
-          </div>
-          <div class="sketch-note">Disegna liberamente: gli stroke entrano nell’autosave, Undo/Redo e nella condivisione del progetto.</div>
         </aside>
 
         <div class="canvas-viewport" id="canvasViewport" tabindex="0">
@@ -647,7 +627,7 @@
     </div>
   </div>
 
-  <script src="firebase-config.js?v=20260920-4520"></script>
-  <script src="app.js?v=20260920-4520"></script>
+  <script src="firebase-config.js?v=20260920-5210"></script>
+  <script src="app.js?v=20260920-5210"></script>
 </body>
 </html>
