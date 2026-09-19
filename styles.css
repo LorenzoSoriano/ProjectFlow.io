@@ -274,3 +274,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .edge-junction:active{
   cursor:grabbing;
 }
+
+.build-badge{
+  display:inline-flex;
+  align-items:center;
+  height:20px;
+  padding:0 7px;
+  border:1px solid rgba(124,108,255,.28);
+  border-radius:999px;
+  background:rgba(124,108,255,.1);
+  color:#a99fff;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.4px;
+}
