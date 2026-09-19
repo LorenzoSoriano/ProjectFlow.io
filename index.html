@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260919-2608" />
+  <link rel="stylesheet" href="styles.css?v=20260919-2720" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v1.8</span>
+        <span class="build-badge" title="Build corrente">v1.9</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -133,57 +133,97 @@
         <div class="site-page-inner">
           <header class="site-page-heading guide-heading">
             <div>
-              <span class="eyebrow">GUIDE / DEFAULT DEMO</span>
-              <h1>Come si legge ProjectFlow.</h1>
-              <p>Un esempio di sistema di interazione mostra il rapporto tra struttura dati e flusso di gameplay.</p>
+              <span class="eyebrow">GUIDE / INVENTORY DEMO</span>
+              <h1>Un Inventory System progettato prima del codice.</h1>
+              <p>La demo mostra una configurazione realistica: tipi di item, rarità, dati statici, slot runtime, database, inventory service, pickup flow ed eventi UI.</p>
             </div>
-            <button class="primary-button" id="openDemoGuide" type="button">▶ Apri progetto demo</button>
+            <button class="primary-button" id="openDemoGuide" type="button">▶ Apri Inventory Demo</button>
           </header>
 
-          <section class="demo-workbench">
-            <div class="demo-flow-board">
-              <div class="demo-board-label">GAMEPLAY FLOW</div>
-              <div class="demo-flow-row">
-                <div class="demo-node demo-event"><small>EVENT</small><strong>OnInteract</strong></div>
-                <span class="demo-wire flow">→</span>
-                <div class="demo-node demo-condition"><small>CONDITION</small><strong>HasKey?</strong></div>
-                <span class="demo-wire flow">→ TRUE →</span>
-                <div class="demo-node demo-action"><small>ACTION</small><strong>OpenDoor</strong></div>
+          <section class="inventory-demo-map">
+            <div class="inventory-demo-column structure">
+              <div class="demo-column-head"><span>01</span><strong>DATA MODEL</strong></div>
+              <div class="inventory-demo-card enum">
+                <small>ENUM</small><strong>ItemType</strong>
+                <p>Consumable · Weapon · Armor · Material · Quest · KeyItem</p>
               </div>
-              <div class="demo-data-row">
-                <div class="demo-node demo-class"><small>CLASS</small><strong>Player</strong><span>Key currentKey</span></div>
-                <span class="demo-wire data">······ DATA ······→</span>
-                <div class="demo-node demo-class"><small>CLASS</small><strong>Door</strong><span>DoorState state</span></div>
-                <span class="demo-wire type">·· TYPE ··→</span>
-                <div class="demo-node demo-enum"><small>ENUM</small><strong>DoorState</strong><span>Closed · Open</span></div>
+              <div class="inventory-demo-card enum">
+                <small>ENUM</small><strong>ItemRarity</strong>
+                <p>Common · Uncommon · Rare · Epic · Legendary</p>
+              </div>
+              <div class="inventory-demo-card class">
+                <small>CLASS / SCRIPTABLE DATA</small><strong>ItemData</strong>
+                <p>id · displayName · type · rarity · maxStack · icon · value</p>
+              </div>
+              <div class="inventory-demo-card class">
+                <small>CLASS</small><strong>InventorySlot</strong>
+                <p>ItemData item · int quantity · IsEmpty()</p>
               </div>
             </div>
 
-            <aside class="demo-explanation">
-              <article>
-                <span class="demo-step">01</span>
-                <div><strong>FLOW</strong><p>Le connessioni di esecuzione mostrano cosa succede e in quale ordine.</p></div>
-              </article>
-              <article>
-                <span class="demo-step">02</span>
-                <div><strong>DATA</strong><p>Variabili e parametri portano valori tipati dentro condizioni e metodi.</p></div>
-              </article>
-              <article>
-                <span class="demo-step">03</span>
-                <div><strong>STRUCTURE</strong><p>Classi, enum e componenti creano relazioni automatiche senza trasformarle in flow.</p></div>
-              </article>
-              <article>
-                <span class="demo-step">04</span>
-                <div><strong>METHODS</strong><p>Chiusi sembrano firme C#; aperti mostrano parametri, commento, return e pseudocode.</p></div>
-              </article>
-            </aside>
+            <div class="inventory-demo-arrow">→</div>
+
+            <div class="inventory-demo-column system">
+              <div class="demo-column-head"><span>02</span><strong>INVENTORY SYSTEM</strong></div>
+              <div class="inventory-demo-card class primary">
+                <small>MONOBEHAVIOUR</small><strong>Inventory</strong>
+                <p>List&lt;InventorySlot&gt; slots · capacity</p>
+                <code>AddItem(ItemData item, int amount)</code>
+                <code>RemoveItem(ItemData item, int amount)</code>
+                <code>Contains(ItemData item, int amount)</code>
+              </div>
+              <div class="inventory-demo-card class">
+                <small>SERVICE / DATABASE</small><strong>ItemDatabase</strong>
+                <p>Dictionary&lt;string, ItemData&gt; itemsById</p>
+              </div>
+              <div class="inventory-demo-card event">
+                <small>UNITY EVENT</small><strong>OnInventoryChanged</strong>
+                <p>Notifica UI, feedback e altri sistemi senza accoppiarli direttamente.</p>
+              </div>
+            </div>
+
+            <div class="inventory-demo-arrow">→</div>
+
+            <div class="inventory-demo-column flow">
+              <div class="demo-column-head"><span>03</span><strong>GAMEPLAY FLOW</strong></div>
+              <div class="inventory-flow-stack">
+                <div class="inventory-demo-card event"><small>EVENT</small><strong>OnItemPickup</strong></div>
+                <span class="inventory-flow-line">↓ FLOW</span>
+                <div class="inventory-demo-card condition"><small>CONDITION</small><strong>CanAddItem?</strong></div>
+                <span class="inventory-flow-line">↓ TRUE</span>
+                <div class="inventory-demo-card action"><small>ACTION</small><strong>Add Item</strong></div>
+                <span class="inventory-flow-line">↓</span>
+                <div class="inventory-demo-card action"><small>ACTION</small><strong>Refresh Inventory UI</strong></div>
+              </div>
+            </div>
           </section>
 
-          <section class="guide-cards">
-            <article><span>◇</span><div><strong>Parti da una classe</strong><p>Definisci responsabilità, variabili e metodi.</p></div></article>
-            <article><span>⚡</span><div><strong>Aggiungi un evento</strong><p>Usalo come punto di ingresso del gameplay flow.</p></div></article>
-            <article><span>?</span><div><strong>Inserisci condizioni</strong><p>Collega dati tipati e separa i rami True / False.</p></div></article>
-            <article><span>▶</span><div><strong>Chiudi con un'azione</strong><p>Descrivi il risultato oppure collega un metodo reale.</p></div></article>
+          <section class="inventory-guide-details">
+            <article>
+              <span class="demo-step">01</span>
+              <div><strong>Enum come vocabolario</strong><p><code>ItemType</code> e <code>ItemRarity</code> diventano tipi riutilizzabili, visibili nelle variabili e negli switch.</p></div>
+            </article>
+            <article>
+              <span class="demo-step">02</span>
+              <div><strong>Dati separati dal runtime</strong><p><code>ItemData</code> descrive l'item; <code>InventorySlot</code> tiene quantità e stato runtime.</p></div>
+            </article>
+            <article>
+              <span class="demo-step">03</span>
+              <div><strong>Responsabilità chiare</strong><p><code>Inventory</code> gestisce stack, capacità e operazioni. Il database risolve gli item per ID.</p></div>
+            </article>
+            <article>
+              <span class="demo-step">04</span>
+              <div><strong>Flow disaccoppiato</strong><p>Pickup, validazione, aggiunta e refresh UI sono leggibili come sequenza senza nascondere i dati coinvolti.</p></div>
+            </article>
+          </section>
+
+          <section class="guide-callout">
+            <div>
+              <span class="eyebrow">PROVA NELL'EDITOR</span>
+              <h2>La demo non è un'immagine: è un progetto ProjectFlow modificabile.</h2>
+              <p>Aprendola trovi classi, enum, metodi, eventi e flow già configurati. Puoi duplicarla e trasformarla nel tuo sistema.</p>
+            </div>
+            <button class="primary-button" id="openDemoGuideBottom" type="button">Apri Inventory Demo</button>
           </section>
         </div>
       </section>
@@ -198,66 +238,131 @@
             </div>
           </header>
 
-          <section class="home-info-grid about-page-grid">
-            <article class="home-info-card home-info-card-large">
-              <span class="eyebrow">OBIETTIVO</span>
-              <h2>Progetta il comportamento prima del codice.</h2>
-              <p>Lo strumento non prova a essere un compilatore o un diagramma UML rigido. Serve a ragionare velocemente su sistemi, responsabilità, dipendenze e comportamento mantenendo abbastanza struttura da avvicinarsi al codice reale.</p>
+          <section class="about-story">
+            <article class="about-story-copy">
+              <span class="eyebrow">PERCHÉ ESISTE</span>
+              <h2>Un workspace per ragionare, non un compilatore.</h2>
+              <p>Molti sistemi di gameplay partono da idee corrette ma diventano difficili da leggere appena entrano in gioco classi, stati, eventi, dipendenze e dati. ProjectFlow permette di costruire questa struttura gradualmente, lasciando spazio al pensiero di game design senza perdere il collegamento con il codice.</p>
+              <p>Il principio è semplice: prima definisci <strong>responsabilità</strong> e <strong>relazioni</strong>, poi il <strong>flow</strong>, infine scendi verso firme C#, parametri e pseudocode.</p>
               <div class="about-pill-row">
-                <span>Game Design</span>
-                <span>Unity Architecture</span>
-                <span>Gameplay Flow</span>
-                <span>Code Planning</span>
+                <span>Game Design</span><span>Unity Architecture</span><span>Gameplay Flow</span><span>Code Planning</span>
               </div>
             </article>
-            <article class="home-info-card">
-              <span class="eyebrow">LIVELLI</span>
-              <h3>FLOW + DATA + STRUCTURE</h3>
-              <p><strong>FLOW</strong> descrive quando accade qualcosa. <strong>DATA</strong> mostra i valori. <strong>STRUCTURE</strong> mantiene leggibili dipendenze, classi, enum e componenti.</p>
+            <div class="about-media-placeholder">
+              <div class="media-placeholder-grid"></div>
+              <span>EDITOR SCREENSHOT</span>
+              <strong>Spazio pronto per immagini del prodotto</strong>
+              <small>In futuro qui potrà entrare uno screenshot reale dell'editor o un breve video.</small>
+            </div>
+          </section>
+
+          <section class="about-feature-story">
+            <div class="about-media-placeholder compact">
+              <div class="media-placeholder-node a"></div>
+              <div class="media-placeholder-node b"></div>
+              <div class="media-placeholder-node c"></div>
+              <span>FLOW VISUAL</span>
+              <strong>Mostrare un sistema reale</strong>
+            </div>
+            <article>
+              <span class="eyebrow">METODO</span>
+              <h2>FLOW, DATA e STRUCTURE rimangono separati.</h2>
+              <p>Le linee di esecuzione raccontano il comportamento. Le connessioni dati mostrano i valori. Le relazioni di tipo spiegano dipendenze e architettura. Questa separazione mantiene leggibile anche un sistema complesso.</p>
             </article>
-            <article class="home-info-card">
-              <span class="eyebrow">WORKFLOW</span>
-              <h3>Da concetto a C#.</h3>
-              <p>Puoi partire da un evento di gameplay, definire i dati coinvolti e arrivare gradualmente a firme di metodo e pseudocode abbastanza precise da guidare l'implementazione.</p>
-            </article>
+          </section>
+
+          <section class="about-roadmap">
+            <div class="about-roadmap-head">
+              <div><span class="eyebrow">DIREZIONE</span><h2>Dove può arrivare ProjectFlow.</h2></div>
+              <p>Questa sezione è già predisposta per crescere con immagini, esempi e casi d'uso reali.</p>
+            </div>
+            <div class="about-roadmap-grid">
+              <article><span>01</span><strong>Design systems</strong><p>Template riutilizzabili per inventory, interaction, quest, combat e UI.</p></article>
+              <article><span>02</span><strong>Team review</strong><p>Condivisione e commenti per discutere architettura e gameplay prima dell'implementazione.</p></article>
+              <article><span>03</span><strong>Documentation</strong><p>Esportazione di schemi e descrizioni leggibili come documentazione tecnica di progetto.</p></article>
+            </div>
           </section>
         </div>
       </section>
 
       <section class="site-page" id="privacyPage" data-site-page="privacy" hidden>
-        <div class="site-page-inner">
+        <div class="site-page-inner privacy-page">
           <header class="site-page-heading">
             <div>
-              <span class="eyebrow">PRIVACY</span>
-              <h1>Controllo semplice dei tuoi schemi.</h1>
-              <p>La modalità locale funziona senza account; il cloud viene usato solo quando attivi il login Google.</p>
+              <span class="eyebrow">PRIVACY NOTICE</span>
+              <h1>Come ProjectFlow tratta i dati.</h1>
+              <p>Informativa trasparente sul funzionamento attuale del servizio. Prima di un lancio pubblico definitivo devono essere completati i dati del titolare e il contatto privacy.</p>
             </div>
-            <span class="privacy-updated">Aggiornato: 19 settembre 2026</span>
+            <span class="privacy-updated">Versione: 19 settembre 2026</span>
           </header>
 
-          <section class="privacy-section">
-            <div class="privacy-grid">
-              <article>
-                <h3>Senza login</h3>
-                <p>Gli schemi vengono salvati nel <strong>localStorage</strong> del browser. Restano sul dispositivo e nel profilo browser utilizzato finché non vengono eliminati o cancellati i dati del sito.</p>
-              </article>
-              <article>
-                <h3>Con Google</h3>
-                <p>Firebase Authentication gestisce l'accesso Google. ProjectFlow usa l'identificativo dell'account per salvare gli schemi in Cloud Firestore sotto il percorso personale dell'utente.</p>
-              </article>
-              <article>
-                <h3>Dati salvati</h3>
-                <p>Il cloud contiene il nome dello schema, date di creazione/modifica e dati del diagramma. Il codice attuale non attiva Firebase Analytics.</p>
-              </article>
-              <article>
-                <h3>Eliminazione</h3>
-                <p>Il comando <strong>Elimina</strong> rimuove lo schema dalla libreria locale e, quando autenticato e sincronizzato, anche dal documento cloud corrispondente.</p>
-              </article>
+          <div class="privacy-compliance-warning">
+            <span>!</span>
+            <div>
+              <strong>Configurazione legale da completare prima del rilascio pubblico.</strong>
+              <p>Inserire identità completa e contatto del titolare del trattamento. Questa pagina migliora trasparenza e struttura dell'informativa ma non sostituisce una verifica legale del servizio reale.</p>
             </div>
-            <div class="privacy-note">
-              <span>ⓘ</span>
-              <p>Google e Firebase possono trattare dati tecnici necessari ai loro servizi secondo le rispettive informative. Le regole Firestore di ProjectFlow limitano i documenti degli schemi all'UID autenticato proprietario.</p>
+          </div>
+
+          <section class="privacy-summary">
+            <article><small>MODALITÀ LOCALE</small><strong>Nessun account richiesto</strong><p>I diagrammi restano nel browser tramite localStorage.</p></article>
+            <article><small>MODALITÀ CLOUD</small><strong>Solo su scelta dell'utente</strong><p>Google Sign-In abilita la sincronizzazione Firebase.</p></article>
+            <article><small>ANALYTICS</small><strong>Non attivi</strong><p>Il codice corrente non inizializza Firebase Analytics.</p></article>
+          </section>
+
+          <section class="privacy-legal-grid">
+            <article>
+              <span class="privacy-number">01</span>
+              <div><h3>Titolare e contatti</h3><p><strong>Titolare:</strong> da completare prima del lancio pubblico.</p><p><strong>Contatto privacy:</strong> da pubblicare.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">02</span>
+              <div><h3>Finalità</h3><p>Salvataggio locale dei diagrammi; autenticazione Google opzionale; sincronizzazione cloud dei progetti richiesti dall'utente; gestione della libreria personale.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">03</span>
+              <div><h3>Dati trattati</h3><p>In modalità cloud possono essere trattati UID Firebase, nome/account Google visualizzato, email associata all'autenticazione e contenuto tecnico degli schemi salvati.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">04</span>
+              <div><h3>Base giuridica</h3><p>Per le funzioni cloud richieste dall'utente, il trattamento è finalizzato all'erogazione del servizio richiesto. Eventuali finalità ulteriori dovranno essere indicate separatamente prima di essere attivate.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">05</span>
+              <div><h3>Conservazione</h3><p>I dati locali restano finché l'utente elimina gli schemi o i dati del sito. I progetti cloud restano finché vengono eliminati dall'utente o finché il servizio/account viene mantenuto.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">06</span>
+              <div><h3>Fornitori e destinatari</h3><p>Per autenticazione e storage cloud ProjectFlow utilizza servizi Google/Firebase. La modalità locale non richiede la sincronizzazione dei diagrammi con Firebase.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">07</span>
+              <div><h3>Diritti dell'utente</h3><p>L'utente può esportare ed eliminare i propri schemi. Per accesso, rettifica, cancellazione, limitazione, opposizione e portabilità deve essere pubblicato un contatto del titolare.</p></div>
+            </article>
+            <article>
+              <span class="privacy-number">08</span>
+              <div><h3>Reclamo</h3><p>Gli interessati possono rivolgersi all'autorità di controllo competente. In Italia è il Garante per la protezione dei dati personali.</p></div>
+            </article>
+          </section>
+
+          <section class="privacy-technical">
+            <div>
+              <span class="eyebrow">SICUREZZA TECNICA</span>
+              <h2>Accesso separato per utente.</h2>
+              <p>Gli schemi cloud sono organizzati sotto <code>users/{uid}/projects/{projectId}</code>. Le regole Firestore incluse nel repository verificano che l'UID autenticato corrisponda al proprietario del percorso.</p>
             </div>
+            <ul>
+              <li>Firebase Authentication per identificare l'utente.</li>
+              <li>Firestore Security Rules per limitare lettura e scrittura.</li>
+              <li>Firebase App Check consigliato come ulteriore hardening prima del lancio.</li>
+              <li>Nessuna chiave Admin SDK o service account nel client pubblico.</li>
+            </ul>
+          </section>
+
+          <section class="privacy-links">
+            <a href="https://www.garanteprivacy.it/" target="_blank" rel="noreferrer">Garante Privacy ↗</a>
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Privacy Google ↗</a>
+            <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noreferrer">Firebase Privacy ↗</a>
           </section>
         </div>
       </section>
@@ -290,24 +395,28 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.8</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.9</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
       </div>
       <div class="top-actions">
-        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account e sincronizzazione">
+        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account e sincronizzazione" aria-haspopup="menu" aria-expanded="false">
           <span class="account-avatar" id="editorAccountAvatar">G</span>
           <span id="editorAccountLabel">Accedi</span>
+          <span class="account-chevron">▾</span>
         </button>
+        <div class="autosave-indicator" id="editorAutosaveIndicator" title="ProjectFlow salva automaticamente">
+          <span class="autosave-dot"></span>
+          <span>Autosave</span>
+        </div>
         <button class="toolbar-button" id="fitView" title="Centra il diagramma">⌗ <span>Centra</span></button>
-        <button class="toolbar-button" id="saveProject" title="Salva nel browser">⌘ <span>Salva</span></button>
         <div class="toolbar-menu">
           <button class="toolbar-button" id="dataMenuButton">↥ <span>Dati</span> ▾</button>
           <div class="menu-popover" id="dataMenu">
             <button id="exportProject">Esporta JSON</button>
             <button id="importProject">Importa JSON</button>
-            <button id="resetProject" class="danger-text">Ripristina esempio</button>
+            <button id="resetProject" class="danger-text">Carica demo inventario</button>
           </div>
         </div>
         <input id="importFile" type="file" accept=".json,application/json" hidden />
@@ -581,7 +690,32 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="firebase-config.js?v=20260919-2608"></script>
-  <script src="app.js?v=20260919-2634"></script>
+  <div class="account-popover" id="accountMenu" role="menu" aria-hidden="true">
+    <div class="account-popover-profile">
+      <span class="account-menu-avatar" id="accountMenuAvatar">G</span>
+      <div><strong id="accountMenuName">Account</strong><small id="accountMenuEmail">Modalità locale</small></div>
+    </div>
+    <div class="account-popover-status"><span class="sync-dot local" id="accountMenuSyncDot"></span><span id="accountMenuSyncText">Salvataggio locale</span></div>
+    <div class="account-popover-actions">
+      <button type="button" id="accountSyncNow">↻ Sincronizza ora</button>
+      <button type="button" id="accountPrivacy">ⓘ Privacy</button>
+      <button type="button" id="accountLogout" class="danger-text">Esci dall'account</button>
+    </div>
+  </div>
+
+  <div class="project-loading-overlay" id="projectLoadingOverlay" aria-hidden="true">
+    <div class="project-loading-card">
+      <div class="loading-project-mark">PF</div>
+      <div class="loading-copy">
+        <span class="eyebrow">PROJECTFLOW</span>
+        <strong id="projectLoadingTitle">Apertura progetto…</strong>
+        <small id="projectLoadingDetail">Preparazione blocchi, connessioni e viewport</small>
+      </div>
+      <div class="loading-progress"><span></span></div>
+    </div>
+  </div>
+
+  <script src="firebase-config.js?v=20260919-2720"></script>
+  <script src="app.js?v=20260919-2720"></script>
 </body>
 </html>
