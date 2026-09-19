@@ -2423,7 +2423,6 @@
         ownerId: cloudState.user.uid,
         ownerName: cloudState.user.displayName || "",
         ownerEmail: normalizeShareEmail(cloudState.user.email),
-        invitedEmails: [],
         name: record.name,
         createdAt: record.createdAt || Date.now(),
         updatedAt: record.updatedAt || Date.now(),
@@ -2489,24 +2488,40 @@
 
   async function fetchSharedProjects() {
     if (!cloudState.user || !cloudState.api || !cloudState.db) return [];
-    const collectionRef = cloudState.api.collection(cloudState.db, "sharedProjects");
     const results = new Map();
     const email = normalizeShareEmail(cloudState.user.email);
 
-    const queries = [
-      cloudState.api.query(collectionRef, cloudState.api.where("ownerId", "==", cloudState.user.uid))
-    ];
+    const ownedQuery = cloudState.api.query(
+      cloudState.api.collection(cloudState.db, "sharedProjects"),
+      cloudState.api.where("ownerId", "==", cloudState.user.uid)
+    );
+    const ownedSnapshot = await cloudState.api.getDocs(ownedQuery);
+    ownedSnapshot.forEach((docSnapshot) => {
+      const remote = sharedRecordFromSnapshot(docSnapshot);
+      if (remote) results.set(remote.id, remote);
+    });
+
     if (email) {
-      queries.push(cloudState.api.query(collectionRef, cloudState.api.where("invitedEmails", "array-contains", email)));
+      const inviteCollection = cloudState.api.collection(
+        cloudState.db,
+        "shareInvites",
+        email,
+        "projects"
+      );
+      const inviteSnapshot = await cloudState.api.getDocs(inviteCollection);
+      for (const inviteDoc of inviteSnapshot.docs) {
+        try {
+          const projectId = inviteDoc.data().projectId || inviteDoc.id;
+          const sharedSnapshot = await cloudState.api.getDoc(sharedProjectRef(projectId));
+          if (!sharedSnapshot.exists()) continue;
+          const remote = sharedRecordFromSnapshot(sharedSnapshot);
+          if (remote) results.set(remote.id, remote);
+        } catch (error) {
+          console.warn("ProjectFlow: invito non più accessibile.", error);
+        }
+      }
     }
 
-    for (const queryRef of queries) {
-      const snapshot = await cloudState.api.getDocs(queryRef);
-      snapshot.forEach((docSnapshot) => {
-        const remote = sharedRecordFromSnapshot(docSnapshot);
-        if (remote) results.set(remote.id, remote);
-      });
-    }
     return Array.from(results.values());
   }
 
