@@ -682,7 +682,24 @@
       setInspectorVisible(true);
     });
 
-    header.append(typeDot, heading, more, makePort(node.id, "__node__", "out", connectedPorts));
+    const removeNodeButton = document.createElement("button");
+    removeNodeButton.className = "node-delete-inline";
+    removeNodeButton.type = "button";
+    removeNodeButton.textContent = "×";
+    removeNodeButton.title = "Elimina blocco";
+    removeNodeButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+    removeNodeButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      project.nodes = project.nodes.filter((item) => item.id !== node.id);
+      project.connections = project.connections.filter((edge) => edge.from.nodeId !== node.id && edge.to.nodeId !== node.id);
+      selectedNodeIds.delete(node.id);
+      syncPrimarySelection();
+      render();
+      markDirty();
+      showToast("Blocco eliminato");
+    });
+
+    header.append(typeDot, heading, more, removeNodeButton, makePort(node.id, "__node__", "out", connectedPorts));
 
     header.addEventListener("pointerdown", (event) => {
       if (
@@ -1263,17 +1280,16 @@
     const lead = 34;
     pushRoutePoint(points, { x: a.x, y: a.y });
 
-    const forward = b.x >= a.x;
-    const startLead = { x: a.x + (forward ? lead : -lead), y: a.y };
-    const endLead = { x: b.x - (forward ? lead : -lead), y: b.y };
+    const startLead = { x: a.x + lead, y: a.y };
+    const endLead = { x: b.x - lead, y: b.y };
     pushRoutePoint(points, startLead);
 
-    if (forward && endLead.x - startLead.x >= 54) {
+    if (endLead.x - startLead.x >= 54) {
       const midX = Math.round((startLead.x + endLead.x) / 2);
       pushRoutePoint(points, { x: midX, y: startLead.y });
       pushRoutePoint(points, { x: midX, y: endLead.y });
     } else {
-      const detour = Math.max(a.x, b.x) + Math.max(78, Math.min(150, Math.abs(b.y - a.y) * 0.28 + 60));
+      const detour = Math.max(startLead.x, b.x, endLead.x) + Math.max(78, Math.min(150, Math.abs(b.y - a.y) * 0.28 + 60));
       pushRoutePoint(points, { x: detour, y: startLead.y });
       pushRoutePoint(points, { x: detour, y: endLead.y });
     }
@@ -2731,6 +2747,7 @@
 
   window.addEventListener("beforeunload", () => saveProject(false));
 
+  setInspectorVisible(false);
   render();
   if (!localStorage.getItem(VIEW_KEY)) {
     setTimeout(fitView, 30);
