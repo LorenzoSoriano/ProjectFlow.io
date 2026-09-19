@@ -6,21 +6,84 @@
   <meta name="theme-color" content="#0b1020" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260919-2348" />
+  <link rel="stylesheet" href="styles.css?v=20260919-2407" />
 </head>
 <body>
-  <div class="app-shell">
+  <section class="project-home" id="projectHome">
+    <header class="home-topbar">
+      <a class="brand home-brand" href="#" aria-label="ProjectFlow home">
+        <span class="brand-mark">PF</span>
+        <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
+        <span class="build-badge" title="Build corrente">v1.6</span>
+      </a>
+
+      <div class="home-account">
+        <div class="sync-state" id="homeSyncState">
+          <span class="sync-dot local"></span>
+          <span>Salvataggio locale</span>
+        </div>
+        <button class="google-login-button" id="homeAuthButton" type="button">
+          <span class="google-g">G</span>
+          <span>Accedi con Google</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="home-main">
+      <section class="home-hero">
+        <div>
+          <span class="eyebrow">PROJECT LIBRARY</span>
+          <h1>I tuoi schemi di gameplay e codice.</h1>
+          <p>Crea, importa e organizza flow di classi, dati, eventi e sistemi Unity prima di passare all'implementazione.</p>
+        </div>
+        <div class="home-hero-actions">
+          <button class="primary-button home-primary" id="createProjectHome" type="button">＋ Nuovo schema</button>
+          <button class="secondary-button home-secondary" id="uploadProjectHome" type="button">↥ Upload JSON</button>
+          <input id="homeUploadFile" type="file" accept=".json,application/json" hidden />
+        </div>
+      </section>
+
+      <section class="project-library-section">
+        <div class="project-library-head">
+          <div>
+            <span class="eyebrow">LIBRERIA</span>
+            <h2>Progetti</h2>
+          </div>
+          <label class="home-search">
+            <span>⌕</span>
+            <input id="projectLibrarySearch" type="search" placeholder="Cerca uno schema…" autocomplete="off" />
+          </label>
+        </div>
+
+        <div class="project-library-grid" id="projectLibraryGrid"></div>
+
+        <div class="project-library-empty hidden" id="projectLibraryEmpty">
+          <div class="empty-project-symbol">◇</div>
+          <h3>Nessuno schema</h3>
+          <p>Crea il tuo primo flow oppure importa un file JSON.</p>
+          <button class="primary-button" id="createProjectEmpty" type="button">＋ Crea schema</button>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <div class="app-shell editor-view hidden" id="editorView">
     <header class="topbar">
       <div class="brand-group">
         <button class="icon-button mobile-only" id="toggleLibrary" aria-label="Apri libreria">☰</button>
+        <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.5</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.6</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
       </div>
       <div class="top-actions">
+        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account e sincronizzazione">
+          <span class="account-avatar" id="editorAccountAvatar">G</span>
+          <span id="editorAccountLabel">Accedi</span>
+        </button>
         <button class="toolbar-button" id="fitView" title="Centra il diagramma">⌗ <span>Centra</span></button>
         <button class="toolbar-button" id="saveProject" title="Salva nel browser">⌘ <span>Salva</span></button>
         <div class="toolbar-menu">
@@ -302,6 +365,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=20260919-2348"></script>
+  <script src="firebase-config.js?v=20260919-2407"></script>
+  <script src="app.js?v=20260919-2407"></script>
 </body>
 </html>
