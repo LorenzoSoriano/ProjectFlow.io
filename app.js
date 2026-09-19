@@ -2426,6 +2426,88 @@
         rerenderNode();
       };
 
+      const makeCompactMethodIO = (item) => {
+        ensureFunctionSignature(item, item.access);
+        const lane = document.createElement("div");
+        lane.className = "compact-method-io";
+
+        item.methodParameters.forEach((parameter) => {
+          const chip = document.createElement("div");
+          chip.className = "compact-io-chip parameter-chip";
+
+          if (parameter.mode !== "out") {
+            chip.appendChild(decoratePort(
+              makePort(node.id, parameter.id, "in", connectedPorts),
+              parameterTypeKey(parameter)
+            ));
+          }
+
+          const copy = document.createElement("span");
+          copy.textContent = csharpParameterText(parameter);
+          chip.appendChild(copy);
+
+          if (parameter.mode === "ref" || parameter.mode === "out") {
+            chip.appendChild(decoratePort(
+              makePort(node.id, parameter.id, "out", connectedPorts),
+              parameterTypeKey(parameter)
+            ));
+          }
+
+          lane.appendChild(chip);
+        });
+
+        if (item.returnType && item.returnType !== "void") {
+          const result = document.createElement("div");
+          result.className = "compact-io-chip return-chip";
+
+          const copy = document.createElement("span");
+          copy.textContent = methodReturnTypeKey(item) + " " + (item.returnName || "result");
+          result.append(copy, decoratePort(
+            makePort(node.id, item.returnPortId, "out", connectedPorts),
+            methodReturnTypeKey(item)
+          ));
+          lane.appendChild(result);
+        }
+
+        return lane;
+      };
+
+      const makeMemberSummaryToggle = (item, expanded) => {
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "member-summary-toggle" + (expanded ? " expanded" : "");
+        toggle.title = expanded ? "Comprimi membro" : "Modifica membro";
+        toggle.addEventListener("pointerdown", (event) => event.stopPropagation());
+        toggle.addEventListener("click", (event) => {
+          event.stopPropagation();
+          item.uiExpanded = !item.uiExpanded;
+          rerenderNode();
+        });
+
+        const chevron = document.createElement("span");
+        chevron.className = "member-summary-chevron";
+        chevron.textContent = expanded ? "▾" : "▸";
+
+        const copy = document.createElement("span");
+        copy.className = "member-summary-copy";
+
+        const signature = document.createElement("code");
+        signature.className = "member-code-signature";
+        signature.textContent = memberCompactSignature(item);
+        copy.appendChild(signature);
+
+        const commentText = memberCompactComment(item);
+        if (commentText) {
+          const comment = document.createElement("span");
+          comment.className = "member-code-comment";
+          comment.textContent = "// " + commentText.replace(/\s+/g, " ").trim();
+          copy.appendChild(comment);
+        }
+
+        toggle.append(chevron, copy);
+        return toggle;
+      };
+
       const makeRowElement = (item) => {
         normalizeMember(item);
         const itemMeta = ROW_META[item.kind] || ROW_META.variable;
@@ -2497,6 +2579,41 @@
 
         const editor = document.createElement("div");
         editor.className = "inline-member-editor";
+
+        const collapsibleKinds = new Set(["variable", "property", "function", "unityEvent", "component"]);
+        const collapsible = collapsibleKinds.has(item.kind);
+        const expanded = !collapsible || !!item.uiExpanded;
+        if (collapsible) {
+          rowElement.classList.add("member-collapsible");
+          rowElement.classList.toggle("member-expanded", expanded);
+          rowElement.classList.toggle("member-collapsed", !expanded);
+          editor.appendChild(makeMemberSummaryToggle(item, expanded));
+        }
+
+        if (collapsible && !expanded) {
+          if (item.kind === "function") {
+            editor.appendChild(makeCompactMethodIO(item));
+          }
+
+          const remove = document.createElement("button");
+          remove.className = "inline-remove-member" + (item.kind === "component" && item.locked ? " locked" : "");
+          remove.type = "button";
+          remove.textContent = item.kind === "component" && item.locked ? "•" : "×";
+          remove.title = item.kind === "component" && item.locked ? "Componente obbligatorio" : "Rimuovi membro";
+          remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+          remove.addEventListener("click", (event) => {
+            event.stopPropagation();
+            removeMember(item);
+          });
+
+          rowElement.append(dragHandle, kind, editor, remove);
+
+          if (allowOutput) {
+            rowElement.appendChild(decoratePort(makePort(node.id, item.id, "out", connectedPorts), outputType));
+          }
+
+          return rowElement;
+        }
 
         const topLine = document.createElement("div");
         topLine.className = "inline-member-top";
