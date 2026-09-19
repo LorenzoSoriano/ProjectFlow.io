@@ -5907,3 +5907,22 @@ body,
     width:calc(100% - 20px);
   }
 }
+
+.share-login-notice{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.share-login-notice button{
+  min-height:34px;
+  border:1px solid #444;
+  border-radius:7px;
+  background:#2c2c2c;
+  color:#ddd;
+  cursor:pointer;
+  font-size:9px;
+}
+.share-login-notice button:hover{
+  background:#353535;
+  color:#fff;
+}
