@@ -2954,16 +2954,12 @@
       trigger.addEventListener("click", (event) => {
         event.stopPropagation();
         const willOpen = !popup.classList.contains("open");
-
-        document.querySelectorAll(".type-picker-popup.open").forEach((openPopup) => {
-          if (openPopup !== popup) {
-            openPopup.classList.remove("open");
-            if (typeof openPopup._resetTypePicker === "function") openPopup._resetTypePicker();
-          }
-        });
+        closeInterfaceSurfaces(willOpen ? popup : null);
 
         if (willOpen) resetTypePicker();
         popup.classList.toggle("open", willOpen);
+        popup.setAttribute("aria-hidden", willOpen ? "false" : "true");
+        if (willOpen) keepSurfaceInViewport(popup, 12);
       });
 
       wrap.append(trigger, popup);
@@ -4476,21 +4472,17 @@
           addButton.addEventListener("click", (event) => {
             event.stopPropagation();
             const willOpen = !popup.classList.contains("open");
-
-            document.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
-              if (openPopup !== popup) {
-                openPopup.classList.remove("open");
-                if (typeof openPopup._resetFanPopup === "function") openPopup._resetFanPopup();
-              }
-            });
+            closeInterfaceSurfaces(willOpen ? popup : null);
 
             if (willOpen && typeof popup._resetFanPopup === "function") popup._resetFanPopup();
             popup.classList.toggle("open", willOpen);
+            popup.setAttribute("aria-hidden", willOpen ? "false" : "true");
 
             if (willOpen && typeof popup._updatePopupOverflow === "function") {
               popup.scrollTop = 0;
               popup._updatePopupOverflow();
             }
+            if (willOpen) keepSurfaceInViewport(popup, 12);
           });
 
           addWrap.append(addButton, popup);
@@ -6332,7 +6324,6 @@
 
   $("addObjectTop").addEventListener("click", () => addNode("object"));
   $("fitView").addEventListener("click", fitView);
-  $("saveProject").addEventListener("click", () => saveProject(true));
   $("zoomIn").addEventListener("click", () => setZoom(view.scale + 0.1));
   $("zoomOut").addEventListener("click", () => setZoom(view.scale - 0.1));
   $("zoomReadout").addEventListener("click", () => setZoom(1));
@@ -6353,11 +6344,19 @@
 
   $("dataMenuButton").addEventListener("click", (event) => {
     event.stopPropagation();
-    $("dataMenu").classList.toggle("open");
+    const menu = $("dataMenu");
+    const willOpen = !menu.classList.contains("open");
+    closeInterfaceSurfaces(willOpen ? menu : null);
+    menu.classList.toggle("open", willOpen);
+    menu.setAttribute("aria-hidden", willOpen ? "false" : "true");
+    if (willOpen) keepSurfaceInViewport(menu, 12);
   });
 
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".toolbar-menu")) $("dataMenu").classList.remove("open");
+    if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
+      closeAccountMenu();
+    }
 
     if (!event.target.closest(".section-add-wrap")) {
       document.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
@@ -6391,7 +6390,7 @@
 
   $("resetProject").addEventListener("click", () => {
     $("dataMenu").classList.remove("open");
-    if (!confirm("Ripristinare il flow di esempio? Il progetto locale corrente verrà sostituito.")) return;
+    if (!confirm("Caricare l'Inventory Demo? Il progetto corrente verrà sostituito.")) return;
     project = sampleProject();
     $("projectName").value = project.name;
     selectedNodeIds.clear();
@@ -6401,7 +6400,7 @@
     saveProject(false);
     render();
     fitView();
-    showToast("Esempio ripristinato");
+    showToast("Inventory Demo caricata");
   });
 
   $("projectName").addEventListener("input", () => {
@@ -6644,7 +6643,12 @@
     if (type) addNode(type);
   });
 
-  $("toggleLibrary").addEventListener("click", () => $("libraryPanel").classList.add("open"));
+  $("toggleLibrary").addEventListener("click", () => {
+    if (window.innerWidth <= 850) {
+      $("inspectorPanel").classList.remove("open");
+    }
+    $("libraryPanel").classList.add("open");
+  });
   $("closeLibrary").addEventListener("click", () => $("libraryPanel").classList.remove("open"));
 
   $("backToProjects").addEventListener("click", () => {
@@ -6668,6 +6672,7 @@
 
   $("openDemoHome").addEventListener("click", openDemoProject);
   $("openDemoGuide").addEventListener("click", openDemoProject);
+  $("openDemoGuideBottom").addEventListener("click", openDemoProject);
 
   $("createProjectHome").addEventListener("click", createProjectFromHome);
   $("createProjectProjects").addEventListener("click", createProjectFromHome);
@@ -6681,10 +6686,36 @@
   });
 
   $("projectLibrarySearch").addEventListener("input", renderProjectLibrary);
-  $("homeAuthButton").addEventListener("click", toggleGoogleAuth);
-  $("editorAuthButton").addEventListener("click", toggleGoogleAuth);
+  $("homeAuthButton").addEventListener("click", (event) => {
+    event.stopPropagation();
+    handleAccountButton($("homeAuthButton"));
+  });
+  $("editorAuthButton").addEventListener("click", (event) => {
+    event.stopPropagation();
+    handleAccountButton($("editorAuthButton"));
+  });
+  $("accountLogout").addEventListener("click", logoutGoogleAuth);
+  $("accountSyncNow").addEventListener("click", async () => {
+    if (!cloudState.user) return;
+    $("accountSyncNow").disabled = true;
+    await mergeCloudLibrary();
+    $("accountSyncNow").disabled = false;
+    updateAccountUI();
+    showToast("Sincronizzazione completata");
+  });
+  $("accountPrivacy").addEventListener("click", () => {
+    closeAccountMenu();
+    if ($("editorView") && !$("editorView").classList.contains("hidden")) {
+      saveProject(false);
+      showProjectHome("privacy");
+    } else {
+      navigateSitePage("privacy");
+    }
+  });
 
   window.addEventListener("resize", () => {
+    closeInterfaceSurfaces();
+    reconcileWorkspacePanels();
     renderEdges();
     renderMinimap();
   });
