@@ -1274,8 +1274,151 @@
     return item ? (item.label || item.name || node.title) : node.title;
   }
 
+  function projectTypeNodeMap() {
+    const map = new Map();
+    project.nodes.forEach((node) => {
+      if ((node.type === "class" || node.type === "enum") && node.title) {
+        map.set(node.title, node);
+      }
+    });
+    return map;
+  }
+
+  function buildTypeRelations() {
+    const typeMap = projectTypeNodeMap();
+    const relations = [];
+    const seen = new Set();
+
+    const addRelation = (sourceNode, targetType, sourceLabel, sourceKind, typeLabel) => {
+      if (!sourceNode || !targetType) return;
+      const targetNode = typeMap.get(targetType);
+      if (!targetNode || targetNode.id === sourceNode.id) return;
+
+      const key = [sourceNode.id, targetNode.id, sourceKind, sourceLabel, targetType].join("|");
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      relations.push({
+        id: "type_rel_" + sourceNode.id + "_" + targetNode.id + "_" + relations.length,
+        relationKind: "type",
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        sourceLabel: sourceLabel || targetType,
+        sourceKind: sourceKind || "type",
+        targetType: targetType,
+        targetNodeType: targetNode.type,
+        typeLabel: typeLabel || targetType
+      });
+    };
+
+    const scanFunction = (sourceNode, method, prefix) => {
+      ensureFunctionSignature(method, method.access || method.methodAccess || "public");
+
+      method.methodParameters.forEach((parameter) => {
+        addRelation(
+          sourceNode,
+          parameter.dataType,
+          (prefix ? prefix + "." : "") + parameter.name,
+          "parameter",
+          parameterTypeLabel(parameter)
+        );
+        if (parameter.collectionKind === "dictionary") {
+          addRelation(
+            sourceNode,
+            parameter.dictionaryKeyType,
+            (prefix ? prefix + "." : "") + parameter.name + " · key",
+            "dictionaryKey",
+            parameter.dictionaryKeyType
+          );
+        }
+      });
+
+      if (method.returnType && method.returnType !== "void") {
+        addRelation(
+          sourceNode,
+          method.returnType,
+          (prefix ? prefix + " → " : "return → ") + (method.returnName || "result"),
+          "return",
+          methodReturnTypeLabel(method)
+        );
+      }
+
+      if (method.returnCollectionKind === "dictionary") {
+        addRelation(
+          sourceNode,
+          method.returnDictionaryKeyType,
+          (prefix ? prefix + " → " : "return → ") + "key",
+          "dictionaryKey",
+          method.returnDictionaryKeyType
+        );
+      }
+    };
+
+    project.nodes.forEach((node) => {
+      if (node.type === "enumSwitch" && node.switchEnumType) {
+        addRelation(node, node.switchEnumType, "Switch " + node.switchEnumType, "enumSwitch", node.switchEnumType);
+      }
+
+      if (node.type === "function") {
+        scanFunction(node, node, node.title);
+      }
+
+      node.rows.forEach((item) => {
+        if (item.kind === "variable" || item.kind === "property") {
+          addRelation(node, item.dataType, item.label, "variable", variableTypeLabel(item));
+          if (item.collectionKind === "dictionary") {
+            addRelation(node, item.dictionaryKeyType, item.label + " · key", "dictionaryKey", item.dictionaryKeyType);
+          }
+        }
+
+        if (item.kind === "function") {
+          scanFunction(node, item, item.label);
+        }
+
+        if (item.kind === "component" && item.componentSource === "script" && item.componentClassId) {
+          const scriptClass = nodeById(item.componentClassId);
+          if (scriptClass) {
+            addRelation(node, scriptClass.title, item.componentType, "componentScript", scriptClass.title);
+          }
+        }
+      });
+    });
+
+    return relations;
+  }
+
+  function getNodeWorldRect(nodeId) {
+    const node = nodeById(nodeId);
+    if (!node) return null;
+    const element = nodeLayer.querySelector('[data-node-id="' + nodeId + '"]');
+    const width = element ? element.offsetWidth : nodeWidthFor(node);
+    const height = element ? element.offsetHeight : 180;
+    return {
+      x: node.x,
+      y: node.y,
+      width: width,
+      height: height,
+      cx: node.x + width / 2,
+      cy: node.y + height / 2
+    };
+  }
+
+  function autoTypeRelationAnchors(relation) {
+    const source = getNodeWorldRect(relation.sourceNodeId);
+    const target = getNodeWorldRect(relation.targetNodeId);
+    if (!source || !target) return null;
+
+    const left = source.cx <= target.cx ? source : target;
+    const right = source.cx <= target.cx ? target : source;
+
+    return {
+      a: { x: left.x + left.width, y: left.cy },
+      b: { x: right.x, y: right.cy }
+    };
+  }
+
   function connectionRelationsForNode(nodeId) {
-    return project.connections
+    const manual = project.connections
       .filter((edge) => edge.from.nodeId === nodeId || edge.to.nodeId === nodeId)
       .map((edge) => {
         const internal = edge.from.nodeId === nodeId && edge.to.nodeId === nodeId;
@@ -1283,15 +1426,42 @@
         const otherNodeId = direction === "out" ? edge.to.nodeId : edge.from.nodeId;
         const otherNode = nodeById(otherNodeId);
         return {
+          relationKind: "manual",
           edgeId: edge.id,
           internal,
           direction,
+          sourceNodeId: edge.from.nodeId,
+          targetNodeId: edge.to.nodeId,
           fromLabel: refLabel(edge.from),
           toLabel: refLabel(edge.to),
           otherNodeTitle: internal ? "Internal" : (otherNode ? otherNode.title : "External"),
           dataType: edge.dataType || memberOutputType(memberByRef(edge.from))
         };
       });
+
+    const automatic = buildTypeRelations()
+      .filter((relation) => relation.sourceNodeId === nodeId || relation.targetNodeId === nodeId)
+      .map((relation) => {
+        const outgoing = relation.sourceNodeId === nodeId;
+        const otherNode = nodeById(outgoing ? relation.targetNodeId : relation.sourceNodeId);
+        return {
+          relationKind: "type",
+          edgeId: null,
+          internal: false,
+          direction: outgoing ? "out" : "in",
+          sourceNodeId: relation.sourceNodeId,
+          targetNodeId: relation.targetNodeId,
+          fromLabel: outgoing ? relation.sourceLabel : (otherNode ? otherNode.title : "Source"),
+          toLabel: outgoing ? relation.targetType : relation.sourceLabel,
+          otherNodeTitle: otherNode ? otherNode.title : relation.targetType,
+          dataType: relation.targetType,
+          targetNodeType: relation.targetNodeType,
+          sourceKind: relation.sourceKind,
+          typeLabel: relation.typeLabel
+        };
+      });
+
+    return manual.concat(automatic);
   }
 
   function createNodeBackbone(node) {
@@ -1330,7 +1500,9 @@
       visibleRelations.forEach((relation) => {
         const item = document.createElement("button");
         item.type = "button";
-        item.className = "backbone-relation " + (relation.internal ? "internal" : "external");
+        item.className = "backbone-relation " +
+          (relation.internal ? "internal" : "external") +
+          (relation.relationKind === "type" ? " type-link" : "");
         item.title = relation.fromLabel + " → " + relation.toLabel;
         item.style.setProperty("--relation-color", dataTypeColor(relation.dataType));
 
@@ -1343,21 +1515,32 @@
         path.textContent = relation.fromLabel + " → " + relation.toLabel;
         const meta = document.createElement("small");
         const relationType = relation.dataType === "__flow__" ? "FLOW" : (relation.dataType || "DATA");
-        meta.textContent = relation.internal
-          ? "INTERNAL · " + relationType
-          : (relation.direction === "out" ? "OUT → " : "IN ← ") + relation.otherNodeTitle + " · " + relationType;
+        meta.textContent = relation.relationKind === "type"
+          ? "TYPE · " + String(relation.targetNodeType || "reference").toUpperCase() + " · " + (relation.typeLabel || relationType)
+          : relation.internal
+            ? "INTERNAL · " + relationType
+            : (relation.direction === "out" ? "OUT → " : "IN ← ") + relation.otherNodeTitle + " · " + relationType;
 
         copy.append(path, meta);
         item.append(dot, copy);
         item.addEventListener("pointerdown", (event) => event.stopPropagation());
         item.addEventListener("click", (event) => {
           event.stopPropagation();
-          selectedEdgeId = relation.edgeId;
-          selectedNodeIds.clear();
-          selectedNodeId = null;
+
+          if (relation.relationKind === "type") {
+            selectedEdgeId = null;
+            selectedNodeIds = new Set([relation.sourceNodeId, relation.targetNodeId]);
+            syncPrimarySelection();
+          } else {
+            selectedEdgeId = relation.edgeId;
+            selectedNodeIds.clear();
+            selectedNodeId = null;
+          }
+
           renderNodes();
           renderEdges();
           renderInspector();
+          renderMinimap();
         });
         list.appendChild(item);
       });
