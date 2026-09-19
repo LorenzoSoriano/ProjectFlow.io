@@ -87,7 +87,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .canvas-viewport.panning{cursor:grabbing}
 .world{position:absolute;left:0;top:0;width:5000px;height:3500px;transform-origin:0 0;will-change:auto}
 .world.is-transforming{will-change:transform}
-.edge-layer,.node-layer{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.group-layer,.edge-layer,.node-layer{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.group-layer{z-index:0;pointer-events:none}
+.edge-layer{z-index:1}
+.node-layer{z-index:2;pointer-events:none}
+.node-layer>.flow-node{pointer-events:auto}
 .edge{fill:none;stroke:#53617b;stroke-width:2.1;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer;transition:stroke .15s}
 .edge:hover,.edge.selected{stroke:#a295ff;stroke-width:3}
 .edge-glow{fill:none;stroke:rgba(63,127,166,.12);stroke-width:8;vector-effect:non-scaling-stroke;pointer-events:none}
@@ -270,9 +274,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   filter:drop-shadow(0 0 5px color-mix(in srgb,var(--junction-color,#3f7fa6) 55%,transparent));
   transition:r .12s ease,stroke .12s ease;
 }
-.edge-junction:hover,
-.edge-junction.selected{
+.edge-junction:hover{
   stroke:#eef2ff;
+}
+.edge-junction.selected{
+  r:7px;
+  stroke:#ffffff;
+  stroke-width:4;
+  filter:drop-shadow(0 0 8px color-mix(in srgb,var(--junction-color,#3f7fa6) 78%,transparent));
 }
 .edge-junction:active{
   cursor:grabbing;
@@ -5057,4 +5066,84 @@ body,
     align-items:flex-start;
     flex-direction:column;
   }
+}
+
+/* Shader Graph-like node groups. The frame is derived from the real node bounds. */
+.graph-group{
+  position:absolute;
+  box-sizing:border-box;
+  border:1px solid rgba(112,126,151,.42);
+  border-radius:14px;
+  background:rgba(28,34,45,.17);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.018);
+  pointer-events:none;
+  transition:border-color .12s ease,background .12s ease,box-shadow .12s ease;
+}
+.graph-group.selected{
+  border-color:rgba(92,160,199,.9);
+  background:rgba(63,127,166,.09);
+  box-shadow:0 0 0 2px rgba(63,127,166,.11),inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.graph-group-header{
+  position:absolute;
+  left:12px;
+  right:12px;
+  top:10px;
+  height:30px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  pointer-events:auto;
+  cursor:grab;
+  user-select:none;
+}
+.graph-group-header:active{cursor:grabbing}
+.graph-group-mark{
+  width:8px;
+  height:8px;
+  flex:0 0 auto;
+  border:1px solid rgba(107,172,205,.85);
+  border-radius:2px;
+  background:rgba(63,127,166,.25);
+}
+.graph-group-title{
+  min-width:0;
+  flex:1;
+  height:26px;
+  padding:0 7px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:#abb5c7;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.2px;
+  outline:none;
+}
+.graph-group-title:hover,
+.graph-group-title:focus{
+  border-color:rgba(91,155,196,.35);
+  background:rgba(13,18,26,.58);
+  color:#e2e7ef;
+}
+.graph-group-remove{
+  width:25px;
+  height:25px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:#697489;
+  cursor:pointer;
+}
+.graph-group-remove:hover{
+  border-color:rgba(212,111,116,.28);
+  background:rgba(212,111,116,.08);
+  color:#e4878c;
+}
+.group-tool span{font-size:9px;font-weight:800}
+@media(max-width:1050px){
+  .group-tool span{display:none}
 }
