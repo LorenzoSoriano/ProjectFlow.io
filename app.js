@@ -378,6 +378,10 @@
 
   function syncEnumSwitchNode(node) {
     if (!node || node.type !== "enumSwitch") return;
+    if (!node.switchEnumType) {
+      const firstEnum = enumNodes()[0];
+      if (firstEnum) node.switchEnumType = firstEnum.title;
+    }
     const selectedEnum = enumByName(node.switchEnumType);
 
     const enter = node.rows.find((item) => item.kind === "flowIn") || row("Enter", "", "flowIn");
@@ -572,8 +576,7 @@
     }
 
     if (node.type === "enumSwitch") {
-      if (typeof node.switchEnumType !== "string") node.switchEnumType = enumNodes()[0] ? enumNodes()[0].title : "";
-      syncEnumSwitchNode(node);
+      if (typeof node.switchEnumType !== "string") node.switchEnumType = "";
     }
 
     if (node.type === "event") {
