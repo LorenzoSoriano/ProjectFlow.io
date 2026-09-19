@@ -5,6 +5,9 @@
   const VIEW_KEY = "projectflow.view.v1";
   const PANELS_KEY = "projectflow.panels.v1";
   const LIBRARY_KEY = "projectflow.library.v1";
+  const PROJECT_LIBRARY_KEY = "projectflow.projects.v1";
+  const ACTIVE_PROJECT_KEY = "projectflow.active-project.v1";
+  const FIREBASE_SDK_VERSION = "12.19.0";
   const NODE_WIDTH = 440;
 
   function nodeWidthFor(nodeOrType) {
@@ -760,6 +763,15 @@
         { id: uid("edge"), from: { nodeId: "game_manager", rowId: multiplier.id, side: "out" }, to: { nodeId: "calculate_score", rowId: calcMultiplier.id, side: "in" } },
         { id: uid("edge"), from: { nodeId: "calculate_score", rowId: calcOutput.id, side: "out" }, to: { nodeId: "score_text", rowId: uiText.id, side: "in" } }
       ]
+    };
+  }
+
+  function blankProject(name) {
+    return {
+      version: 1,
+      name: name || "Nuovo schema",
+      nodes: [],
+      connections: []
     };
   }
 
