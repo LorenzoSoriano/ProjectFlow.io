@@ -121,8 +121,13 @@ ProjectFlow supports persistent project sharing through Firebase Authentication 
 - Invitations are kept outside the shared project data. A collaborator does not receive the list of other invited emails.
 - The owner-only invite index lives under `sharedProjects/{projectId}/invites`; the recipient-specific access document lives under `shareInvites/{email}/projects/{projectId}`.
 
-The **Sketch** drawer stores freehand strokes in the project document. Sketch strokes therefore participate in autosave, Undo/Redo, export/import, and shared-project synchronization.
+**Sketch** is now a real canvas node, like Note: it can be moved, grouped, renamed and duplicated. Its freehand strokes are stored inside the node, so they participate in autosave, Undo/Redo, export/import, and shared-project synchronization.
 
 ### Firestore rules
 
 After updating the site code, deploy the current `firestore.rules` to the Firebase project. The rules preserve private user projects under `users/{uid}/projects` and add restricted access for shared projects, recipient-specific invites, and realtime presence.
+
+
+### v2.5 sharing fix
+
+The first share operation now creates the shared Firestore document directly instead of reading a document that does not exist yet. This avoids a permission-denied failure with strict Firestore rules. Share-link copying also has a fallback when the browser Clipboard API is unavailable.
