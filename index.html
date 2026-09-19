@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260920-5635" />
+  <link rel="stylesheet" href="styles.css?v=20260920-6110" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.6</span>
+        <span class="build-badge" title="Build corrente">v2.7</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -395,31 +395,19 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.6</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.7</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
       </div>
-      <div class="top-actions">
-        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account e sincronizzazione" aria-haspopup="menu" aria-expanded="false">
+      <div class="top-actions editor-top-actions">
+        <div class="collab-presence topbar-presence" id="collabPresence" hidden></div>
+        <button class="toolbar-button share-button" id="shareProjectButton" type="button" title="Condividi progetto" aria-expanded="false">⌁ <span>Condividi</span></button>
+        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account, dati e sincronizzazione" aria-haspopup="menu" aria-expanded="false">
           <span class="account-avatar" id="editorAccountAvatar">G</span>
           <span id="editorAccountLabel">Accedi</span>
           <span class="account-chevron">▾</span>
         </button>
-        <div class="autosave-indicator" id="editorAutosaveIndicator" title="ProjectFlow salva automaticamente">
-          <span class="autosave-dot"></span>
-          <span>Autosave</span>
-        </div>
-        <button class="toolbar-button share-button" id="shareProjectButton" type="button" title="Condividi progetto" aria-expanded="false">⌁ <span>Condividi</span></button>
-        <button class="toolbar-button" id="fitView" title="Centra il diagramma">⌗ <span>Centra</span></button>
-        <div class="toolbar-menu">
-          <button class="toolbar-button" id="dataMenuButton">↥ <span>Dati</span> ▾</button>
-          <div class="menu-popover" id="dataMenu">
-            <button id="exportProject">Esporta JSON</button>
-            <button id="importProject">Importa JSON</button>
-            <button id="resetProject" class="danger-text">Carica demo inventario</button>
-          </div>
-        </div>
         <input id="importFile" type="file" accept=".json,application/json" hidden />
       </div>
     </header>
@@ -427,23 +415,18 @@
     <main class="workspace">
       <section class="canvas-panel">
         <div class="canvas-toolbar">
-          <div class="tool-group">
-            <button class="canvas-tool active" id="selectTool" title="Seleziona">↖</button>
-            <button class="canvas-tool" id="connectTool" title="Collega blocchi">⌁</button>
-            <button class="canvas-tool group-tool" id="createGroup" title="Raggruppa i blocchi selezionati (Ctrl/Cmd+G)">▭ <span id="groupActionLabel">Raggruppa</span></button>
-            <span class="tool-separator"></span>
-            <button class="canvas-tool history-tool" id="undoAction" type="button" title="Annulla (Ctrl/Cmd+Z)" disabled>↶</button>
-            <button class="canvas-tool history-tool" id="redoAction" type="button" title="Ripristina (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
-            <span class="tool-separator"></span>
-            <button class="canvas-tool" id="sketchTool" type="button" title="Aggiungi nodo Sketch">✎ <span>Sketch</span></button>
-          </div>
-          <div class="canvas-right-actions">
-            <div class="collab-presence" id="collabPresence" hidden></div>
-            <div class="canvas-status">
-              <span class="status-dot"></span>
-              <span id="saveStatus">Salvato localmente</span>
+          <div class="canvas-left-stack">
+            <div class="tool-group">
+              <button class="canvas-tool active" id="selectTool" title="Seleziona">↖</button>
+              <button class="canvas-tool" id="connectTool" title="Collega blocchi">⌁</button>
+              <button class="canvas-tool group-tool" id="createGroup" title="Raggruppa i blocchi selezionati (Ctrl/Cmd+G)">▭ <span id="groupActionLabel">Raggruppa</span></button>
+              <span class="tool-separator"></span>
+              <button class="canvas-tool history-tool" id="undoAction" type="button" title="Annulla (Ctrl/Cmd+Z)" disabled>↶</button>
+              <button class="canvas-tool history-tool" id="redoAction" type="button" title="Ripristina (Ctrl/Cmd+Shift+Z)" disabled>↷</button>
+              <span class="tool-separator"></span>
+              <button class="canvas-tool" id="sketchTool" type="button" title="Aggiungi nodo Sketch">✎ <span>Sketch</span></button>
             </div>
-            <button class="primary-button canvas-add-block" id="addObjectTop" type="button" aria-haspopup="dialog" aria-expanded="false">＋ Nuovo blocco</button>
+            <button class="primary-button canvas-add-block canvas-add-block-left" id="addObjectTop" type="button" aria-haspopup="dialog" aria-expanded="false">＋ Nuovo blocco</button>
           </div>
         </div>
 
@@ -501,9 +484,10 @@
             <div class="collaboration-layer" id="collaborationLayer" aria-hidden="true"></div>
           </div>
 
-          <div class="canvas-hint" id="canvasHint">
-            <strong>Trascina per muovere i blocchi.</strong>
-            <span>FLOW = esecuzione, DATA = valori tipati. Usa Event → Condition → Action / State per prototipare il gameplay.</span>
+          <div class="autosave-corner autosave-indicator" id="editorAutosaveIndicator" title="ProjectFlow salva automaticamente">
+            <span class="autosave-dot"></span>
+            <span class="autosave-corner-label">Autosave</span>
+            <span class="autosave-corner-state" id="saveStatus">Salvato localmente</span>
           </div>
 
           <div class="connection-banner" id="connectionBanner">
@@ -515,10 +499,13 @@
           <div class="minimap" id="minimap">
             <div class="minimap-header">
               <div class="minimap-title">MAPPA</div>
-              <div class="minimap-zoom" aria-label="Controlli zoom">
-                <button class="minimap-zoom-button" id="zoomOut" type="button" title="Riduci zoom">−</button>
-                <button class="minimap-zoom-readout" id="zoomReadout" type="button" title="Ripristina zoom al 100%">100%</button>
-                <button class="minimap-zoom-button" id="zoomIn" type="button" title="Aumenta zoom">＋</button>
+              <div class="minimap-controls" aria-label="Controlli mappa">
+                <button class="minimap-center-button" id="fitView" type="button" title="Centra il diagramma">⌗ <span>Centra</span></button>
+                <div class="minimap-zoom" aria-label="Controlli zoom">
+                  <button class="minimap-zoom-button" id="zoomOut" type="button" title="Riduci zoom">−</button>
+                  <button class="minimap-zoom-readout" id="zoomReadout" type="button" title="Ripristina zoom al 100%">100%</button>
+                  <button class="minimap-zoom-button" id="zoomIn" type="button" title="Aumenta zoom">＋</button>
+                </div>
               </div>
             </div>
             <svg id="minimapSvg" viewBox="0 0 180 110" aria-label="Minimappa navigabile"></svg>
@@ -608,10 +595,21 @@
       <div><strong id="accountMenuName">Account</strong><small id="accountMenuEmail">Modalità locale</small></div>
     </div>
     <div class="account-popover-status"><span class="sync-dot local" id="accountMenuSyncDot"></span><span id="accountMenuSyncText">Salvataggio locale</span></div>
-    <div class="account-popover-actions">
-      <button type="button" id="accountSyncNow">↻ Sincronizza ora</button>
-      <button type="button" id="accountPrivacy">ⓘ Privacy</button>
-      <button type="button" id="accountLogout" class="danger-text">Esci dall'account</button>
+    <div class="account-popover-section">
+      <span class="account-popover-section-title">DATI PROGETTO</span>
+      <div class="account-popover-actions account-data-actions">
+        <button type="button" id="exportProject">↥ Esporta JSON</button>
+        <button type="button" id="importProject">↧ Importa JSON</button>
+        <button type="button" id="resetProject">◇ Carica demo inventario</button>
+      </div>
+    </div>
+    <div class="account-popover-section account-popover-section-main">
+      <span class="account-popover-section-title">ACCOUNT</span>
+      <div class="account-popover-actions">
+        <button type="button" id="accountSyncNow">↻ Sincronizza ora</button>
+        <button type="button" id="accountPrivacy">ⓘ Privacy</button>
+        <button type="button" id="accountLogout" class="danger-text">Esci dall'account</button>
+      </div>
     </div>
   </div>
 
@@ -627,7 +625,7 @@
     </div>
   </div>
 
-  <script src="firebase-config.js?v=20260920-5635"></script>
-  <script src="app.js?v=20260920-5635"></script>
+  <script src="firebase-config.js?v=20260920-6110"></script>
+  <script src="app.js?v=20260920-6110"></script>
 </body>
 </html>
