@@ -1676,6 +1676,7 @@
 
   function startGroupDrag(event, groupId) {
     const group = groupById(groupId);
+    broadcastActivity("Sposta gruppo " + (group && group.title ? group.title : ""));
     if (!group) return;
     const start = screenToWorld(event.clientX, event.clientY);
     groupDrag = {
@@ -1814,6 +1815,7 @@
   }
 
   function showProjectHome(pageName) {
+    stopSharedProjectSession();
     const home = $("projectHome");
     const editor = $("editorView");
     if (home) home.classList.remove("hidden");
@@ -1852,6 +1854,9 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
       resetEditorSelection();
       showEditorView();
+      if (record.sharedProjectId) startSharedProjectSession(record);
+      else stopSharedProjectSession();
+      renderSharePanel();
 
       if (fitAfterOpen !== false) {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -3134,6 +3139,7 @@
   }
 
   function markDirty() {
+    if (!cloudState.applyingRemote && cloudState.sharedProjectId) broadcastActivity("Modifica il progetto");
     $("saveStatus").textContent = "Salvataggio automatico…";
     setAutosaveState("saving", "Salvataggio…");
     scheduleHistoryCheckpoint();
@@ -6160,6 +6166,7 @@
 
   function startJunctionDrag(event, edgeId, pointId) {
     if (event.button !== 0) return;
+    broadcastActivity("Modifica una connessione");
     event.preventDefault();
     event.stopPropagation();
 
@@ -7214,6 +7221,7 @@
   }
 
   function startNodeDrag(event, node) {
+    broadcastActivity("Sposta " + (node.title || "un blocco"));
     if (!selectedNodeIds.has(node.id)) {
       selectedNodeIds = new Set([node.id]);
       syncPrimarySelection();
@@ -7687,6 +7695,7 @@
     selectedJunctionIds.clear();
     render();
     markDirty();
+    broadcastActivity("Aggiunge " + ((TYPE_META[type] || TYPE_META.object).label));
     showToast((TYPE_META[type] || TYPE_META.object).label + " aggiunto");
     setTimeout(() => {
       const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"] .node-title-inline');
@@ -7904,6 +7913,28 @@
   });
 
   $("createGroup").addEventListener("click", toggleGrouping);
+  $("shareProjectButton").addEventListener("click", openSharePanel);
+  $("closeSharePanel").addEventListener("click", () => closeInterfaceSurfaces());
+  $("shareInviteButton").addEventListener("click", () => {
+    const input = $("shareEmailInput");
+    inviteCollaborator(input.value).then(() => { input.value = ""; });
+  });
+  $("shareEmailInput").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    $("shareInviteButton").click();
+  });
+  $("copyShareLink").addEventListener("click", copyCurrentShareLink);
+
+  $("sketchTool").addEventListener("click", openSketchPanel);
+  $("closeSketchPanel").addEventListener("click", () => closeInterfaceSurfaces());
+  $("sketchUndoStroke").addEventListener("click", undoSketchStroke);
+  $("sketchClear").addEventListener("click", clearSketch);
+  $("sketchCanvas").addEventListener("pointerdown", startSketchStroke);
+  $("sketchCanvas").addEventListener("pointermove", moveSketchStroke);
+  $("sketchCanvas").addEventListener("pointerup", endSketchStroke);
+  $("sketchCanvas").addEventListener("pointercancel", endSketchStroke);
+
   $("undoAction").addEventListener("click", undoProjectChange);
   $("redoAction").addEventListener("click", redoProjectChange);
   $("fitView").addEventListener("click", fitView);
@@ -7994,6 +8025,22 @@
   $("projectName").addEventListener("input", () => {
     project.name = $("projectName").value;
     markDirty();
+  });
+
+  viewport.addEventListener("pointermove", (event) => {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    const point = screenToWorld(event.clientX, event.clientY);
+    cloudState.presenceCursor = {
+      x: Math.round(point.x),
+      y: Math.round(point.y)
+    };
+    queuePresenceWrite(false);
+  });
+
+  viewport.addEventListener("pointerleave", () => {
+    if (!cloudState.sharedProjectId) return;
+    cloudState.presenceCursor = null;
+    queuePresenceWrite(false);
   });
 
   viewport.addEventListener("wheel", (event) => {
@@ -8175,6 +8222,11 @@
         closeNewBlockPalette();
         return;
       }
+      if (($("sharePanel") && $("sharePanel").classList.contains("open")) ||
+          ($("sketchPanel") && $("sketchPanel").classList.contains("open"))) {
+        closeInterfaceSurfaces();
+        return;
+      }
       cancelConnection();
       clearSelection();
       return;
@@ -8316,16 +8368,20 @@
     reconcileWorkspacePanels();
     renderEdges();
     renderMinimap();
+    resizeSketchCanvas();
   });
 
   window.addEventListener("beforeunload", () => {
     if (currentProjectId) saveProject(false);
+    stopSharedProjectSession();
   });
 
   setInspectorVisible(false);
   renderProjectLibrary();
   updateAccountUI();
-  initCloud();
+  if (sharedProjectIdFromLocation()) initCloud(true);
+  else initCloud();
   render();
+  renderSharePanel();
   showProjectHome();
 })();
