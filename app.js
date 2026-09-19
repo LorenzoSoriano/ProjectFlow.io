@@ -1055,6 +1055,7 @@
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "input") return normalizedType(item.value);
+    if (item.kind === "flowIn" || item.kind === "flowOut") return "__flow__";
     if (item.kind === "condition") return "any";
     return "any";
   }
@@ -1068,6 +1069,7 @@
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "output") return normalizedType(item.value);
+    if (item.kind === "flowIn" || item.kind === "flowOut") return "__flow__";
     if (item.kind === "condition") return normalizedType(item.value || "bool");
     return "any";
   }
@@ -1119,6 +1121,9 @@
 
     const outputType = memberOutputType(fromItem);
     const inputType = memberInputType(toItem);
+    if ((outputType === "__flow__") !== (inputType === "__flow__")) {
+      return { ok: false, reason: "Le connessioni FLOW e DATA sono separate." };
+    }
     if (!sameType(outputType, inputType)) {
       return { ok: false, reason: "Tipo incompatibile: " + outputType + " → " + inputType + "." };
     }
@@ -1160,7 +1165,9 @@
 
   function makePort(nodeId, rowId, side, connectedPorts) {
     const port = document.createElement("button");
-    port.className = "port " + side;
+    const item = memberByRef({ nodeId: nodeId, rowId: rowId, side: side });
+    const flowPort = item && (item.kind === "flowIn" || item.kind === "flowOut");
+    port.className = "port " + side + (flowPort ? " flow-port" : "");
     port.type = "button";
     port.dataset.node = nodeId;
     port.dataset.row = rowId;
@@ -1179,7 +1186,7 @@
     port.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      handlePortClick({ nodeId: nodeId, rowId: rowId, side: side });
+      handlePortClick({ nodeId: nodeId, rowId: rowId, side: side, kind: flowPort ? "flow" : "data" });
     });
     return port;
   }
@@ -3904,12 +3911,14 @@
     if (!duplicate) {
       project.connections.push({
         id: uid("edge"),
-        from: { nodeId: check.from.nodeId, rowId: check.from.rowId, side: "out" },
-        to: { nodeId: check.to.nodeId, rowId: check.to.rowId, side: "in" },
+        from: { nodeId: check.from.nodeId, rowId: check.from.rowId, side: "out", kind: check.outputType === "__flow__" ? "flow" : "data" },
+        to: { nodeId: check.to.nodeId, rowId: check.to.rowId, side: "in", kind: check.outputType === "__flow__" ? "flow" : "data" },
         points: [],
         dataType: check.outputType
       });
-      showToast(check.outputType === "any" ? "Collegamento creato" : "Collegamento " + check.outputType + " creato");
+      showToast(check.outputType === "__flow__"
+        ? "Flusso collegato"
+        : (check.outputType === "any" ? "Collegamento creato" : "Collegamento " + check.outputType + " creato"));
       markDirty();
     }
 
@@ -4392,6 +4401,18 @@
   });
 
   viewport.addEventListener("wheel", (event) => {
+    const localScroller = event.target.closest(
+      ".section-member-list.scrollable, .section-add-popup.open, .type-picker-popup.open, .method-parameter-list"
+    );
+
+    if (localScroller) {
+      const canScroll = localScroller.scrollHeight > localScroller.clientHeight + 1;
+      if (canScroll) {
+        event.stopPropagation();
+        return;
+      }
+    }
+
     event.preventDefault();
     const factor = event.deltaY < 0 ? 1.08 : 0.92;
     setZoom(view.scale * factor, event.clientX, event.clientY);
