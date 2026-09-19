@@ -2257,3 +2257,275 @@ body.resizing-panel *{
     grid-template-columns:54px 82px minmax(0,1fr) 23px;
   }
 }
+
+
+/* Gameplay flow + enum system v1.3 */
+.template-icon.enum-icon,
+.type-enum .node-type-dot{color:#c58cff}
+.template-icon.event-icon,
+.type-event .node-type-dot{color:#ffcf66}
+.template-icon.action-icon,
+.type-action .node-type-dot{color:#6fe0a7}
+.template-icon.state-icon,
+.type-state .node-type-dot{color:#72b5ff}
+.template-icon.enum-switch-icon,
+.type-enumSwitch .node-type-dot{color:#b893ff}
+
+.type-enum{--node-accent:#c58cff;border-color:#49375f}
+.type-event{--node-accent:#ffcf66;border-color:#594c2c}
+.type-action{--node-accent:#6fe0a7;border-color:#2d5645}
+.type-state{--node-accent:#72b5ff;border-color:#304b68}
+.type-enumSwitch{--node-accent:#b893ff;border-color:#493c67}
+
+.gameplay-meta-inline{
+  grid-template-columns:1fr;
+}
+.gameplay-meta-warning{
+  min-height:28px;
+  display:flex;
+  align-items:center;
+  padding:0 8px;
+  border:1px solid rgba(255,150,109,.28);
+  border-radius:7px;
+  background:rgba(255,150,109,.06);
+  color:#bc846f;
+  font-size:9px;
+}
+
+/* FLOW ports are deliberately different from DATA ports. */
+.port.flow-port{
+  width:13px;
+  height:13px;
+  border-radius:2px;
+  clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+  border-color:#9488ff;
+  background:#16142b;
+}
+.port.flow-port.connected{
+  background:#9488ff;
+  border-color:#b4aaff;
+  box-shadow:0 0 10px rgba(155,140,255,.42);
+}
+.flow-member-row{
+  min-height:41px;
+  background:linear-gradient(90deg,rgba(124,108,255,.045),transparent);
+}
+.flow-member-row .row-kind{
+  color:#a99fff;
+  background:rgba(124,108,255,.1);
+}
+.flow-member-label{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.flow-member-label strong{
+  color:#c2c8d8;
+  font-size:10px;
+}
+.flow-member-label small{
+  color:#756d9a;
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:.8px;
+}
+.edge.flow-edge{
+  stroke-width:2.8;
+  stroke-dasharray:8 4;
+}
+.edge-glow.flow-edge{
+  stroke-width:10;
+  opacity:.42;
+}
+.edge.flow-edge.selected{
+  stroke-width:3.4;
+}
+
+/* Enum */
+.enum-meta-row{
+  display:grid;
+  grid-template-columns:1fr 1fr auto;
+  gap:5px;
+  padding:8px 9px;
+  border-bottom:1px solid rgba(35,44,63,.55);
+}
+.enum-meta-select{
+  min-width:0;
+  height:29px;
+  padding:0 7px;
+  border:1px solid #2a344b;
+  border-radius:7px;
+  background:#0a101b;
+  color:#9ba7bb;
+  font-size:10px;
+}
+.enum-flags-button{
+  height:29px;
+  padding:0 8px;
+  border:1px solid #303950;
+  border-radius:7px;
+  background:#0a101b;
+  color:#6d7890;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+.enum-flags-button.active{
+  border-color:rgba(197,140,255,.48);
+  background:rgba(197,140,255,.09);
+  color:#d1a7ff;
+}
+.enum-values-section{
+  padding:7px 9px 9px;
+}
+.enum-values-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  min-height:28px;
+  color:#7f8ba1;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:1px;
+}
+.enum-values-list{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  max-height:310px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+}
+.enum-value-row{
+  display:grid;
+  grid-template-columns:22px minmax(0,1fr) 74px 23px;
+  gap:5px;
+  align-items:center;
+  min-height:34px;
+  padding:4px 5px;
+  border:1px solid #222d42;
+  border-radius:8px;
+  background:#090f19;
+}
+.enum-value-index{
+  color:#56647b;
+  font:8px "SFMono-Regular",Consolas,monospace;
+  text-align:center;
+}
+.enum-value-name,
+.enum-value-number{
+  width:100%;
+  min-width:0;
+  height:27px;
+  padding:0 7px;
+  border:1px solid #283249;
+  border-radius:6px;
+  outline:0;
+  background:#0b121e;
+  color:#d1d8e7;
+  font-size:10px;
+}
+.enum-value-number{
+  font-family:"SFMono-Regular",Consolas,monospace;
+  color:#bb9fe0;
+}
+.enum-value-remove{
+  width:23px;
+  height:23px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:#59657a;
+  cursor:pointer;
+}
+.enum-value-remove:hover{
+  background:rgba(255,110,125,.1);
+  color:#ff7e8c;
+}
+.enum-add-value{
+  width:100%;
+  min-height:29px;
+  margin-top:6px;
+  border:1px dashed #3a3150;
+  border-radius:7px;
+  background:transparent;
+  color:#8c73aa;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+.enum-add-value:hover{
+  border-color:#725498;
+  background:rgba(197,140,255,.055);
+  color:#c7a1ee;
+}
+.inline-default-select{
+  width:100%;
+  min-width:0;
+  height:28px;
+  padding:0 7px;
+  border:1px solid #263147;
+  border-radius:6px;
+  background:#0a101b;
+  color:#d4dbea;
+  font-size:10px;
+}
+
+/* More usable local scrollbars: visual rail stays subtle, hit area is larger. */
+.section-member-list.scrollable,
+.enum-values-list,
+.section-add-popup,
+.type-picker-popup,
+.library-panel,
+.inspector-scroll{
+  scrollbar-width:auto;
+  scrollbar-color:#56647f #0b111c;
+}
+.section-member-list.scrollable::-webkit-scrollbar,
+.enum-values-list::-webkit-scrollbar,
+.section-add-popup::-webkit-scrollbar,
+.type-picker-popup::-webkit-scrollbar,
+.library-panel::-webkit-scrollbar,
+.inspector-scroll::-webkit-scrollbar{
+  width:12px;
+  height:12px;
+}
+.section-member-list.scrollable::-webkit-scrollbar-track,
+.enum-values-list::-webkit-scrollbar-track,
+.section-add-popup::-webkit-scrollbar-track,
+.type-picker-popup::-webkit-scrollbar-track,
+.library-panel::-webkit-scrollbar-track,
+.inspector-scroll::-webkit-scrollbar-track{
+  background:#0a101a;
+  border-radius:999px;
+}
+.section-member-list.scrollable::-webkit-scrollbar-thumb,
+.enum-values-list::-webkit-scrollbar-thumb,
+.section-add-popup::-webkit-scrollbar-thumb,
+.type-picker-popup::-webkit-scrollbar-thumb,
+.library-panel::-webkit-scrollbar-thumb,
+.inspector-scroll::-webkit-scrollbar-thumb{
+  min-height:34px;
+  border:3px solid #0a101a;
+  border-radius:999px;
+  background:#56647f;
+}
+.section-member-list.scrollable::-webkit-scrollbar-thumb:hover,
+.enum-values-list::-webkit-scrollbar-thumb:hover,
+.section-add-popup::-webkit-scrollbar-thumb:hover,
+.type-picker-popup::-webkit-scrollbar-thumb:hover,
+.library-panel::-webkit-scrollbar-thumb:hover,
+.inspector-scroll::-webkit-scrollbar-thumb:hover{
+  background:#786fa8;
+}
+.section-member-list.scrollable,
+.enum-values-list{
+  pointer-events:auto;
+  touch-action:pan-y;
+}
+
+/* Method order: Parameters → Description → Return → Logic */
+.method-parameters-section + .method-description-inline{
+  margin-top:7px;
+}
