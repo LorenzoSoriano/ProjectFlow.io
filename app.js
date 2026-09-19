@@ -939,6 +939,17 @@
   let zoomSharpTimer = null;
   let connectMode = false;
 
+  const cloudState = {
+    configured: !!(window.PROJECTFLOW_FIREBASE_CONFIG && window.PROJECTFLOW_FIREBASE_CONFIG.projectId),
+    ready: false,
+    user: null,
+    auth: null,
+    db: null,
+    provider: null,
+    api: null,
+    saveTimer: null
+  };
+
   $("projectName").value = project.name;
 
   function nodeById(id) {
@@ -961,6 +972,471 @@
 
   function selectedNodes() {
     return project.nodes.filter((node) => selectedNodeIds.has(node.id));
+  }
+
+  function projectStats(data) {
+    const nodes = Array.isArray(data && data.nodes) ? data.nodes.length : 0;
+    const connections = Array.isArray(data && data.connections) ? data.connections.length : 0;
+    const classes = Array.isArray(data && data.nodes)
+      ? data.nodes.filter((node) => node.type === "class" || node.type === "object").length
+      : 0;
+    return { nodes, connections, classes };
+  }
+
+  function formatProjectDate(timestamp) {
+    try {
+      return new Intl.DateTimeFormat("it-IT", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(timestamp));
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function setActiveProjectId(id) {
+    currentProjectId = id || "";
+    if (currentProjectId) localStorage.setItem(ACTIVE_PROJECT_KEY, currentProjectId);
+    else localStorage.removeItem(ACTIVE_PROJECT_KEY);
+  }
+
+  function resetEditorSelection() {
+    selectedNodeIds.clear();
+    selectedNodeId = null;
+    selectedEdgeId = null;
+    pendingPort = null;
+    $("connectionBanner").classList.remove("show");
+  }
+
+  function showProjectHome() {
+    const home = $("projectHome");
+    const editor = $("editorView");
+    if (home) home.classList.remove("hidden");
+    if (editor) editor.classList.add("hidden");
+    document.body.classList.add("home-mode");
+    renderProjectLibrary();
+  }
+
+  function showEditorView() {
+    const home = $("projectHome");
+    const editor = $("editorView");
+    if (home) home.classList.add("hidden");
+    if (editor) editor.classList.remove("hidden");
+    document.body.classList.remove("home-mode");
+
+    $("projectName").value = project.name || "Untitled Flow";
+    requestAnimationFrame(() => {
+      render();
+      renderEdges();
+      renderMinimap();
+    });
+  }
+
+  function activateProject(id, fitAfterOpen) {
+    const record = projectRecordById(id);
+    if (!record) return;
+
+    setActiveProjectId(record.id);
+    project = normalizeProject(cloneProjectData(record.data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    resetEditorSelection();
+    showEditorView();
+
+    if (fitAfterOpen !== false) {
+      requestAnimationFrame(() => requestAnimationFrame(fitView));
+    }
+  }
+
+  function createProjectFromHome() {
+    const data = blankProject("Nuovo schema");
+    const record = upsertLocalProject(data, uid("project"));
+    setActiveProjectId(record.id);
+    project = normalizeProject(cloneProjectData(record.data));
+    queueCloudSave(record);
+    resetEditorSelection();
+    showEditorView();
+    requestAnimationFrame(() => fitView());
+  }
+
+  function duplicateLibraryProject(id) {
+    const source = projectRecordById(id);
+    if (!source) return;
+    const copy = normalizeProject(cloneProjectData(source.data));
+    copy.name = (source.name || "Schema") + " — copia";
+    const record = upsertLocalProject(copy, uid("project"));
+    queueCloudSave(record);
+    renderProjectLibrary();
+  }
+
+  function downloadProjectData(data) {
+    const normalized = normalizeProject(cloneProjectData(data));
+    const blob = new Blob([JSON.stringify(normalized, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeName = (normalized.name || "projectflow").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+    link.href = url;
+    link.download = safeName + ".projectflow.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function deleteLibraryProject(id) {
+    const record = projectRecordById(id);
+    if (!record) return;
+    if (!confirm('Eliminare lo schema "' + record.name + '"?')) return;
+
+    removeLocalProject(id);
+    if (currentProjectId === id) {
+      setActiveProjectId(projectLibrary[0] ? projectLibrary[0].id : "");
+      project = currentProjectId
+        ? normalizeProject(cloneProjectData(projectRecordById(currentProjectId).data))
+        : blankProject();
+    }
+
+    await cloudDeleteProject(id);
+    renderProjectLibrary();
+  }
+
+  function makeProjectCard(record) {
+    const card = document.createElement("article");
+    card.className = "project-card";
+    card.dataset.projectId = record.id;
+
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "project-card-preview";
+    preview.title = "Apri " + record.name;
+
+    const stats = projectStats(record.data);
+    const glyphs = document.createElement("div");
+    glyphs.className = "project-card-glyphs";
+    const visibleNodes = (record.data.nodes || []).slice(0, 7);
+    visibleNodes.forEach((node, index) => {
+      const glyph = document.createElement("span");
+      glyph.className = "project-preview-node";
+      glyph.style.setProperty("--preview-accent", typeMeta(node.type).color);
+      glyph.style.left = (12 + (index % 3) * 27 + ((index * 11) % 9)) + "%";
+      glyph.style.top = (17 + Math.floor(index / 3) * 27 + ((index * 7) % 8)) + "%";
+      glyphs.appendChild(glyph);
+    });
+    preview.appendChild(glyphs);
+    preview.addEventListener("click", () => activateProject(record.id, true));
+
+    const body = document.createElement("div");
+    body.className = "project-card-body";
+
+    const titleRow = document.createElement("div");
+    titleRow.className = "project-card-title-row";
+    const title = document.createElement("h3");
+    title.textContent = record.name || "Untitled Flow";
+    const localBadge = document.createElement("span");
+    localBadge.className = "project-storage-badge";
+    localBadge.textContent = cloudState.user ? "Cloud" : "Local";
+    titleRow.append(title, localBadge);
+
+    const meta = document.createElement("p");
+    meta.className = "project-card-meta";
+    meta.textContent =
+      stats.nodes + " blocchi · " +
+      stats.connections + " connessioni · " +
+      formatProjectDate(record.updatedAt);
+
+    const actions = document.createElement("div");
+    actions.className = "project-card-actions";
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "project-card-action primary";
+    open.textContent = "Apri";
+    open.addEventListener("click", () => activateProject(record.id, true));
+
+    const duplicate = document.createElement("button");
+    duplicate.type = "button";
+    duplicate.className = "project-card-action";
+    duplicate.textContent = "Duplica";
+    duplicate.addEventListener("click", () => duplicateLibraryProject(record.id));
+
+    const download = document.createElement("button");
+    download.type = "button";
+    download.className = "project-card-action";
+    download.textContent = "Esporta";
+    download.addEventListener("click", () => downloadProjectData(record.data));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "project-card-action danger";
+    remove.textContent = "Elimina";
+    remove.addEventListener("click", () => deleteLibraryProject(record.id));
+
+    actions.append(open, duplicate, download, remove);
+    body.append(titleRow, meta, actions);
+    card.append(preview, body);
+    return card;
+  }
+
+  function renderProjectLibrary() {
+    const grid = $("projectLibraryGrid");
+    const empty = $("projectLibraryEmpty");
+    const search = $("projectLibrarySearch");
+    if (!grid || !empty) return;
+
+    const query = (search ? search.value : "").trim().toLowerCase();
+    const matches = projectLibrary
+      .slice()
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .filter((record) => !query || record.name.toLowerCase().includes(query));
+
+    grid.innerHTML = "";
+    matches.forEach((record) => grid.appendChild(makeProjectCard(record)));
+
+    const noProjects = projectLibrary.length === 0;
+    const noMatches = matches.length === 0;
+    empty.classList.toggle("hidden", !noProjects);
+    grid.classList.toggle("empty-search", !noProjects && noMatches);
+
+    let noResults = $("projectLibraryNoResults");
+    if (!noResults && grid.parentElement) {
+      noResults = document.createElement("div");
+      noResults.id = "projectLibraryNoResults";
+      noResults.className = "project-library-no-results hidden";
+      noResults.textContent = "Nessuno schema corrisponde alla ricerca.";
+      grid.parentElement.appendChild(noResults);
+    }
+    if (noResults) noResults.classList.toggle("hidden", noProjects || !noMatches);
+  }
+
+  function importLibraryFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = normalizeProject(JSON.parse(reader.result));
+        if (!imported.name || imported.name === "Untitled Flow") {
+          imported.name = file.name.replace(/\.projectflow\.json$|\.json$/i, "") || "Schema importato";
+        }
+        const record = upsertLocalProject(imported, uid("project"));
+        queueCloudSave(record);
+        renderProjectLibrary();
+      } catch (error) {
+        alert("Il file non contiene un progetto ProjectFlow valido.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function updateAccountUI() {
+    const user = cloudState.user;
+    const configured = cloudState.configured;
+    const homeButton = $("homeAuthButton");
+    const editorButton = $("editorAuthButton");
+    const syncState = $("homeSyncState");
+    const avatar = $("editorAccountAvatar");
+    const label = $("editorAccountLabel");
+
+    if (syncState) {
+      const dot = syncState.querySelector(".sync-dot");
+      const copy = syncState.querySelector("span:last-child");
+      if (dot) {
+        dot.classList.toggle("cloud", !!user);
+        dot.classList.toggle("local", !user);
+      }
+      if (copy) {
+        copy.textContent = user
+          ? "Sincronizzato con " + (user.displayName || user.email || "Google")
+          : configured ? "Salvataggio locale · Google disponibile" : "Salvataggio locale";
+      }
+    }
+
+    if (homeButton) {
+      const text = homeButton.querySelector("span:last-child");
+      homeButton.classList.toggle("signed-in", !!user);
+      if (text) text.textContent = user ? "Esci da " + (user.displayName || "Google") : "Accedi con Google";
+      homeButton.title = configured
+        ? (user ? "Disconnetti account Google" : "Sincronizza i progetti con Google")
+        : "Configura Firebase per attivare Google login e cloud";
+    }
+
+    if (editorButton) {
+      editorButton.classList.toggle("signed-in", !!user);
+      if (label) label.textContent = user ? (user.displayName || "Account") : "Accedi";
+      if (avatar) {
+        const initial = user && (user.displayName || user.email)
+          ? (user.displayName || user.email).trim().charAt(0).toUpperCase()
+          : "G";
+        avatar.textContent = initial;
+        avatar.style.backgroundImage = user && user.photoURL ? 'url("' + user.photoURL + '")' : "";
+      }
+    }
+  }
+
+  async function initCloud() {
+    updateAccountUI();
+    if (!cloudState.configured) return;
+
+    try {
+      const base = "https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/";
+      const [appApi, authApi, firestoreApi] = await Promise.all([
+        import(base + "firebase-app.js"),
+        import(base + "firebase-auth.js"),
+        import(base + "firebase-firestore.js")
+      ]);
+
+      const firebaseApp = appApi.initializeApp(window.PROJECTFLOW_FIREBASE_CONFIG);
+      const auth = authApi.getAuth(firebaseApp);
+      const db = firestoreApi.getFirestore(firebaseApp);
+      const provider = new authApi.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+
+      cloudState.auth = auth;
+      cloudState.db = db;
+      cloudState.provider = provider;
+      cloudState.api = Object.assign({}, authApi, firestoreApi);
+      cloudState.ready = true;
+
+      authApi.onAuthStateChanged(auth, async (user) => {
+        cloudState.user = user || null;
+        updateAccountUI();
+
+        if (user) {
+          await mergeCloudLibrary();
+          renderProjectLibrary();
+        }
+      });
+    } catch (error) {
+      console.warn("ProjectFlow: Firebase non disponibile.", error);
+      cloudState.ready = false;
+      updateAccountUI();
+    }
+  }
+
+  async function toggleGoogleAuth() {
+    if (!cloudState.configured) {
+      alert(
+        "Google login è già predisposto, ma manca la configurazione Firebase. " +
+        "Inserisci il firebaseConfig in firebase-config.js e abilita Google + Firestore."
+      );
+      return;
+    }
+
+    if (!cloudState.ready || !cloudState.api) return;
+
+    try {
+      if (cloudState.user) {
+        await cloudState.api.signOut(cloudState.auth);
+      } else {
+        await cloudState.api.signInWithPopup(cloudState.auth, cloudState.provider);
+      }
+    } catch (error) {
+      console.warn("ProjectFlow: accesso Google non riuscito.", error);
+      alert("Accesso Google non riuscito: " + (error.message || error.code || "errore sconosciuto"));
+    }
+  }
+
+  async function mergeCloudLibrary() {
+    if (!cloudState.user || !cloudState.api || !cloudState.db) return;
+
+    try {
+      const collectionRef = cloudState.api.collection(
+        cloudState.db,
+        "users",
+        cloudState.user.uid,
+        "projects"
+      );
+      const snapshot = await cloudState.api.getDocs(collectionRef);
+      const cloudMap = new Map();
+
+      snapshot.forEach((docSnapshot) => {
+        const value = docSnapshot.data();
+        if (!value || !value.data) return;
+        cloudMap.set(docSnapshot.id, {
+          id: docSnapshot.id,
+          name: value.name || value.data.name || "Untitled Flow",
+          createdAt: Number(value.createdAt) || Date.now(),
+          updatedAt: Number(value.updatedAt) || Date.now(),
+          data: normalizeProject(value.data)
+        });
+      });
+
+      for (const [id, remote] of cloudMap) {
+        const local = projectRecordById(id);
+        if (!local || remote.updatedAt > local.updatedAt) {
+          if (local) {
+            local.name = remote.name;
+            local.createdAt = remote.createdAt;
+            local.updatedAt = remote.updatedAt;
+            local.data = normalizeProject(cloneProjectData(remote.data));
+          } else {
+            projectLibrary.push(remote);
+          }
+        }
+      }
+
+      persistProjectLibrary();
+
+      for (const local of projectLibrary) {
+        const remote = cloudMap.get(local.id);
+        if (!remote || local.updatedAt > remote.updatedAt) {
+          await cloudWriteProject(local);
+        }
+      }
+
+      const active = projectRecordById(currentProjectId);
+      if (active && $("editorView") && !$("editorView").classList.contains("hidden")) {
+        project = normalizeProject(cloneProjectData(active.data));
+        $("projectName").value = project.name;
+        render();
+      }
+    } catch (error) {
+      console.warn("ProjectFlow: sincronizzazione cloud non riuscita.", error);
+    }
+  }
+
+  async function cloudWriteProject(record) {
+    if (!record || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    try {
+      const ref = cloudState.api.doc(
+        cloudState.db,
+        "users",
+        cloudState.user.uid,
+        "projects",
+        record.id
+      );
+      await cloudState.api.setDoc(ref, {
+        name: record.name,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+        data: record.data
+      }, { merge: true });
+    } catch (error) {
+      console.warn("ProjectFlow: salvataggio cloud non riuscito.", error);
+    }
+  }
+
+  function queueCloudSave(record) {
+    if (!record || !cloudState.user) return;
+    clearTimeout(cloudState.saveTimer);
+    cloudState.saveTimer = setTimeout(() => cloudWriteProject(record), 550);
+  }
+
+  async function cloudDeleteProject(id) {
+    if (!id || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    try {
+      const ref = cloudState.api.doc(
+        cloudState.db,
+        "users",
+        cloudState.user.uid,
+        "projects",
+        id
+      );
+      await cloudState.api.deleteDoc(ref);
+    } catch (error) {
+      console.warn("ProjectFlow: eliminazione cloud non riuscita.", error);
+    }
   }
 
   function loadPanelWidths() {
