@@ -99,6 +99,24 @@
     return group ? group.label : (id === "scripts" ? "SCRIPTS" : "OTHER");
   }
 
+  function dataTypeCategories() {
+    const groups = [
+      { id: "primitive", label: "PRIMITIVE", values: ["bool", "int", "float", "double", "string"] },
+      { id: "math", label: "MATH", values: ["Vector2", "Vector3", "Quaternion", "Color"] },
+      { id: "core", label: "UNITY CORE", values: ["GameObject", "Transform", "LayerMask"] },
+      { id: "physics", label: "PHYSICS", values: ["Rigidbody", "Rigidbody2D", "Collider", "Collider2D", "BoxCollider", "SphereCollider", "CapsuleCollider"] },
+      { id: "animation", label: "ANIMATION", values: ["Animator", "Animation", "AnimationClip", "RuntimeAnimatorController"] },
+      { id: "audio", label: "AUDIO", values: ["AudioSource", "AudioListener", "AudioClip"] },
+      { id: "rendering", label: "RENDERING", values: ["Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer", "Texture2D", "Material"] },
+      { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform"] },
+      { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] }
+    ];
+
+    const custom = publicClassNodes().map((node) => node.title);
+    if (custom.length) groups.push({ id: "classes", label: "CUSTOM CLASSES", values: custom });
+    return groups;
+  }
+
   const UNITY_LIFECYCLE = [
     { name: "Awake", parameters: "", returnType: "void" },
     { name: "OnEnable", parameters: "", returnType: "void" },
@@ -332,6 +350,7 @@
     if (!Array.isArray(node.rows)) node.rows = [];
     node.rows.forEach(normalizeMember);
     if (!node.uiSections || typeof node.uiSections !== "object") node.uiSections = {};
+    if (!node.uiComponentCategories || typeof node.uiComponentCategories !== "object") node.uiComponentCategories = {};
 
     if (node.type === "object") {
       const hasTransform = node.rows.some((item) => item.kind === "component" && item.componentType === "Transform");
@@ -1125,6 +1144,68 @@
       return select;
     };
 
+    const typePicker = (value, onChange, className) => {
+      const wrap = document.createElement("div");
+      wrap.className = "type-picker";
+
+      const trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = className || "inline-type-picker";
+      trigger.textContent = value || "Type";
+      trigger.title = "Scegli tipo";
+      trigger.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+      const popup = document.createElement("div");
+      popup.className = "type-picker-popup";
+
+      dataTypeCategories().forEach((category) => {
+        const group = document.createElement("div");
+        group.className = "type-picker-group";
+
+        const categoryButton = document.createElement("button");
+        categoryButton.type = "button";
+        categoryButton.className = "type-picker-category";
+        categoryButton.innerHTML = '<span>' + category.label + '</span><span>›</span>';
+        categoryButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+        categoryButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          popup.querySelectorAll(".type-picker-group.open").forEach((openGroup) => {
+            if (openGroup !== group) openGroup.classList.remove("open");
+          });
+          group.classList.toggle("open");
+        });
+
+        const options = document.createElement("div");
+        options.className = "type-picker-options";
+        category.values.forEach((typeValue) => {
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "type-picker-option" + (typeValue === value ? " active" : "");
+          option.textContent = typeValue;
+          option.addEventListener("pointerdown", (event) => event.stopPropagation());
+          option.addEventListener("click", (event) => {
+            event.stopPropagation();
+            onChange(typeValue);
+          });
+          options.appendChild(option);
+        });
+
+        group.append(categoryButton, options);
+        popup.appendChild(group);
+      });
+
+      trigger.addEventListener("click", (event) => {
+        event.stopPropagation();
+        document.querySelectorAll(".type-picker-popup.open").forEach((openPopup) => {
+          if (openPopup !== popup) openPopup.classList.remove("open");
+        });
+        popup.classList.toggle("open");
+      });
+
+      wrap.append(trigger, popup);
+      return wrap;
+    };
+
     const inlineInput = (value, placeholder, onInput, className) => {
       const input = document.createElement("input");
       input.className = className || "inline-member-input";
@@ -1387,13 +1468,13 @@
             rerenderNode();
           }, "inline-access-select");
 
-          const type = compactSelect(item.dataType, availableDataTypes(), (value) => {
+          const type = typePicker(item.dataType, (value) => {
             item.dataType = value;
             if (publicClassNodes().some((classNode) => classNode.title === value) && item.referenceMode === "value") {
               item.referenceMode = "inspector";
             }
             rerenderNode();
-          }, "inline-type-select");
+          }, "inline-type-picker");
 
           const name = inlineInput(item.label, "nome", (value) => {
             item.label = value;
@@ -1784,6 +1865,10 @@
               memberList.querySelectorAll(".inline-edit-row").forEach((row) => {
                 row.style.display = !query || (row.dataset.search || "").includes(query) ? "" : "none";
               });
+              memberList.querySelectorAll(".component-category-group").forEach((group) => {
+                const visibleRows = Array.from(group.querySelectorAll(".inline-edit-row")).some((row) => row.style.display !== "none");
+                group.style.display = visibleRows ? "" : "none";
+              });
               renderEdges();
             });
 
@@ -1800,30 +1885,73 @@
           memberList.addEventListener("scroll", () => renderEdges(), { passive: true });
           memberList.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
 
-          let previousComponentCategory = "";
-          items.forEach((item) => {
-            if (titleText === "COMPONENTS" && item.kind === "component" && item.componentCategory !== previousComponentCategory) {
-              previousComponentCategory = item.componentCategory;
-              const categoryLabel = document.createElement("div");
-              categoryLabel.className = "component-category-label";
-              categoryLabel.textContent = componentCategoryLabel(item.componentCategory);
-              memberList.appendChild(categoryLabel);
-            }
+          if (titleText === "COMPONENTS") {
+            const grouped = new Map();
+            items.forEach((item) => {
+              const key = item.componentCategory || "other";
+              if (!grouped.has(key)) grouped.set(key, []);
+              grouped.get(key).push(item);
+            });
 
-            const rowElement = makeRowElement(item);
-            rowElement.dataset.search = [
-              item.label,
-              item.componentType,
-              item.componentCategory,
-              item.dataType,
-              item.returnType,
-              item.parameters,
-              item.access,
-              item.methodKind,
-              item.payloadType
-            ].filter(Boolean).join(" ").toLowerCase();
-            memberList.appendChild(rowElement);
-          });
+            grouped.forEach((categoryItems, categoryId) => {
+              const group = document.createElement("div");
+              const categoryCollapsed = !!node.uiComponentCategories[categoryId];
+              group.className = "component-category-group" + (categoryCollapsed ? " collapsed" : "");
+
+              const categoryButton = document.createElement("button");
+              categoryButton.type = "button";
+              categoryButton.className = "component-category-toggle";
+              categoryButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+              categoryButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                node.uiComponentCategories[categoryId] = !node.uiComponentCategories[categoryId];
+                rerenderNode();
+              });
+
+              const arrow = document.createElement("span");
+              arrow.className = "component-category-chevron";
+              arrow.textContent = categoryCollapsed ? "▸" : "▾";
+
+              const title = document.createElement("span");
+              title.className = "component-category-name";
+              title.textContent = componentCategoryLabel(categoryId);
+
+              const badge = document.createElement("span");
+              badge.className = "component-category-count";
+              badge.textContent = String(categoryItems.length);
+
+              categoryButton.append(arrow, title, badge);
+              group.appendChild(categoryButton);
+
+              const rowsWrap = document.createElement("div");
+              rowsWrap.className = "component-category-items";
+              categoryItems.forEach((item) => {
+                const rowElement = makeRowElement(item);
+                rowElement.dataset.search = [
+                  item.label,
+                  item.componentType,
+                  item.componentCategory
+                ].filter(Boolean).join(" ").toLowerCase();
+                rowsWrap.appendChild(rowElement);
+              });
+              group.appendChild(rowsWrap);
+              memberList.appendChild(group);
+            });
+          } else {
+            items.forEach((item) => {
+              const rowElement = makeRowElement(item);
+              rowElement.dataset.search = [
+                item.label,
+                item.dataType,
+                item.returnType,
+                item.parameters,
+                item.access,
+                item.methodKind,
+                item.payloadType
+              ].filter(Boolean).join(" ").toLowerCase();
+              memberList.appendChild(rowElement);
+            });
+          }
           content.appendChild(memberList);
         } else {
           const emptyState = document.createElement("div");
@@ -1846,26 +1974,82 @@
           const popup = document.createElement("div");
           popup.className = "section-add-popup";
 
-          actions.forEach((action) => {
-            if (action.header) {
-              const header = document.createElement("div");
-              header.className = "section-add-group";
-              header.textContent = action.label;
-              popup.appendChild(header);
-              return;
-            }
+          if (titleText === "COMPONENTS") {
+            popup.classList.add("fan-popup");
+            const groups = [];
+            let current = null;
 
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "section-add-option";
-            button.textContent = action.label;
-            button.addEventListener("pointerdown", (event) => event.stopPropagation());
-            button.addEventListener("click", (event) => {
-              event.stopPropagation();
-              addMemberFromAction(action.value);
+            actions.forEach((action) => {
+              if (action.header) {
+                current = { label: action.label, items: [] };
+                groups.push(current);
+              } else {
+                if (!current) {
+                  current = { label: "OTHER", items: [] };
+                  groups.push(current);
+                }
+                current.items.push(action);
+              }
             });
-            popup.appendChild(button);
-          });
+
+            groups.forEach((groupData, index) => {
+              const fanGroup = document.createElement("div");
+              fanGroup.className = "fan-group";
+              fanGroup.style.setProperty("--fan-index", String(index));
+
+              const categoryButton = document.createElement("button");
+              categoryButton.type = "button";
+              categoryButton.className = "fan-category";
+              categoryButton.innerHTML = '<span>' + groupData.label + '</span><span>＋</span>';
+              categoryButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+              categoryButton.addEventListener("click", (event) => {
+                event.stopPropagation();
+                popup.querySelectorAll(".fan-group.open").forEach((openGroup) => {
+                  if (openGroup !== fanGroup) openGroup.classList.remove("open");
+                });
+                fanGroup.classList.toggle("open");
+              });
+
+              const choices = document.createElement("div");
+              choices.className = "fan-options";
+              groupData.items.forEach((action) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "fan-option";
+                button.textContent = action.label;
+                button.addEventListener("pointerdown", (event) => event.stopPropagation());
+                button.addEventListener("click", (event) => {
+                  event.stopPropagation();
+                  addMemberFromAction(action.value);
+                });
+                choices.appendChild(button);
+              });
+
+              fanGroup.append(categoryButton, choices);
+              popup.appendChild(fanGroup);
+            });
+          } else {
+            actions.forEach((action) => {
+              if (action.header) {
+                const header = document.createElement("div");
+                header.className = "section-add-group";
+                header.textContent = action.label;
+                popup.appendChild(header);
+                return;
+              }
+
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "section-add-option";
+              button.textContent = action.label;
+              button.addEventListener("pointerdown", (event) => event.stopPropagation());
+              button.addEventListener("click", (event) => {
+                event.stopPropagation();
+                addMemberFromAction(action.value);
+              });
+              popup.appendChild(button);
+            });
+          }
 
           addButton.addEventListener("click", (event) => {
             event.stopPropagation();
