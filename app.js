@@ -5,7 +5,26 @@
   const VIEW_KEY = "projectflow.view.v1";
   const PANELS_KEY = "projectflow.panels.v1";
   const LIBRARY_KEY = "projectflow.library.v1";
-  const NODE_WIDTH = 360;
+  const NODE_WIDTH = 440;
+
+  function nodeWidthFor(nodeOrType) {
+    const type = typeof nodeOrType === "string" ? nodeOrType : (nodeOrType && nodeOrType.type) || "object";
+    if (type === "object" || type === "class") return 500;
+    if (type === "function") return 470;
+    if (type === "enum") return 440;
+    if (type === "component") return 430;
+    if (["event", "action", "condition", "state", "enumSwitch"].includes(type)) return 420;
+    if (type === "note") return 390;
+    return 430;
+  }
+
+  function memberScrollLimit(node, sectionTitle) {
+    if (sectionTitle === "METHODS") return 520;
+    if (sectionTitle === "VARIABLES" || sectionTitle === "DATA") return 470;
+    if (sectionTitle === "COMPONENTS") return 490;
+    if (sectionTitle === "UNITY EVENTS") return 420;
+    return 430;
+  }
 
   const $ = (id) => document.getElementById(id);
   const nodeLayer = $("nodeLayer");
@@ -1403,6 +1422,7 @@
     element.dataset.nodeId = node.id;
     element.style.left = node.x + "px";
     element.style.top = node.y + "px";
+    element.style.width = nodeWidthFor(node) + "px";
 
     const header = document.createElement("div");
     header.className = "node-header";
@@ -2676,7 +2696,9 @@
           const updateMemberScroll = () => {
             memberList.classList.remove("scrollable");
             requestAnimationFrame(() => {
-              const needsScroll = memberList.scrollHeight > 270;
+              const limit = memberScrollLimit(node, titleText);
+              memberList.style.setProperty("--member-scroll-limit", limit + "px");
+              const needsScroll = memberList.scrollHeight > limit;
               memberList.classList.toggle("scrollable", needsScroll);
               if (!needsScroll) memberList.scrollTop = 0;
               renderEdges();
@@ -3525,7 +3547,7 @@
     const padding = 90;
     const minX = Math.min.apply(null, project.nodes.map((node) => node.x)) - padding;
     const minY = Math.min.apply(null, project.nodes.map((node) => node.y)) - padding;
-    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + NODE_WIDTH)) + padding;
+    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node))) + padding;
     const maxY = Math.max.apply(null, project.nodes.map((node) => node.y + 220)) + padding;
     const width = Math.max(1, maxX - minX);
     const height = Math.max(1, maxY - minY);
@@ -3537,7 +3559,7 @@
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       rect.setAttribute("x", offsetX + (node.x - minX) * scale);
       rect.setAttribute("y", offsetY + (node.y - minY) * scale);
-      rect.setAttribute("width", Math.max(6, NODE_WIDTH * scale));
+      rect.setAttribute("width", Math.max(6, nodeWidthFor(node) * scale));
       rect.setAttribute("height", Math.max(4, 95 * scale));
       rect.setAttribute("rx", "2");
       rect.setAttribute("class", "minimap-node" + (isNodeSelected(node.id) ? " selected" : ""));
@@ -4484,7 +4506,7 @@
   function addNode(type, presetComponent) {
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
-    const node = defaultNode(type, center.x - NODE_WIDTH / 2 + offset, center.y - 100 + offset, presetComponent);
+    const node = defaultNode(type, center.x - nodeWidthFor(type) / 2 + offset, center.y - 100 + offset, presetComponent);
     project.nodes.push(node);
     selectedNodeIds = new Set([node.id]);
     syncPrimarySelection();
@@ -4536,7 +4558,7 @@
     const rect = viewport.getBoundingClientRect();
     const minX = Math.min.apply(null, project.nodes.map((node) => node.x));
     const minY = Math.min.apply(null, project.nodes.map((node) => node.y));
-    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + NODE_WIDTH));
+    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)));
     const maxY = Math.max.apply(null, project.nodes.map((node) => node.y + 260));
     const width = Math.max(400, maxX - minX);
     const height = Math.max(300, maxY - minY);
