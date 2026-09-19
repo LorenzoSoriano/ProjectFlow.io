@@ -131,3 +131,10 @@ After updating the site code, deploy the current `firestore.rules` to the Fireba
 ### v2.5 sharing fix
 
 The first share operation now creates the shared Firestore document directly instead of reading a document that does not exist yet. This avoids a permission-denied failure with strict Firestore rules. Share-link copying also has a fallback when the browser Clipboard API is unavailable.
+
+
+### v2.6 performance + Sketch resize
+
+Canvas interaction rendering is batched with `requestAnimationFrame`, minimap refreshes are throttled, camera persistence is debounced, and collaboration cursor writes are less frequent. Sketch drawing now paints only the newest segment while the pointer moves instead of redrawing every stored stroke.
+
+Sketch nodes are freely resizable from the bottom-right handle, persist width/height in project data, and include Pen/Eraser modes, color, thickness, undo-last-stroke, clear, and a compact size readout.
