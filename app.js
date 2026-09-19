@@ -4,7 +4,7 @@
   const STORAGE_KEY = "projectflow.project.v1";
   const VIEW_KEY = "projectflow.view.v1";
   const PANELS_KEY = "projectflow.panels.v1";
-  const NODE_WIDTH = 332;
+  const NODE_WIDTH = 360;
 
   const $ = (id) => document.getElementById(id);
   const nodeLayer = $("nodeLayer");
