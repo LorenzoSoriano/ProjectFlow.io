@@ -1169,6 +1169,8 @@
   let marqueeState = null;
   let minimapProjection = null;
   let minimapDrag = false;
+  let sketchDraft = null;
+  let sketchPointerId = null;
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -6447,6 +6449,145 @@
   function endMinimapNavigation() {
     minimapDrag = false;
     window.removeEventListener("pointermove", moveMinimapNavigation);
+  }
+
+
+  function sketchData() {
+    if (!project.sketch || typeof project.sketch !== "object") project.sketch = { strokes: [] };
+    if (!Array.isArray(project.sketch.strokes)) project.sketch.strokes = [];
+    return project.sketch;
+  }
+
+  function resizeSketchCanvas() {
+    const canvas = $("sketchCanvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const width = Math.max(1, Math.round(rect.width * ratio));
+    const height = Math.max(1, Math.round(rect.height * ratio));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    drawSketch();
+  }
+
+  function drawSketch() {
+    const canvas = $("sketchCanvas");
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const drawStroke = (stroke) => {
+      if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = stroke.color || "#9fb7ff";
+      ctx.lineWidth = (Number(stroke.size) || 3) * ((scaleX + scaleY) / 2);
+      stroke.points.forEach((point, index) => {
+        const x = point.x * rect.width * scaleX;
+        const y = point.y * rect.height * scaleY;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    };
+
+    sketchData().strokes.forEach(drawStroke);
+    if (sketchDraft) drawStroke(sketchDraft);
+  }
+
+  function sketchPointFromEvent(event) {
+    const canvas = $("sketchCanvas");
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)))
+    };
+  }
+
+  function startSketchStroke(event) {
+    if (event.button !== 0 && event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    event.preventDefault();
+    const canvas = $("sketchCanvas");
+    sketchPointerId = event.pointerId;
+    if (canvas.setPointerCapture) canvas.setPointerCapture(event.pointerId);
+    sketchDraft = {
+      id: uid("stroke"),
+      color: $("sketchColor").value || "#9fb7ff",
+      size: Number($("sketchSize").value) || 3,
+      points: [sketchPointFromEvent(event)]
+    };
+    broadcastActivity("Disegna nello Sketch");
+  }
+
+  function moveSketchStroke(event) {
+    if (!sketchDraft || event.pointerId !== sketchPointerId) return;
+    event.preventDefault();
+    const point = sketchPointFromEvent(event);
+    const previous = sketchDraft.points[sketchDraft.points.length - 1];
+    const dx = point.x - previous.x;
+    const dy = point.y - previous.y;
+    if (dx * dx + dy * dy < 0.000012) return;
+    sketchDraft.points.push(point);
+    drawSketch();
+  }
+
+  function endSketchStroke(event) {
+    if (!sketchDraft || event.pointerId !== sketchPointerId) return;
+    const canvas = $("sketchCanvas");
+    if (canvas.releasePointerCapture) {
+      try { canvas.releasePointerCapture(event.pointerId); } catch (error) {}
+    }
+    if (sketchDraft.points.length > 1) {
+      sketchData().strokes.push(sketchDraft);
+      markDirty();
+      broadcastActivity("Aggiunge uno sketch");
+    }
+    sketchDraft = null;
+    sketchPointerId = null;
+    drawSketch();
+  }
+
+  function undoSketchStroke() {
+    const sketch = sketchData();
+    if (!sketch.strokes.length) return;
+    sketch.strokes.pop();
+    drawSketch();
+    markDirty();
+    broadcastActivity("Annulla un tratto Sketch");
+  }
+
+  function clearSketch() {
+    const sketch = sketchData();
+    if (!sketch.strokes.length) return;
+    if (!confirm("Pulire tutto lo Sketch?")) return;
+    sketch.strokes = [];
+    drawSketch();
+    markDirty();
+    broadcastActivity("Pulisce lo Sketch");
+  }
+
+  function openSketchPanel() {
+    const panel = $("sketchPanel");
+    if (!panel) return;
+    const willOpen = !panel.classList.contains("open");
+    closeInterfaceSurfaces(willOpen ? panel : null);
+    panel.classList.toggle("open", willOpen);
+    panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
+    $("sketchTool").classList.toggle("active", willOpen);
+    if (willOpen) {
+      broadcastActivity("Apre lo Sketch");
+      requestAnimationFrame(resizeSketchCanvas);
+    }
   }
 
   function inspectorField(labelText, control) {
