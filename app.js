@@ -509,6 +509,7 @@
   }
 
   function createNodeElement(node, connectedPorts) {
+    ensureNodeMeta(node);
     const meta = typeMeta(node.type);
     const element = document.createElement("article");
     element.className = "flow-node type-" + node.type;
@@ -531,7 +532,7 @@
     const title = document.createElement("strong");
     title.textContent = node.title;
     const label = document.createElement("small");
-    label.textContent = meta.label;
+    label.textContent = nodeSubtitle(node);
     heading.append(title, label);
 
     const more = document.createElement("button");
@@ -560,58 +561,133 @@
     const body = document.createElement("div");
     body.className = "node-body";
 
-    if (node.description) {
-      const desc = document.createElement("div");
-      desc.className = "node-description";
-      desc.textContent = node.description;
-      body.appendChild(desc);
-    }
+    if (node.type === "note") {
+      const noteEditor = document.createElement("textarea");
+      noteEditor.className = "node-note-editor";
+      noteEditor.value = node.description || "";
+      noteEditor.placeholder = "Scrivi la nota direttamente qui…";
+      noteEditor.spellcheck = true;
+      noteEditor.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+        if (!isNodeSelected(node.id)) {
+          selectedNodeIds = new Set([node.id]);
+          syncPrimarySelection();
+          selectedEdgeId = null;
+          element.classList.add("selected");
+          renderInspector();
+          renderMinimap();
+        }
+      });
+      noteEditor.addEventListener("input", () => {
+        node.description = noteEditor.value;
+        noteEditor.style.height = "auto";
+        noteEditor.style.height = Math.max(92, noteEditor.scrollHeight) + "px";
+        markDirty();
+      });
+      body.appendChild(noteEditor);
+      requestAnimationFrame(() => {
+        noteEditor.style.height = "auto";
+        noteEditor.style.height = Math.max(92, noteEditor.scrollHeight) + "px";
+      });
+    } else {
+      if (node.description) {
+        const desc = document.createElement("div");
+        desc.className = "node-description";
+        desc.textContent = node.description;
+        body.appendChild(desc);
+      }
 
-    node.rows.forEach((item) => {
-      const itemMeta = ROW_META[item.kind] || ROW_META.variable;
-      const rowElement = document.createElement("div");
-      rowElement.className = "node-row";
-      rowElement.dataset.rowId = item.id;
+      if (node.type === "class") {
+        const classMeta = document.createElement("div");
+        classMeta.className = "node-meta-strip";
+        const accessLabel = REFERENCE_MODE_LABELS[node.instanceAccess] || node.instanceAccess;
+        classMeta.innerHTML =
+          '<span class="meta-chip">' + node.classVisibility + '</span>' +
+          '<span class="meta-chip">' + node.baseType + '</span>' +
+          '<span class="meta-chip muted">' + accessLabel + '</span>';
+        body.appendChild(classMeta);
+      }
 
-      const kind = document.createElement("span");
-      kind.className = "row-kind";
-      kind.textContent = itemMeta.icon;
+      if (node.type === "function") {
+        const functionMeta = document.createElement("div");
+        functionMeta.className = "node-function-signature";
+        const owner = ownerClassName(node);
+        const kind = METHOD_KIND_LABELS[node.methodKind] || "Custom";
+        const ownerText = owner ? owner + "  ·  " : "";
+        functionMeta.innerHTML =
+          '<span class="function-owner">' + ownerText + kind + '</span>' +
+          '<code>' + node.methodAccess + " " + node.returnType + " " + node.title + "(" + (node.parameters || "") + ")" + '</code>';
+        body.appendChild(functionMeta);
+      }
 
-      const copy = document.createElement("div");
-      copy.className = "row-copy";
-      const rowTitle = document.createElement("strong");
-      rowTitle.textContent = item.label;
-      const rowValue = document.createElement("small");
-      rowValue.textContent = item.value;
-      copy.append(rowTitle, rowValue);
+      const makeRowElement = (item) => {
+        const itemMeta = ROW_META[item.kind] || ROW_META.variable;
+        const rowElement = document.createElement("div");
+        rowElement.className = "node-row member-" + item.kind;
+        rowElement.dataset.rowId = item.id;
 
-      rowElement.append(
-        makePort(node.id, item.id, "in", connectedPorts),
-        kind,
-        copy,
-        makePort(node.id, item.id, "out", connectedPorts)
-      );
-      body.appendChild(rowElement);
-    });
+        const kind = document.createElement("span");
+        kind.className = "row-kind";
+        kind.textContent = itemMeta.icon;
 
-    if (node.pseudo) {
-      const pseudo = document.createElement("pre");
-      pseudo.className = "node-pseudo";
-      pseudo.textContent = node.pseudo;
-      body.appendChild(pseudo);
+        const copy = document.createElement("div");
+        copy.className = "row-copy";
+        const rowTitle = document.createElement("strong");
+        rowTitle.textContent = item.label;
+        const rowValue = document.createElement("small");
+        rowValue.textContent = memberSummary(item);
+        copy.append(rowTitle, rowValue);
+
+        rowElement.append(
+          makePort(node.id, item.id, "in", connectedPorts),
+          kind,
+          copy,
+          makePort(node.id, item.id, "out", connectedPorts)
+        );
+        return rowElement;
+      };
+
+      const appendSection = (titleText, items) => {
+        if (!items.length) return;
+        const section = document.createElement("div");
+        section.className = "node-member-section";
+        const sectionTitle = document.createElement("div");
+        sectionTitle.className = "node-member-title";
+        sectionTitle.textContent = titleText;
+        section.appendChild(sectionTitle);
+        items.forEach((item) => section.appendChild(makeRowElement(item)));
+        body.appendChild(section);
+      };
+
+      if (node.type === "class") {
+        appendSection("VARIABLES", node.rows.filter((item) => item.kind === "variable" || item.kind === "property"));
+        appendSection("METHODS", node.rows.filter((item) => item.kind === "function"));
+        appendSection("UNITY EVENTS", node.rows.filter((item) => item.kind === "unityEvent"));
+        appendSection("OTHER", node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind)));
+      } else {
+        node.rows.forEach((item) => body.appendChild(makeRowElement(item)));
+      }
+
+      if (node.pseudo) {
+        const pseudo = document.createElement("pre");
+        pseudo.className = "node-pseudo";
+        pseudo.textContent = node.pseudo;
+        body.appendChild(pseudo);
+      }
     }
 
     element.append(header, body);
 
     element.addEventListener("pointerdown", (event) => {
-      if (!event.target.closest(".port") && !event.target.closest(".node-header")) {
+      if (!event.target.closest(".port") && !event.target.closest(".node-header") && !event.target.closest(".node-note-editor")) {
         event.stopPropagation();
         selectNode(node.id, event);
         selectedEdgeId = null;
       }
     });
 
-    element.addEventListener("dblclick", () => {
+    element.addEventListener("dblclick", (event) => {
+      if (event.target.closest(".node-note-editor")) return;
       selectNode(node.id, null, true);
       $("nodeTitle").focus();
       $("nodeTitle").select();
