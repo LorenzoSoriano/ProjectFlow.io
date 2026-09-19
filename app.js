@@ -4084,17 +4084,22 @@
     renderTypeSettings(node);
 
     const classLike = node.type === "class" || node.type === "object";
+    const directStructured = ["function", "enum", "event", "action", "state", "condition", "enumSwitch"].includes(node.type);
     $("addVariable").style.display = classLike ? "" : "none";
     $("addMethod").style.display = classLike ? "" : "none";
     $("addEvent").style.display = node.type === "class" ? "" : "none";
-    $("addRow").style.display = classLike ? "none" : "";
+    $("addRow").style.display = classLike || directStructured ? "none" : "";
 
     $("contentSectionLabel").textContent = node.type === "class" ? "MEMBRI DELLA CLASSE" : "CONTENUTO";
     $("contentSectionHint").textContent = node.type === "class"
       ? "Variabili, metodi e UnityEvent sono separati e collegabili."
       : node.type === "function"
-        ? "Input, output o dati di supporto del metodo."
-        : "Contenuto libero del blocco.";
+        ? "La firma è strutturata in Parameters, Description, Return e Logic."
+        : ["event", "action", "state", "condition", "enumSwitch"].includes(node.type)
+          ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
+          : node.type === "enum"
+            ? "I valori dell'Enum si modificano direttamente nel blocco."
+            : "Contenuto libero del blocco.";
 
     const list = $("rowEditorList");
     list.innerHTML = "";
@@ -5004,7 +5009,19 @@
     }
 
     if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-    const shortcuts = { o: "object", c: "class", f: "function", v: "variable", d: "condition", u: "ui", n: "note" };
+    const shortcuts = {
+      o: "object",
+      c: "class",
+      f: "function",
+      v: "variable",
+      d: "condition",
+      u: "ui",
+      n: "note",
+      e: "event",
+      a: "action",
+      s: "state",
+      m: "enum"
+    };
     const type = shortcuts[event.key.toLowerCase()];
     if (type) addNode(type);
   });
