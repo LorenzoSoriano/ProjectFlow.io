@@ -193,3 +193,84 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 }
 .node-layer{pointer-events:none}
 .flow-node{pointer-events:auto}
+
+
+/* Rendering clarity */
+.world{
+  backface-visibility:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+.flow-node{
+  transform:translateZ(0);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:geometricPrecision;
+}
+.edge-layer{
+  shape-rendering:geometricPrecision;
+}
+.node-heading strong,
+.node-heading small,
+.node-description,
+.row-copy strong,
+.row-copy small,
+.node-pseudo{
+  -webkit-font-smoothing:antialiased;
+  text-rendering:geometricPrecision;
+}
+
+/* Connected ports keep the connection color visible */
+.port.connected{
+  background:var(--node-accent);
+  border-color:var(--node-accent);
+  box-shadow:0 0 0 3px rgba(255,255,255,.045),0 0 10px color-mix(in srgb,var(--node-accent) 60%,transparent);
+}
+.port.in.connected{
+  box-shadow:0 0 0 2px rgba(255,255,255,.04),0 0 8px color-mix(in srgb,var(--node-accent) 55%,transparent);
+}
+.port.out.connected{
+  box-shadow:0 0 0 3px rgba(255,255,255,.055),0 0 11px color-mix(in srgb,var(--node-accent) 62%,transparent);
+}
+.node-row>.port.connected:hover,
+.node-row>.port.connected.pending{
+  transform:translateY(-50%) scale(1.5);
+}
+.node-header>.port.connected:hover,
+.node-header>.port.connected.pending{
+  transform:scale(1.5);
+}
+
+/* Edge routing and draggable junction points */
+.edge{
+  pointer-events:none;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.edge-glow{
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.edge-hit{
+  fill:none;
+  stroke:transparent;
+  stroke-width:16;
+  vector-effect:non-scaling-stroke;
+  pointer-events:stroke;
+  cursor:crosshair;
+}
+.edge-junction{
+  fill:var(--junction-color,#7c6cff);
+  stroke:#0b101b;
+  stroke-width:3;
+  vector-effect:non-scaling-stroke;
+  cursor:grab;
+  pointer-events:all;
+  filter:drop-shadow(0 0 5px color-mix(in srgb,var(--junction-color,#7c6cff) 55%,transparent));
+  transition:r .12s ease,stroke .12s ease;
+}
+.edge-junction:hover,
+.edge-junction.selected{
+  stroke:#eef2ff;
+}
+.edge-junction:active{
+  cursor:grabbing;
+}
