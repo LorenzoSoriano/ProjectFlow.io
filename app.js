@@ -3,6 +3,7 @@
 
   const STORAGE_KEY = "projectflow.project.v1";
   const VIEW_KEY = "projectflow.view.v1";
+  const PANELS_KEY = "projectflow.panels.v1";
   const NODE_WIDTH = 284;
 
   const $ = (id) => document.getElementById(id);
@@ -215,10 +216,13 @@
   let project = loadProject();
   let view = loadView();
   let selectedNodeId = null;
+  let selectedNodeIds = new Set();
   let selectedEdgeId = null;
   let pendingPort = null;
   let dragState = null;
   let junctionDrag = null;
+  let marqueeState = null;
+  let panelResizeState = null;
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
@@ -231,7 +235,47 @@
   }
 
   function selectedNode() {
-    return nodeById(selectedNodeId);
+    if (selectedNodeIds.size !== 1) return null;
+    const id = selectedNodeIds.values().next().value;
+    return nodeById(id);
+  }
+
+  function isNodeSelected(id) {
+    return selectedNodeIds.has(id);
+  }
+
+  function syncPrimarySelection() {
+    selectedNodeId = selectedNodeIds.size ? Array.from(selectedNodeIds).pop() : null;
+  }
+
+  function selectedNodes() {
+    return project.nodes.filter((node) => selectedNodeIds.has(node.id));
+  }
+
+  function loadPanelWidths() {
+    let widths = { library: 245, inspector: 305 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(PANELS_KEY) || "null");
+      if (saved && typeof saved.library === "number") widths.library = saved.library;
+      if (saved && typeof saved.inspector === "number") widths.inspector = saved.inspector;
+    } catch (error) {}
+    widths.library = Math.max(180, Math.min(420, widths.library));
+    widths.inspector = Math.max(240, Math.min(520, widths.inspector));
+    document.documentElement.style.setProperty("--library-width", widths.library + "px");
+    document.documentElement.style.setProperty("--inspector-width", widths.inspector + "px");
+    return widths;
+  }
+
+  let panelWidths = loadPanelWidths();
+
+  function setPanelWidths() {
+    document.documentElement.style.setProperty("--library-width", panelWidths.library + "px");
+    document.documentElement.style.setProperty("--inspector-width", panelWidths.inspector + "px");
+    localStorage.setItem(PANELS_KEY, JSON.stringify(panelWidths));
+    requestAnimationFrame(() => {
+      renderEdges();
+      renderMinimap();
+    });
   }
 
   function setWorldTransform() {
@@ -298,7 +342,7 @@
     const meta = typeMeta(node.type);
     const element = document.createElement("article");
     element.className = "flow-node type-" + node.type;
-    if (node.id === selectedNodeId) element.classList.add("selected");
+    if (isNodeSelected(node.id)) element.classList.add("selected");
     if (pendingPort && pendingPort.nodeId === node.id) element.classList.add("connection-source");
     element.dataset.nodeId = node.id;
     element.style.left = node.x + "px";
@@ -333,8 +377,9 @@
     header.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.target.closest(".port") || event.target.closest("button")) return;
       event.preventDefault();
-      selectNode(node.id);
-      startNodeDrag(event, node);
+      event.stopPropagation();
+      selectNode(node.id, event);
+      if (isNodeSelected(node.id)) startNodeDrag(event, node);
     });
 
     const body = document.createElement("div");
@@ -384,14 +429,15 @@
     element.append(header, body);
 
     element.addEventListener("pointerdown", (event) => {
-      if (!event.target.closest(".port")) {
-        selectNode(node.id);
+      if (!event.target.closest(".port") && !event.target.closest(".node-header")) {
+        event.stopPropagation();
+        selectNode(node.id, event);
         selectedEdgeId = null;
       }
     });
 
     element.addEventListener("dblclick", () => {
-      selectNode(node.id);
+      selectNode(node.id, null, true);
       $("nodeTitle").focus();
       $("nodeTitle").select();
     });
@@ -497,6 +543,7 @@
     });
 
     selectedEdgeId = edge.id;
+    selectedNodeIds.clear();
     selectedNodeId = null;
     renderNodes();
     renderEdges();
@@ -626,7 +673,7 @@
       rect.setAttribute("width", Math.max(6, NODE_WIDTH * scale));
       rect.setAttribute("height", Math.max(4, 95 * scale));
       rect.setAttribute("rx", "2");
-      rect.setAttribute("class", "minimap-node" + (node.id === selectedNodeId ? " selected" : ""));
+      rect.setAttribute("class", "minimap-node" + (isNodeSelected(node.id) ? " selected" : ""));
       svg.appendChild(rect);
     });
 
@@ -646,10 +693,25 @@
 
   function renderInspector() {
     const node = selectedNode();
-    $("emptyInspector").style.display = node ? "none" : "block";
+    const count = selectedNodeIds.size;
+    const empty = $("emptyInspector");
+    const emptyTitle = empty.querySelector("h3");
+    const emptyText = empty.querySelector("p");
+
+    empty.style.display = node ? "none" : "block";
     $("inspectorContent").classList.toggle("hidden", !node);
-    $("inspectorPanel").classList.toggle("open", !!node && window.innerWidth <= 850);
-    if (!node) return;
+    $("inspectorPanel").classList.toggle("open", count > 0 && window.innerWidth <= 850);
+
+    if (!node) {
+      if (count > 1) {
+        emptyTitle.textContent = count + " blocchi selezionati";
+        emptyText.textContent = "Trascina un blocco selezionato per muovere tutto il gruppo. Canc elimina il gruppo e Ctrl/Cmd + D lo duplica.";
+      } else {
+        emptyTitle.textContent = "Seleziona un blocco";
+        emptyText.textContent = "Qui puoi modificarne contenuto, pseudocodice e campi senza imporre una sintassi.";
+      }
+      return;
+    }
 
     $("inspectorTitle").textContent = node.title;
     $("nodeType").value = node.type;
@@ -726,9 +788,17 @@
     setWorldTransform();
   }
 
-  function selectNode(id) {
-    if (selectedNodeId === id) return;
-    selectedNodeId = id;
+  function selectNode(id, event, forceSingle) {
+    const additive = !forceSingle && !!(event && (event.ctrlKey || event.metaKey || event.shiftKey));
+
+    if (additive) {
+      if (selectedNodeIds.has(id)) selectedNodeIds.delete(id);
+      else selectedNodeIds.add(id);
+    } else {
+      selectedNodeIds = new Set([id]);
+    }
+
+    syncPrimarySelection();
     selectedEdgeId = null;
     renderNodes();
     renderEdges();
@@ -737,6 +807,7 @@
   }
 
   function clearSelection() {
+    selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
     renderNodes();
@@ -746,33 +817,41 @@
   }
 
   function startNodeDrag(event, node) {
-    const rect = viewport.getBoundingClientRect();
-    const worldX = (event.clientX - rect.left - view.x) / view.scale;
-    const worldY = (event.clientY - rect.top - view.y) / view.scale;
+    if (!selectedNodeIds.has(node.id)) {
+      selectedNodeIds = new Set([node.id]);
+      syncPrimarySelection();
+    }
+
+    const startPoint = screenToWorld(event.clientX, event.clientY);
     dragState = {
-      nodeId: node.id,
-      offsetX: worldX - node.x,
-      offsetY: worldY - node.y,
-      pointerId: event.pointerId
+      pointerId: event.pointerId,
+      startX: startPoint.x,
+      startY: startPoint.y,
+      starts: selectedNodes().map((item) => ({ id: item.id, x: item.x, y: item.y }))
     };
+
     window.addEventListener("pointermove", moveNode);
     window.addEventListener("pointerup", endNodeDrag, { once: true });
   }
 
   function moveNode(event) {
     if (!dragState) return;
-    const node = nodeById(dragState.nodeId);
-    if (!node) return;
-    const rect = viewport.getBoundingClientRect();
-    const worldX = (event.clientX - rect.left - view.x) / view.scale;
-    const worldY = (event.clientY - rect.top - view.y) / view.scale;
-    node.x = Math.round(worldX - dragState.offsetX);
-    node.y = Math.round(worldY - dragState.offsetY);
-    const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
-    if (el) {
-      el.style.left = node.x + "px";
-      el.style.top = node.y + "px";
-    }
+    const point = screenToWorld(event.clientX, event.clientY);
+    const dx = point.x - dragState.startX;
+    const dy = point.y - dragState.startY;
+
+    dragState.starts.forEach((startNode) => {
+      const node = nodeById(startNode.id);
+      if (!node) return;
+      node.x = Math.round(startNode.x + dx);
+      node.y = Math.round(startNode.y + dy);
+      const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      if (el) {
+        el.style.left = node.x + "px";
+        el.style.top = node.y + "px";
+      }
+    });
+
     renderEdges();
     renderMinimap();
   }
@@ -854,15 +933,20 @@
       removeEdge(selectedEdgeId);
       return;
     }
-    if (!selectedNodeId) return;
-    const node = nodeById(selectedNodeId);
-    if (!node) return;
-    project.nodes = project.nodes.filter((item) => item.id !== selectedNodeId);
-    project.connections = project.connections.filter((edge) => edge.from.nodeId !== selectedNodeId && edge.to.nodeId !== selectedNodeId);
+    if (!selectedNodeIds.size) return;
+
+    const ids = new Set(selectedNodeIds);
+    const count = ids.size;
+    project.nodes = project.nodes.filter((item) => !ids.has(item.id));
+    project.connections = project.connections.filter((edge) =>
+      !ids.has(edge.from.nodeId) && !ids.has(edge.to.nodeId)
+    );
+
+    selectedNodeIds.clear();
     selectedNodeId = null;
     render();
     markDirty();
-    showToast("Blocco eliminato");
+    showToast(count === 1 ? "Blocco eliminato" : count + " blocchi eliminati");
   }
 
   function defaultNode(type, x, y) {
@@ -937,7 +1021,8 @@
     const offset = project.nodes.length % 5 * 18;
     const node = defaultNode(type, center.x - NODE_WIDTH / 2 + offset, center.y - 100 + offset);
     project.nodes.push(node);
-    selectedNodeId = node.id;
+    selectedNodeIds = new Set([node.id]);
+    syncPrimarySelection();
     selectedEdgeId = null;
     render();
     markDirty();
@@ -951,24 +1036,29 @@
   }
 
   function duplicateSelected() {
-    const source = selectedNode();
-    if (!source) return;
-    const copy = JSON.parse(JSON.stringify(source));
-    copy.id = uid("node");
-    copy.x += 38;
-    copy.y += 38;
-    copy.title += " Copy";
-    const rowMap = {};
-    copy.rows.forEach((item) => {
-      const oldId = item.id;
-      item.id = uid("row");
-      rowMap[oldId] = item.id;
+    const sources = selectedNodes();
+    if (!sources.length) return;
+
+    const newIds = [];
+    sources.forEach((source) => {
+      const copy = JSON.parse(JSON.stringify(source));
+      copy.id = uid("node");
+      copy.x += 38;
+      copy.y += 38;
+      copy.title += " Copy";
+      copy.rows.forEach((item) => {
+        item.id = uid("row");
+      });
+      project.nodes.push(copy);
+      newIds.push(copy.id);
     });
-    project.nodes.push(copy);
-    selectedNodeId = copy.id;
+
+    selectedNodeIds = new Set(newIds);
+    syncPrimarySelection();
+    selectedEdgeId = null;
     render();
     markDirty();
-    showToast("Blocco duplicato");
+    showToast(newIds.length === 1 ? "Blocco duplicato" : newIds.length + " blocchi duplicati");
   }
 
   function fitView() {
@@ -1026,6 +1116,7 @@
       try {
         const imported = normalizeProject(JSON.parse(reader.result));
         project = imported;
+        selectedNodeIds.clear();
         selectedNodeId = null;
         selectedEdgeId = null;
         pendingPort = null;
@@ -1166,6 +1257,118 @@
     setZoom(view.scale * factor, event.clientX, event.clientY);
   }, { passive: false });
 
+  function startMarquee(event) {
+    const rect = viewport.getBoundingClientRect();
+    marqueeState = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      additive: event.ctrlKey || event.metaKey || event.shiftKey,
+      moved: false
+    };
+
+    const box = document.createElement("div");
+    box.className = "selection-marquee";
+    box.id = "selectionMarquee";
+    box.style.left = (event.clientX - rect.left) + "px";
+    box.style.top = (event.clientY - rect.top) + "px";
+    viewport.appendChild(box);
+
+    window.addEventListener("pointermove", moveMarquee);
+    window.addEventListener("pointerup", endMarquee, { once: true });
+  }
+
+  function moveMarquee(event) {
+    if (!marqueeState) return;
+    const rect = viewport.getBoundingClientRect();
+    const left = Math.min(marqueeState.startClientX, event.clientX) - rect.left;
+    const top = Math.min(marqueeState.startClientY, event.clientY) - rect.top;
+    const width = Math.abs(event.clientX - marqueeState.startClientX);
+    const height = Math.abs(event.clientY - marqueeState.startClientY);
+    marqueeState.moved = width > 4 || height > 4;
+
+    const box = $("selectionMarquee");
+    if (!box) return;
+    box.style.left = left + "px";
+    box.style.top = top + "px";
+    box.style.width = width + "px";
+    box.style.height = height + "px";
+  }
+
+  function endMarquee(event) {
+    window.removeEventListener("pointermove", moveMarquee);
+    const state = marqueeState;
+    marqueeState = null;
+
+    const box = $("selectionMarquee");
+    if (box) box.remove();
+    if (!state) return;
+
+    if (!state.moved) {
+      if (!state.additive) clearSelection();
+      return;
+    }
+
+    const a = screenToWorld(state.startClientX, state.startClientY);
+    const b = screenToWorld(event.clientX, event.clientY);
+    const left = Math.min(a.x, b.x);
+    const top = Math.min(a.y, b.y);
+    const right = Math.max(a.x, b.x);
+    const bottom = Math.max(a.y, b.y);
+    const next = state.additive ? new Set(selectedNodeIds) : new Set();
+
+    project.nodes.forEach((node) => {
+      const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      const width = el ? el.offsetWidth : NODE_WIDTH;
+      const height = el ? el.offsetHeight : 160;
+      if (node.x < right && node.x + width > left && node.y < bottom && node.y + height > top) {
+        next.add(node.id);
+      }
+    });
+
+    selectedNodeIds = next;
+    syncPrimarySelection();
+    selectedEdgeId = null;
+    renderNodes();
+    renderEdges();
+    renderInspector();
+    renderMinimap();
+  }
+
+  function startPanelResize(side, event) {
+    if (window.innerWidth <= 850) return;
+    event.preventDefault();
+    event.stopPropagation();
+    panelResizeState = {
+      side: side,
+      startX: event.clientX,
+      startWidth: side === "library" ? panelWidths.library : panelWidths.inspector
+    };
+    document.body.classList.add("resizing-panel");
+    window.addEventListener("pointermove", movePanelResize);
+    window.addEventListener("pointerup", endPanelResize, { once: true });
+  }
+
+  function movePanelResize(event) {
+    if (!panelResizeState) return;
+    const delta = event.clientX - panelResizeState.startX;
+    if (panelResizeState.side === "library") {
+      panelWidths.library = Math.max(180, Math.min(420, panelResizeState.startWidth + delta));
+    } else {
+      panelWidths.inspector = Math.max(240, Math.min(520, panelResizeState.startWidth - delta));
+    }
+    setPanelWidths();
+  }
+
+  function endPanelResize() {
+    window.removeEventListener("pointermove", movePanelResize);
+    panelResizeState = null;
+    document.body.classList.remove("resizing-panel");
+    setPanelWidths();
+  }
+
+  $("libraryResizer").addEventListener("pointerdown", (event) => startPanelResize("library", event));
+  $("inspectorResizer").addEventListener("pointerdown", (event) => startPanelResize("inspector", event));
+
   viewport.addEventListener("pointerdown", (event) => {
     if (event.target !== viewport && event.target !== world && event.target !== nodeLayer && event.target !== edgeLayer) return;
 
@@ -1178,9 +1381,10 @@
       return;
     }
 
-    if (event.button === 0 && event.target !== edgeLayer) {
-      clearSelection();
+    if (event.button === 0) {
+      event.preventDefault();
       if (pendingPort) cancelConnection();
+      startMarquee(event);
     }
   });
 
@@ -1210,6 +1414,18 @@
     if ((event.key === "Delete" || event.key === "Backspace") && !typing) {
       event.preventDefault();
       removeSelected();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a" && !typing) {
+      event.preventDefault();
+      selectedNodeIds = new Set(project.nodes.map((node) => node.id));
+      syncPrimarySelection();
+      selectedEdgeId = null;
+      renderNodes();
+      renderEdges();
+      renderInspector();
+      renderMinimap();
       return;
     }
 
