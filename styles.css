@@ -811,3 +811,32 @@ body.resizing-panel *{
 @media(max-width:850px){
   .flow-node{width:310px}
 }
+
+
+/* Optional advanced inspector */
+.workspace.inspector-collapsed{
+  grid-template-columns:var(--library-width,245px) minmax(0,1fr) 0;
+}
+.workspace.inspector-collapsed .inspector-panel,
+.workspace.inspector-collapsed .inspector-resizer{
+  display:none;
+}
+.inspector-panel.manual-hidden{
+  display:none;
+}
+.node-delete-inline{
+  width:22px;
+  height:22px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:#5f6b81;
+  cursor:pointer;
+}
+.node-delete-inline:hover{
+  background:rgba(255,110,125,.1);
+  color:#ff7e8c;
+}
