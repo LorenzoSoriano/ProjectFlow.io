@@ -933,10 +933,51 @@
     return typeMeta(node.type).label;
   }
 
+  function methodReturnProxy(target, access) {
+    return {
+      id: target.returnPortId,
+      kind: "methodReturn",
+      label: target.returnName || "result",
+      access: access || target.access || target.methodAccess || "public",
+      returnType: target.returnType || "void",
+      returnCollectionKind: target.returnCollectionKind || "single",
+      returnArrayLength: target.returnArrayLength || 0,
+      returnDictionaryKeyType: target.returnDictionaryKeyType || "string"
+    };
+  }
+
+  function parameterProxy(parameter, access) {
+    return Object.assign({}, parameter, {
+      kind: "parameter",
+      label: parameter.name || parameter.label || "value",
+      access: access || parameter.access || "public"
+    });
+  }
+
   function memberByRef(ref) {
     if (!ref || ref.rowId === "__node__") return null;
     const node = nodeById(ref.nodeId);
-    return node ? node.rows.find((item) => item.id === ref.rowId) || null : null;
+    if (!node) return null;
+
+    const direct = node.rows.find((item) => item.id === ref.rowId);
+    if (direct) return direct;
+
+    if (node.type === "function") {
+      ensureFunctionSignature(node, node.methodAccess);
+      const parameter = node.methodParameters.find((item) => item.id === ref.rowId);
+      if (parameter) return parameterProxy(parameter, node.methodAccess);
+      if (ref.rowId === node.returnPortId) return methodReturnProxy(node, node.methodAccess);
+    }
+
+    for (const item of node.rows) {
+      if (item.kind !== "function") continue;
+      ensureFunctionSignature(item, item.access);
+      const parameter = item.methodParameters.find((entry) => entry.id === ref.rowId);
+      if (parameter) return parameterProxy(parameter, item.access);
+      if (ref.rowId === item.returnPortId) return methodReturnProxy(item, item.access);
+    }
+
+    return null;
   }
 
   function firstParameterType(parameters) {
@@ -954,6 +995,8 @@
     if (!item) return "any";
     if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
     if (item.kind === "function") return firstParameterType(item.parameters);
+    if (item.kind === "parameter") return parameterTypeKey(item);
+    if (item.kind === "methodReturn") return methodReturnTypeKey(item);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "input") return normalizedType(item.value);
@@ -965,6 +1008,8 @@
     if (!item) return "any";
     if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
     if (item.kind === "function") return methodReturnTypeKey(item);
+    if (item.kind === "parameter") return parameterTypeKey(item);
+    if (item.kind === "methodReturn") return methodReturnTypeKey(item);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "output") return normalizedType(item.value);
@@ -977,6 +1022,14 @@
     b = normalizedType(b);
     if (a === "any" || b === "any" || a === "value" || b === "value") return true;
     return a === b;
+  }
+
+  function connectionScopeId(ref) {
+    if (!ref) return "";
+    const node = nodeById(ref.nodeId);
+    if (!node) return ref.nodeId || "";
+    if (node.type === "function" && node.ownerClassId) return node.ownerClassId;
+    return node.id;
   }
 
   function normalizeConnectionRefs(a, b) {
@@ -1000,7 +1053,7 @@
       return { ok: false, reason: "Un metodo void non restituisce un dato." };
     }
 
-    if (pair.from.nodeId !== pair.to.nodeId) {
+    if (connectionScopeId(pair.from) !== connectionScopeId(pair.to)) {
       if (fromItem && fromItem.access === "private") {
         return { ok: false, reason: "Un membro private può uscire solo all’interno della propria classe." };
       }
@@ -1078,8 +1131,8 @@
     const node = nodeById(ref.nodeId);
     if (!node) return "Unknown";
     if (ref.rowId === "__node__") return node.title;
-    const item = node.rows.find((rowItem) => rowItem.id === ref.rowId);
-    return item ? item.label : node.title;
+    const item = memberByRef(ref);
+    return item ? (item.label || item.name || node.title) : node.title;
   }
 
   function connectionRelationsForNode(nodeId) {
