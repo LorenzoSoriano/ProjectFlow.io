@@ -806,14 +806,110 @@
     return base;
   }
 
-  function loadProject() {
+  function cloneProjectData(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function readProjectLibrary() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PROJECT_LIBRARY_KEY) || "null");
+      if (saved && Array.isArray(saved.projects)) {
+        return saved.projects
+          .filter((entry) => entry && entry.id && entry.data)
+          .map((entry) => ({
+            id: String(entry.id),
+            name: String(entry.name || entry.data.name || "Untitled Flow"),
+            updatedAt: Number(entry.updatedAt) || Date.now(),
+            createdAt: Number(entry.createdAt) || Number(entry.updatedAt) || Date.now(),
+            data: normalizeProject(entry.data)
+          }));
+      }
+    } catch (error) {
+      console.warn("ProjectFlow: impossibile leggere la libreria progetti.", error);
+    }
+    return [];
+  }
+
+  function persistProjectLibrary() {
+    localStorage.setItem(PROJECT_LIBRARY_KEY, JSON.stringify({
+      version: 1,
+      projects: projectLibrary
+    }));
+  }
+
+  function migrateLegacyProject(projects) {
+    if (projects.length) return projects;
+
+    let legacy = null;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? normalizeProject(JSON.parse(saved)) : sampleProject();
-    } catch (error) {
-      console.warn("ProjectFlow: impossibile leggere il progetto salvato.", error);
-      return sampleProject();
+      if (saved) legacy = normalizeProject(JSON.parse(saved));
+    } catch (error) {}
+
+    const data = legacy || sampleProject();
+    const now = Date.now();
+    const entry = {
+      id: uid("project"),
+      name: data.name || "Game Systems — Concept",
+      createdAt: now,
+      updatedAt: now,
+      data: normalizeProject(data)
+    };
+
+    projects.push(entry);
+    localStorage.setItem(ACTIVE_PROJECT_KEY, entry.id);
+    persistProjectLibrary();
+    return projects;
+  }
+
+  let projectLibrary = migrateLegacyProject(readProjectLibrary());
+
+  function resolveActiveProjectId() {
+    const savedId = localStorage.getItem(ACTIVE_PROJECT_KEY);
+    if (savedId && projectLibrary.some((entry) => entry.id === savedId)) return savedId;
+    return projectLibrary[0] ? projectLibrary[0].id : "";
+  }
+
+  let currentProjectId = resolveActiveProjectId();
+
+  function projectRecordById(id) {
+    return projectLibrary.find((entry) => entry.id === id) || null;
+  }
+
+  function loadProject() {
+    const record = projectRecordById(currentProjectId);
+    if (record) return normalizeProject(cloneProjectData(record.data));
+    return blankProject();
+  }
+
+  function upsertLocalProject(data, id, options) {
+    const now = Date.now();
+    const opts = options || {};
+    const projectId = id || uid("project");
+    let record = projectRecordById(projectId);
+
+    if (!record) {
+      record = {
+        id: projectId,
+        name: data.name || "Untitled Flow",
+        createdAt: opts.createdAt || now,
+        updatedAt: now,
+        data: normalizeProject(cloneProjectData(data))
+      };
+      projectLibrary.unshift(record);
+    } else {
+      record.name = data.name || "Untitled Flow";
+      record.updatedAt = now;
+      record.data = normalizeProject(cloneProjectData(data));
     }
+
+    persistProjectLibrary();
+    return record;
+  }
+
+  function removeLocalProject(id) {
+    projectLibrary = projectLibrary.filter((entry) => entry.id !== id);
+    persistProjectLibrary();
   }
 
   function loadView() {
