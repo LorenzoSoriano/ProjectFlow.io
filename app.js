@@ -1063,52 +1063,7 @@
         body.appendChild(desc);
       }
 
-      if (node.type === "object") {
-        const categoryOrder = UNITY_COMPONENT_CATEGORIES.map((category) => category.id).concat(["scripts", "other"]);
-        const components = node.rows
-          .filter((item) => item.kind === "component")
-          .slice()
-          .sort((a, b) => {
-            const categoryDelta = categoryOrder.indexOf(a.componentCategory) - categoryOrder.indexOf(b.componentCategory);
-            return categoryDelta || a.componentType.localeCompare(b.componentType);
-          });
-
-        const componentActions = [];
-        UNITY_COMPONENT_CATEGORIES.forEach((category) => {
-          const choices = category.components.filter((type) => type !== "Transform");
-          if (!choices.length) return;
-          componentActions.push({ header: true, label: category.label });
-          choices.forEach((type) => componentActions.push({
-            label: type,
-            value: "component:" + type
-          }));
-        });
-
-        const scripts = attachableScriptNodes().filter((script) => script.id !== node.id);
-        if (scripts.length) {
-          componentActions.push({ header: true, label: "SCRIPTS" });
-          scripts.forEach((script) => componentActions.push({
-            label: script.title,
-            value: "script:" + script.id
-          }));
-        }
-
-        appendSection("COMPONENTS", components, componentActions);
-
-        const dataMembers = node.rows.filter((item) => item.kind === "variable" || item.kind === "property");
-        appendSection("DATA", dataMembers, [
-          { label: "Single variable", value: "variable" },
-          { label: "Array variable", value: "arrayVariable" },
-          { label: "List variable", value: "listVariable" },
-          { label: "Dictionary variable", value: "dictionaryVariable" }
-        ]);
-
-        const methods = node.rows.filter((item) => item.kind === "function");
-        if (methods.length) appendSection("LEGACY LOGIC", methods, []);
-
-        const events = node.rows.filter((item) => item.kind === "unityEvent");
-        if (events.length) appendSection("EVENTS", events, []);
-      } else if (node.type === "class") {
+      if (node.type === "class") {
         const classMeta = document.createElement("div");
         classMeta.className = "node-meta-inline";
         classMeta.append(
@@ -1793,7 +1748,52 @@
         body.appendChild(section);
       };
 
-      if (node.type === "class") {
+      if (node.type === "object") {
+        const categoryOrder = UNITY_COMPONENT_CATEGORIES.map((category) => category.id).concat(["scripts", "other"]);
+        const components = node.rows
+          .filter((item) => item.kind === "component")
+          .slice()
+          .sort((a, b) => {
+            const categoryDelta = categoryOrder.indexOf(a.componentCategory) - categoryOrder.indexOf(b.componentCategory);
+            return categoryDelta || a.componentType.localeCompare(b.componentType);
+          });
+
+        const componentActions = [];
+        UNITY_COMPONENT_CATEGORIES.forEach((category) => {
+          const choices = category.components.filter((type) => type !== "Transform");
+          if (!choices.length) return;
+          componentActions.push({ header: true, label: category.label });
+          choices.forEach((type) => componentActions.push({
+            label: type,
+            value: "component:" + type
+          }));
+        });
+
+        const scripts = attachableScriptNodes();
+        if (scripts.length) {
+          componentActions.push({ header: true, label: "SCRIPTS" });
+          scripts.forEach((script) => componentActions.push({
+            label: script.title,
+            value: "script:" + script.id
+          }));
+        }
+
+        appendSection("COMPONENTS", components, componentActions);
+
+        const dataMembers = node.rows.filter((item) => item.kind === "variable" || item.kind === "property");
+        appendSection("DATA", dataMembers, [
+          { label: "Single variable", value: "variable" },
+          { label: "Array variable", value: "arrayVariable" },
+          { label: "List variable", value: "listVariable" },
+          { label: "Dictionary variable", value: "dictionaryVariable" }
+        ]);
+
+        const methods = node.rows.filter((item) => item.kind === "function");
+        if (methods.length) appendSection("LEGACY LOGIC", methods, []);
+
+        const events = node.rows.filter((item) => item.kind === "unityEvent");
+        if (events.length) appendSection("EVENTS", events, []);
+      } else if (node.type === "class") {
         const classReferences = publicClassNodes()
           .filter((classNode) => classNode.id !== node.id)
           .map((classNode) => ({ label: "Reference · " + classNode.title, value: "class:" + classNode.title }));
