@@ -486,6 +486,89 @@
     return typeMeta(node.type).label;
   }
 
+  function memberByRef(ref) {
+    if (!ref || ref.rowId === "__node__") return null;
+    const node = nodeById(ref.nodeId);
+    return node ? node.rows.find((item) => item.id === ref.rowId) || null : null;
+  }
+
+  function firstParameterType(parameters) {
+    const first = String(parameters || "").split(",")[0].trim();
+    if (!first) return "any";
+    return first.split(/\s+/)[0] || "any";
+  }
+
+  function normalizedType(value) {
+    const type = String(value || "any").trim();
+    return type || "any";
+  }
+
+  function memberInputType(item) {
+    if (!item) return "any";
+    if (item.kind === "variable" || item.kind === "property") return normalizedType(item.dataType);
+    if (item.kind === "function") return firstParameterType(item.parameters);
+    if (item.kind === "unityEvent") return normalizedType(item.payloadType);
+    if (item.kind === "input") return normalizedType(item.value);
+    if (item.kind === "condition") return "any";
+    return "any";
+  }
+
+  function memberOutputType(item) {
+    if (!item) return "any";
+    if (item.kind === "variable" || item.kind === "property") return normalizedType(item.dataType);
+    if (item.kind === "function") return normalizedType(item.returnType);
+    if (item.kind === "unityEvent") return normalizedType(item.payloadType);
+    if (item.kind === "output") return normalizedType(item.value);
+    if (item.kind === "condition") return normalizedType(item.value || "bool");
+    return "any";
+  }
+
+  function sameType(a, b) {
+    a = normalizedType(a);
+    b = normalizedType(b);
+    if (a === "any" || b === "any" || a === "value" || b === "value") return true;
+    return a === b;
+  }
+
+  function normalizeConnectionRefs(a, b) {
+    let from = a;
+    let to = b;
+    if (from.side === "in") {
+      const temp = from;
+      from = to;
+      to = temp;
+    }
+    return { from, to };
+  }
+
+  function connectionCheck(a, b) {
+    if (!a || !b || a.side === b.side) return { ok: false, reason: "Servono un output e un input." };
+    const pair = normalizeConnectionRefs(a, b);
+    const fromItem = memberByRef(pair.from);
+    const toItem = memberByRef(pair.to);
+
+    if (fromItem && fromItem.kind === "function" && normalizedType(fromItem.returnType) === "void") {
+      return { ok: false, reason: "Un metodo void non restituisce un dato." };
+    }
+
+    if (pair.from.nodeId !== pair.to.nodeId) {
+      if (fromItem && fromItem.access === "private") {
+        return { ok: false, reason: "Un membro private può uscire solo all’interno della propria classe." };
+      }
+      if (toItem && toItem.access === "private") {
+        return { ok: false, reason: "Un membro private può ricevere dati solo all’interno della propria classe." };
+      }
+    }
+
+    const outputType = memberOutputType(fromItem);
+    const inputType = memberInputType(toItem);
+    if (!sameType(outputType, inputType)) {
+      return { ok: false, reason: "Tipo incompatibile: " + outputType + " → " + inputType + "." };
+    }
+
+    return { ok: true, from: pair.from, to: pair.to, outputType, inputType };
+  }
+
   function makePort(nodeId, rowId, side, connectedPorts) {
     const port = document.createElement("button");
     port.className = "port " + side;
@@ -499,6 +582,10 @@
     port.setAttribute("aria-label", (side === "in" ? "Input" : "Output") + " " + rowId);
     if (pendingPort && pendingPort.nodeId === nodeId && pendingPort.rowId === rowId && pendingPort.side === side) {
       port.classList.add("pending");
+    } else if (pendingPort && pendingPort.side !== side) {
+      const check = connectionCheck(pendingPort, { nodeId: nodeId, rowId: rowId, side: side });
+      port.classList.add(check.ok ? "compatible" : "incompatible");
+      if (!check.ok) port.title = check.reason;
     }
     port.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -724,24 +811,108 @@
     return { x: node.x + local.x, y: node.y + local.y };
   }
 
-  function curveCommand(a, b) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const curve = Math.max(55, Math.min(180, Math.abs(dx) * 0.45 + Math.abs(dy) * 0.08));
-    const direction = dx >= 0 ? 1 : -1;
-    return " C " +
-      (a.x + curve * direction) + " " + a.y + ", " +
-      (b.x - curve * direction) + " " + b.y + ", " +
-      b.x + " " + b.y;
+  function pushRoutePoint(points, point) {
+    const last = points[points.length - 1];
+    if (!last || last.x !== point.x || last.y !== point.y) points.push(point);
+  }
+
+  function routeLeg(a, b) {
+    const points = [];
+    const lead = 34;
+    pushRoutePoint(points, { x: a.x, y: a.y });
+
+    const forward = b.x >= a.x;
+    const startLead = { x: a.x + (forward ? lead : -lead), y: a.y };
+    const endLead = { x: b.x - (forward ? lead : -lead), y: b.y };
+    pushRoutePoint(points, startLead);
+
+    if (forward && endLead.x - startLead.x >= 54) {
+      const midX = Math.round((startLead.x + endLead.x) / 2);
+      pushRoutePoint(points, { x: midX, y: startLead.y });
+      pushRoutePoint(points, { x: midX, y: endLead.y });
+    } else {
+      const detour = Math.max(a.x, b.x) + Math.max(78, Math.min(150, Math.abs(b.y - a.y) * 0.28 + 60));
+      pushRoutePoint(points, { x: detour, y: startLead.y });
+      pushRoutePoint(points, { x: detour, y: endLead.y });
+    }
+
+    pushRoutePoint(points, endLead);
+    pushRoutePoint(points, { x: b.x, y: b.y });
+    return points;
+  }
+
+  function simplifyRoute(points) {
+    const cleaned = [];
+    points.forEach((point) => {
+      const last = cleaned[cleaned.length - 1];
+      if (!last || last.x !== point.x || last.y !== point.y) cleaned.push(point);
+    });
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 1; i < cleaned.length - 1; i += 1) {
+        const a = cleaned[i - 1];
+        const b = cleaned[i];
+        const c = cleaned[i + 1];
+        if ((a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y)) {
+          cleaned.splice(i, 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+    return cleaned;
+  }
+
+  function routePointsFor(rawPoints) {
+    if (!rawPoints || rawPoints.length < 2) return [];
+    const points = [];
+    for (let i = 0; i < rawPoints.length - 1; i += 1) {
+      const leg = routeLeg(rawPoints[i], rawPoints[i + 1]);
+      leg.forEach((point, index) => {
+        if (i > 0 && index === 0) return;
+        pushRoutePoint(points, point);
+      });
+    }
+    return simplifyRoute(points);
+  }
+
+  function roundedOrthogonalPath(points) {
+    if (!points.length) return "";
+    if (points.length === 1) return "M " + points[0].x + " " + points[0].y;
+
+    let d = "M " + points[0].x + " " + points[0].y;
+    const radiusLimit = 13;
+
+    for (let i = 1; i < points.length - 1; i += 1) {
+      const prev = points[i - 1];
+      const cur = points[i];
+      const next = points[i + 1];
+      const lenA = Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y);
+      const lenB = Math.abs(next.x - cur.x) + Math.abs(next.y - cur.y);
+      const radius = Math.max(0, Math.min(radiusLimit, lenA / 2, lenB / 2));
+
+      const before = {
+        x: cur.x + (prev.x === cur.x ? 0 : (prev.x < cur.x ? -radius : radius)),
+        y: cur.y + (prev.y === cur.y ? 0 : (prev.y < cur.y ? -radius : radius))
+      };
+      const after = {
+        x: cur.x + (next.x === cur.x ? 0 : (next.x < cur.x ? -radius : radius)),
+        y: cur.y + (next.y === cur.y ? 0 : (next.y < cur.y ? -radius : radius))
+      };
+
+      d += " L " + before.x + " " + before.y;
+      if (radius > 0) d += " Q " + cur.x + " " + cur.y + " " + after.x + " " + after.y;
+    }
+
+    const last = points[points.length - 1];
+    d += " L " + last.x + " " + last.y;
+    return d;
   }
 
   function pathForRoute(points) {
-    if (!points || points.length < 2) return "";
-    let d = "M " + points[0].x + " " + points[0].y;
-    for (let i = 0; i < points.length - 1; i += 1) {
-      d += curveCommand(points[i], points[i + 1]);
-    }
-    return d;
+    return roundedOrthogonalPath(routePointsFor(points));
   }
 
   function screenToWorld(clientX, clientY) {
@@ -823,8 +994,8 @@
     if (!point) return;
 
     const worldPoint = screenToWorld(event.clientX, event.clientY);
-    point.x = Math.round(worldPoint.x);
-    point.y = Math.round(worldPoint.y);
+    point.x = Math.round(worldPoint.x / 10) * 10;
+    point.y = Math.round(worldPoint.y / 10) * 10;
     renderEdges();
   }
 
@@ -1459,6 +1630,11 @@
 
   function handlePortClick(ref) {
     if (!pendingPort) {
+      const item = memberByRef(ref);
+      if (ref.side === "out" && item && item.kind === "function" && normalizedType(item.returnType) === "void") {
+        showToast("Questo metodo è void: non ha un output dati.");
+        return;
+      }
       pendingPort = ref;
       $("connectionBanner").classList.add("show");
       renderNodes();
@@ -1476,29 +1652,29 @@
       return;
     }
 
-    let from = pendingPort;
-    let to = ref;
-    if (from.side === "in") {
-      const temp = from;
-      from = to;
-      to = temp;
+    const check = connectionCheck(pendingPort, ref);
+    if (!check.ok) {
+      showToast(check.reason);
+      renderNodes();
+      return;
     }
 
     const duplicate = project.connections.some((edge) =>
-      edge.from.nodeId === from.nodeId &&
-      edge.from.rowId === from.rowId &&
-      edge.to.nodeId === to.nodeId &&
-      edge.to.rowId === to.rowId
+      edge.from.nodeId === check.from.nodeId &&
+      edge.from.rowId === check.from.rowId &&
+      edge.to.nodeId === check.to.nodeId &&
+      edge.to.rowId === check.to.rowId
     );
 
     if (!duplicate) {
       project.connections.push({
         id: uid("edge"),
-        from: { nodeId: from.nodeId, rowId: from.rowId, side: "out" },
-        to: { nodeId: to.nodeId, rowId: to.rowId, side: "in" },
-        points: []
+        from: { nodeId: check.from.nodeId, rowId: check.from.rowId, side: "out" },
+        to: { nodeId: check.to.nodeId, rowId: check.to.rowId, side: "in" },
+        points: [],
+        dataType: check.outputType
       });
-      showToast("Collegamento creato");
+      showToast(check.outputType === "any" ? "Collegamento creato" : "Collegamento " + check.outputType + " creato");
       markDirty();
     }
 
