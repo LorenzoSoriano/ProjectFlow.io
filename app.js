@@ -2800,7 +2800,24 @@
         mergeSharedRecord(remote);
       });
 
+      const revokedActive = projectLibrary.some((entry) =>
+        entry.id === currentProjectId &&
+        entry.sharedProjectId &&
+        entry.sharedRole === "editor" &&
+        !sharedIds.has(entry.sharedProjectId)
+      );
+      projectLibrary = projectLibrary.filter((entry) =>
+        !(entry.sharedProjectId && entry.sharedRole === "editor" && !sharedIds.has(entry.sharedProjectId))
+      );
+
       persistProjectLibrary();
+
+      if (revokedActive && $("editorView") && !$("editorView").classList.contains("hidden")) {
+        setActiveProjectId("");
+        stopSharedProjectSession();
+        showProjectHome("projects");
+        showToast("L'accesso al progetto condiviso è stato revocato");
+      }
 
       for (const local of projectLibrary) {
         if (local.sharedProjectId) {
@@ -7186,6 +7203,7 @@
     renderInspector();
     updateHistoryUI();
     setWorldTransform();
+    drawSketch();
   }
 
   function selectNode(id, event, forceSingle) {
