@@ -107,3 +107,22 @@ Le regole incluse limitano lettura e scrittura al proprietario autenticato.
 ## Editor layout v2.3
 
 The fixed left library has been removed. **New Block** now opens a searchable, closable drawer on the right side of the canvas. The drawer owns the complete block catalog, including Unity component presets, so the canvas stays wider while block discovery remains available on demand.
+
+
+## Collaboration v2.4
+
+ProjectFlow supports persistent project sharing through Firebase Authentication and Cloud Firestore.
+
+- The owner invites a collaborator by Google-account email.
+- Invitations remain valid when the owner closes the browser; access ends only when the owner revokes the invite.
+- A share URL contains the shared project ID, but the URL alone does not grant access: Firebase Authentication must match the invited email.
+- Shared projects synchronize edits through a Firestore realtime listener.
+- Presence is stored under `sharedProjects/{projectId}/presence/{uid}` so active collaborators can see each other's cursor and current activity.
+- Invitations are kept outside the shared project data. A collaborator does not receive the list of other invited emails.
+- The owner-only invite index lives under `sharedProjects/{projectId}/invites`; the recipient-specific access document lives under `shareInvites/{email}/projects/{projectId}`.
+
+The **Sketch** drawer stores freehand strokes in the project document. Sketch strokes therefore participate in autosave, Undo/Redo, export/import, and shared-project synchronization.
+
+### Firestore rules
+
+After updating the site code, deploy the current `firestore.rules` to the Firebase project. The rules preserve private user projects under `users/{uid}/projects` and add restricted access for shared projects, recipient-specific invites, and realtime presence.
