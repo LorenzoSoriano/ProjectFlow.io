@@ -3823,6 +3823,19 @@
   function pathForRoute(points) {
     return roundedOrthogonalPath(routePointsFor(points));
   }
+  function internalConnectionPath(a, b, nodeId) {
+    const rect = getNodeWorldRect(nodeId);
+    if (!rect) return pathForRoute([a, b]);
+
+    const gutterX = rect.x + rect.width - 22;
+    return roundedOrthogonalPath(simplifyRoute([
+      { x: a.x, y: a.y },
+      { x: gutterX, y: a.y },
+      { x: gutterX, y: b.y },
+      { x: b.x, y: b.y }
+    ]));
+  }
+
 
   function screenToWorld(clientX, clientY) {
     const rect = viewport.getBoundingClientRect();
@@ -3937,7 +3950,10 @@
       if (!Array.isArray(edge.points)) edge.points = [];
 
       const route = [a].concat(edge.points, [b]);
-      const routePath = pathForRoute(route);
+      const isInternalEdge = edge.from.nodeId === edge.to.nodeId && edge.points.length === 0;
+      const routePath = isInternalEdge
+        ? internalConnectionPath(a, b, edge.from.nodeId)
+        : pathForRoute(route);
       const sourceNode = nodeById(edge.from.nodeId);
       const sourceMember = memberByRef(edge.from);
       const edgeType = edge.dataType || memberOutputType(sourceMember);
@@ -3949,12 +3965,12 @@
 
       const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
       glow.setAttribute("d", routePath);
-      glow.setAttribute("class", "edge-glow" + (isFlowEdge ? " flow-edge" : ""));
+      glow.setAttribute("class", "edge-glow" + (isFlowEdge ? " flow-edge" : "") + (isInternalEdge ? " internal-edge" : ""));
       edgeLayer.appendChild(glow);
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", routePath);
-      path.setAttribute("class", "edge" + (isFlowEdge ? " flow-edge" : "") + (selectedEdgeId === edge.id ? " selected" : ""));
+      path.setAttribute("class", "edge" + (isFlowEdge ? " flow-edge" : "") + (isInternalEdge ? " internal-edge" : "") + (selectedEdgeId === edge.id ? " selected" : ""));
       path.style.stroke = edgeColor;
       path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
       edgeLayer.appendChild(path);
