@@ -1516,8 +1516,17 @@
   function saveProject(showMessage) {
     project.name = $("projectName").value.trim() || "Untitled Flow";
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-    $("saveStatus").textContent = "Salvato localmente";
-    if (showMessage) showToast("Progetto salvato nel browser");
+
+    const record = upsertLocalProject(project, currentProjectId || uid("project"));
+    setActiveProjectId(record.id);
+    queueCloudSave(record);
+
+    $("saveStatus").textContent = cloudState.user ? "Salvato · sync cloud" : "Salvato localmente";
+    if ($("projectHome") && !$("projectHome").classList.contains("hidden")) renderProjectLibrary();
+
+    if (showMessage) {
+      showToast(cloudState.user ? "Progetto salvato e sincronizzato" : "Progetto salvato nel browser");
+    }
   }
 
   function showToast(message) {
