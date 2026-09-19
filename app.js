@@ -34,6 +34,7 @@
   const nodeLayer = $("nodeLayer");
   const edgeLayer = $("edgeLayer");
   const groupLayer = $("groupLayer");
+  const collaborationLayer = $("collaborationLayer");
   const viewport = $("canvasViewport");
   const world = $("world");
 
@@ -966,6 +967,23 @@
     if (!Array.isArray(base.nodes)) base.nodes = [];
     if (!Array.isArray(base.connections)) base.connections = [];
     if (!Array.isArray(base.groups)) base.groups = [];
+    if (!base.sketch || typeof base.sketch !== "object") base.sketch = { strokes: [] };
+    if (!Array.isArray(base.sketch.strokes)) base.sketch.strokes = [];
+    base.sketch.strokes = base.sketch.strokes
+      .filter((stroke) => stroke && Array.isArray(stroke.points) && stroke.points.length > 1)
+      .map((stroke) => ({
+        id: stroke.id || uid("stroke"),
+        color: typeof stroke.color === "string" ? stroke.color : "#9fb7ff",
+        size: Math.max(1, Math.min(10, Number(stroke.size) || 3)),
+        points: stroke.points
+          .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
+          .map((point) => ({
+            x: Math.max(0, Math.min(1, point.x)),
+            y: Math.max(0, Math.min(1, point.y))
+          }))
+      }))
+      .filter((stroke) => stroke.points.length > 1);
+
     base.connections.forEach((edge) => {
       if (!edge.id) edge.id = uid("edge");
       if (!Array.isArray(edge.points)) edge.points = [];
@@ -1018,6 +1036,11 @@
             name: String(entry.name || entry.data.name || "Untitled Flow"),
             updatedAt: Number(entry.updatedAt) || Date.now(),
             createdAt: Number(entry.createdAt) || Number(entry.updatedAt) || Date.now(),
+            sharedProjectId: entry.sharedProjectId ? String(entry.sharedProjectId) : "",
+            sharedRole: entry.sharedRole ? String(entry.sharedRole) : "",
+            ownerId: entry.ownerId ? String(entry.ownerId) : "",
+            ownerName: entry.ownerName ? String(entry.ownerName) : "",
+            ownerEmail: entry.ownerEmail ? String(entry.ownerEmail) : "",
             data: normalizeProject(entry.data)
           }));
       }
@@ -1093,14 +1116,24 @@
         id: projectId,
         name: data.name || "Untitled Flow",
         createdAt: opts.createdAt || now,
-        updatedAt: now,
+        updatedAt: Number(opts.updatedAt) || now,
+        sharedProjectId: opts.sharedProjectId || "",
+        sharedRole: opts.sharedRole || "",
+        ownerId: opts.ownerId || "",
+        ownerName: opts.ownerName || "",
+        ownerEmail: opts.ownerEmail || "",
         data: normalizeProject(cloneProjectData(data))
       };
       projectLibrary.unshift(record);
     } else {
       record.name = data.name || "Untitled Flow";
-      record.updatedAt = now;
+      record.updatedAt = Number(opts.updatedAt) || now;
       record.data = normalizeProject(cloneProjectData(data));
+      if (opts.sharedProjectId !== undefined) record.sharedProjectId = opts.sharedProjectId || "";
+      if (opts.sharedRole !== undefined) record.sharedRole = opts.sharedRole || "";
+      if (opts.ownerId !== undefined) record.ownerId = opts.ownerId || "";
+      if (opts.ownerName !== undefined) record.ownerName = opts.ownerName || "";
+      if (opts.ownerEmail !== undefined) record.ownerEmail = opts.ownerEmail || "";
     }
 
     persistProjectLibrary();
@@ -1162,7 +1195,18 @@
     provider: null,
     api: null,
     saveTimer: null,
-    accountAnchor: null
+    accountAnchor: null,
+    sharedProjectId: "",
+    sharedProjectUnsubscribe: null,
+    presenceUnsubscribe: null,
+    presenceHeartbeat: null,
+    presenceWriteTimer: null,
+    presenceCursor: null,
+    presenceActivity: "Attivo",
+    presenceLastWrite: 0,
+    remotePresence: new Map(),
+    applyingRemote: false,
+    sharedMeta: null
   };
 
   function historySnapshot() {
