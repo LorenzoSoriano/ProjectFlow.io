@@ -19,6 +19,7 @@
     class: { label: "Classe", icon: "C", color: "#42d4df" },
     function: { label: "Funzione", icon: "ƒ", color: "#55d69e" },
     enum: { label: "Enum", icon: "E", color: "#c58cff" },
+    enumSwitch: { label: "Switch Enum", icon: "⇆", color: "#b893ff" },
     event: { label: "Evento", icon: "⚡", color: "#ffcf66" },
     action: { label: "Azione", icon: "▶", color: "#6fe0a7" },
     state: { label: "Stato", icon: "S", color: "#72b5ff" },
@@ -375,6 +376,38 @@
     return enumNodes().find((node) => node.title === name) || null;
   }
 
+  function syncEnumSwitchNode(node) {
+    if (!node || node.type !== "enumSwitch") return;
+    const selectedEnum = enumByName(node.switchEnumType);
+
+    const enter = node.rows.find((item) => item.kind === "flowIn") || row("Enter", "", "flowIn");
+    const selector = node.rows.find((item) => item.kind === "input") || row("Value", node.switchEnumType || "value", "input");
+    selector.label = "Value";
+    selector.value = selectedEnum ? selectedEnum.title : (node.switchEnumType || "value");
+
+    const outputs = [];
+    if (selectedEnum) {
+      selectedEnum.enumValues.forEach((entry) => {
+        outputs.push({
+          id: "case_" + entry.id,
+          label: entry.name,
+          value: "",
+          kind: "flowOut",
+          enumValueId: entry.id
+        });
+      });
+    }
+
+    const defaultRow = node.rows.find((item) => item.id === "enum_switch_default") || {
+      id: "enum_switch_default",
+      label: "Default",
+      value: "",
+      kind: "flowOut"
+    };
+
+    node.rows = [enter, selector].concat(outputs, [defaultRow]);
+  }
+
   function componentRow(componentType, category, source, extra) {
     return row(componentType || "Component", "", "component", Object.assign({
       componentType: componentType || "Component",
@@ -536,6 +569,11 @@
         name: item && typeof item.name === "string" ? item.name : "Value" + index,
         value: item && typeof item.value === "number" ? item.value : index
       }));
+    }
+
+    if (node.type === "enumSwitch") {
+      if (typeof node.switchEnumType !== "string") node.switchEnumType = enumNodes()[0] ? enumNodes()[0].title : "";
+      syncEnumSwitchNode(node);
     }
 
     if (node.type === "event") {
@@ -987,6 +1025,9 @@
     }
     if (node.type === "enum") {
       return (node.enumFlags ? "[Flags] · " : "") + node.enumUnderlyingType + " · " + node.enumValues.length + " values";
+    }
+    if (node.type === "enumSwitch") {
+      return "FLOW SWITCH · " + (node.switchEnumType || "NO ENUM");
     }
     if (node.type === "event") {
       return "FLOW EVENT · " + String(node.eventKind || "custom").toUpperCase();
@@ -4227,6 +4268,17 @@
             enumValue("Active", 2)
           ]
         }
+      },
+      enumSwitch: {
+        title: "Switch Enum",
+        description: "Dirama il FLOW in base al valore di un enum.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Value", "value", "input"),
+          { id: "enum_switch_default", label: "Default", value: "", kind: "flowOut" }
+        ],
+        pseudo: "",
+        extra: { switchEnumType: "" }
       },
       event: {
         title: "Gameplay Event",
