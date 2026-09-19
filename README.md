@@ -102,3 +102,8 @@ users/{uid}/projects/{projectId}
 ```
 
 Le regole incluse limitano lettura e scrittura al proprietario autenticato.
+
+
+## Editor layout v2.3
+
+The fixed left library has been removed. **New Block** now opens a searchable, closable drawer on the right side of the canvas. The drawer owns the complete block catalog, including Unity component presets, so the canvas stays wider while block discovery remains available on demand.
