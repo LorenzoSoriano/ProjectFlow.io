@@ -1684,3 +1684,194 @@ body.resizing-panel *{
 .component-category-label{
   display:none;
 }
+
+
+/* Drill-down component picker and custom scroll v1.1 */
+.section-add-popup.fan-popup{
+  width:286px;
+  max-height:none;
+  overflow:visible;
+  padding:9px;
+}
+.section-add-popup.fan-popup.needs-scroll{
+  max-height:var(--popup-max-height,390px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:6px;
+}
+.fan-home-view{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.fan-detail-view{
+  display:none;
+}
+.fan-popup.detail-mode .fan-home-view{
+  display:none;
+}
+.fan-popup.detail-mode .fan-detail-view{
+  display:block;
+}
+.fan-detail-header{
+  position:sticky;
+  top:-9px;
+  z-index:5;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  margin:-2px -2px 8px;
+  padding:5px 2px 8px;
+  border-bottom:1px solid #253149;
+  background:linear-gradient(180deg,#121a2a 82%,rgba(18,26,42,.92));
+}
+.fan-back-button{
+  height:30px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:0 8px;
+  border:1px solid #2c3850;
+  border-radius:8px;
+  background:#0b121e;
+  color:#8896ad;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+.fan-back-button:hover{
+  border-color:#514d8e;
+  background:rgba(124,108,255,.08);
+  color:#c9c2ff;
+}
+.fan-back-button>span:first-child{
+  color:#9387ff;
+  font-size:13px;
+}
+.fan-detail-title{
+  overflow:hidden;
+  color:#b8c3d5;
+  font-size:10px;
+  letter-spacing:.8px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fan-detail-options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+}
+.fan-category{
+  min-height:42px;
+  transform:none!important;
+}
+.fan-category-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  text-align:left;
+}
+.fan-category-copy strong{
+  color:#aeb9cb;
+  font-size:10px;
+  letter-spacing:.6px;
+}
+.fan-category-copy small{
+  color:#617087;
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:0;
+}
+.fan-category-arrow{
+  color:#8175ff;
+  font-size:16px;
+  line-height:1;
+}
+.fan-option{
+  min-height:34px;
+  font-size:10px;
+}
+.fan-group,
+.fan-options{
+  display:none!important;
+}
+
+/* Scroll appears only when content actually overflows. */
+.section-add-popup{
+  scrollbar-gutter:auto;
+}
+.section-add-popup:not(.fan-popup){
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.section-member-list.scrollable{
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.type-picker-popup{
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.library-panel,
+.inspector-panel{
+  scrollbar-gutter:auto;
+}
+
+/* Site scrollbar */
+.section-add-popup,
+.type-picker-popup,
+.section-member-list.scrollable,
+.library-panel,
+.inspector-scroll,
+.inspector-panel{
+  scrollbar-width:thin;
+  scrollbar-color:#46536f #0b111c;
+}
+.section-add-popup::-webkit-scrollbar,
+.type-picker-popup::-webkit-scrollbar,
+.section-member-list.scrollable::-webkit-scrollbar,
+.library-panel::-webkit-scrollbar,
+.inspector-scroll::-webkit-scrollbar,
+.inspector-panel::-webkit-scrollbar{
+  width:8px;
+  height:8px;
+}
+.section-add-popup::-webkit-scrollbar-track,
+.type-picker-popup::-webkit-scrollbar-track,
+.section-member-list.scrollable::-webkit-scrollbar-track,
+.library-panel::-webkit-scrollbar-track,
+.inspector-scroll::-webkit-scrollbar-track,
+.inspector-panel::-webkit-scrollbar-track{
+  background:#0b111c;
+  border-radius:999px;
+}
+.section-add-popup::-webkit-scrollbar-thumb,
+.type-picker-popup::-webkit-scrollbar-thumb,
+.section-member-list.scrollable::-webkit-scrollbar-thumb,
+.library-panel::-webkit-scrollbar-thumb,
+.inspector-scroll::-webkit-scrollbar-thumb,
+.inspector-panel::-webkit-scrollbar-thumb{
+  min-height:28px;
+  border:2px solid #0b111c;
+  border-radius:999px;
+  background:linear-gradient(180deg,#525f7b,#39465f);
+}
+.section-add-popup::-webkit-scrollbar-thumb:hover,
+.type-picker-popup::-webkit-scrollbar-thumb:hover,
+.section-member-list.scrollable::-webkit-scrollbar-thumb:hover,
+.library-panel::-webkit-scrollbar-thumb:hover,
+.inspector-scroll::-webkit-scrollbar-thumb:hover,
+.inspector-panel::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,#6c65a7,#4c5278);
+}
+
+/* Component category header should sit before, not over, its rows. */
+.component-category-toggle{
+  position:relative;
+  top:auto;
+}
+.component-category-items{
+  position:relative;
+}
