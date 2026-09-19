@@ -1658,6 +1658,26 @@
         body.appendChild(classMeta);
       }
 
+      if (node.type === "enumSwitch") {
+        syncEnumSwitchNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        const enumOptions = enumNodes().map((entry) => [entry.title, entry.title]);
+        if (enumOptions.length) {
+          meta.appendChild(compactSelect(node.switchEnumType, enumOptions, (value) => {
+            node.switchEnumType = value;
+            syncEnumSwitchNode(node);
+            rerenderNode();
+          }, "node-meta-select"));
+        } else {
+          const warning = document.createElement("div");
+          warning.className = "gameplay-meta-warning";
+          warning.textContent = "Crea prima un Enum";
+          meta.appendChild(warning);
+        }
+        body.appendChild(meta);
+      }
+
       if (node.type === "event") {
         const meta = document.createElement("div");
         meta.className = "node-meta-inline gameplay-meta-inline";
@@ -2498,6 +2518,10 @@
           node.rows.push(method);
         }
         if (action === "event") node.rows.push(eventRow("OnEvent", "void"));
+        if (action === "dataInput") node.rows.push(row("input" + (node.rows.filter((item) => item.kind === "input").length + 1), "int", "input"));
+        if (action === "dataOutput") node.rows.push(row("output" + (node.rows.filter((item) => item.kind === "output").length + 1), "int", "output"));
+        if (action === "flowInput") node.rows.push(row("Enter", "", "flowIn"));
+        if (action === "flowOutput") node.rows.push(row("Next" + (node.rows.filter((item) => item.kind === "flowOut").length + 1), "", "flowOut"));
         if (action.startsWith("component:")) {
           const componentType = action.slice("component:".length);
           if (componentType === "Transform" && node.rows.some((item) => item.kind === "component" && item.componentType === "Transform")) {
@@ -2874,7 +2898,40 @@
         body.appendChild(section);
       };
 
-      if (node.type === "enum") {
+      if (node.type === "enumSwitch") {
+        syncEnumSwitchNode(node);
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
+        appendSection("VALUE", node.rows.filter((item) => item.kind === "input"), []);
+      } else if (node.type === "event") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowOut" || item.kind === "flowIn"), []);
+        appendSection("DATA OUT", node.rows.filter((item) => item.kind === "output"), [
+          { label: "Data Output", value: "dataOutput" }
+        ]);
+      } else if (node.type === "action") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), [
+          { label: "Flow Output", value: "flowOutput" }
+        ]);
+        appendSection("DATA IN", node.rows.filter((item) => item.kind === "input"), [
+          { label: "Data Input", value: "dataInput" }
+        ]);
+        appendSection("DATA OUT", node.rows.filter((item) => item.kind === "output"), [
+          { label: "Data Output", value: "dataOutput" }
+        ]);
+      } else if (node.type === "state") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), [
+          { label: "Transition", value: "flowOutput" }
+        ]);
+        appendSection("DATA", node.rows.filter((item) => item.kind === "input" || item.kind === "output"), [
+          { label: "Data Input", value: "dataInput" },
+          { label: "Data Output", value: "dataOutput" }
+        ]);
+      } else if (node.type === "condition") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
+        appendSection("DATA IN", node.rows.filter((item) => item.kind === "input"), [
+          { label: "Data Input", value: "dataInput" }
+        ]);
+        appendSection("RESULT", node.rows.filter((item) => item.kind === "output"), []);
+      } else if (node.type === "enum") {
         const enumMeta = document.createElement("div");
         enumMeta.className = "enum-meta-row";
         enumMeta.append(
