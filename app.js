@@ -7926,6 +7926,68 @@
     renderMinimap();
   }
 
+  function renderedNodeBounds(node) {
+    const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+    const width = element && element.offsetWidth > 0 ? element.offsetWidth : nodeWidthFor(node);
+    const fallbackHeight = node.type === "sketch"
+      ? Math.max(260, Number(node.sketchHeight || 320) + 95)
+      : 220;
+    const height = element && element.offsetHeight > 0 ? element.offsetHeight : fallbackHeight;
+    return {
+      x: node.x,
+      y: node.y,
+      width: width,
+      height: height,
+      centerX: node.x + width / 2,
+      centerY: node.y + height / 2
+    };
+  }
+
+  function assignDroppedNodesToGroups(nodeIds) {
+    if (!Array.isArray(project.groups) || !project.groups.length || !Array.isArray(nodeIds) || !nodeIds.length) {
+      return [];
+    }
+
+    // Snapshot target frames before changing membership. This keeps the drop
+    // test stable when multiple selected nodes are released together.
+    const candidates = project.groups
+      .map((group) => ({ group: group, bounds: groupWorldBounds(group) }))
+      .filter((entry) => !!entry.bounds);
+
+    const assignments = [];
+
+    nodeIds.forEach((nodeId) => {
+      const node = nodeById(nodeId);
+      if (!node) return;
+      const nodeBounds = renderedNodeBounds(node);
+
+      const targets = candidates
+        .filter((entry) => !entry.group.nodeIds.includes(node.id))
+        .filter((entry) => {
+          const bounds = entry.bounds;
+          return nodeBounds.centerX >= bounds.x &&
+            nodeBounds.centerX <= bounds.x + bounds.width &&
+            nodeBounds.centerY >= bounds.y &&
+            nodeBounds.centerY <= bounds.y + bounds.height;
+        })
+        .sort((a, b) => (a.bounds.width * a.bounds.height) - (b.bounds.width * b.bounds.height));
+
+      const target = targets[0];
+      if (!target) return;
+
+      // A block belongs to at most one group. Dropping it into a different
+      // group transfers it there.
+      project.groups.forEach((group) => {
+        group.nodeIds = group.nodeIds.filter((id) => id !== node.id);
+      });
+      if (!target.group.nodeIds.includes(node.id)) target.group.nodeIds.push(node.id);
+      assignments.push({ nodeId: node.id, groupId: target.group.id });
+    });
+
+    project.groups = project.groups.filter((group) => Array.isArray(group.nodeIds) && group.nodeIds.length);
+    return assignments;
+  }
+
   function startNodeDrag(event, node) {
     broadcastActivity("Sposta " + (node.title || "un blocco"));
     if (!selectedNodeIds.has(node.id)) {
@@ -7969,6 +8031,8 @@
 
   function endNodeDrag() {
     window.removeEventListener("pointermove", moveNode);
+    const droppedNodeIds = dragState ? dragState.starts.map((item) => item.id) : [];
+    const assignments = assignDroppedNodesToGroups(droppedNodeIds);
     dragState = null;
     if (interactionFrame) {
       cancelAnimationFrame(interactionFrame);
@@ -7981,6 +8045,13 @@
     renderMinimap();
     markDirty();
     finishDragPreview();
+
+    if (assignments.length === 1) {
+      const group = groupById(assignments[0].groupId);
+      showToast("Blocco aggiunto a " + (group && group.title ? group.title : "gruppo"));
+    } else if (assignments.length > 1) {
+      showToast(assignments.length + " blocchi aggiunti ai gruppi");
+    }
   }
 
   function handlePortClick(ref) {
