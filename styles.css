@@ -6215,3 +6215,164 @@ body,
     display:none;
   }
 }
+
+
+/* v2.7 — cleaner editor chrome */
+.editor-top-actions{
+  gap:7px;
+}
+.topbar-presence{
+  margin-right:3px;
+}
+.editor-top-actions .share-button{
+  order:2;
+}
+.editor-top-actions .editor-account-button{
+  order:3;
+}
+
+/* Editing tools live only on the left, New Block directly below them. */
+.canvas-toolbar{
+  height:auto;
+  left:12px;
+  right:auto;
+  top:10px;
+  align-items:flex-start;
+  justify-content:flex-start;
+}
+.canvas-left-stack{
+  pointer-events:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+}
+.canvas-add-block-left{
+  min-width:130px;
+  height:32px;
+  justify-content:center;
+  box-shadow:0 8px 24px rgba(0,0,0,.2);
+}
+.canvas-right-actions{
+  display:none!important;
+}
+
+/* Autosave replaces the old bottom-left hint. */
+.canvas-hint{
+  display:none!important;
+}
+.autosave-corner{
+  position:absolute;
+  left:14px;
+  bottom:14px;
+  z-index:11;
+  min-height:31px;
+  display:flex!important;
+  align-items:center;
+  gap:7px;
+  padding:6px 10px;
+  border:1px solid #273244;
+  border-radius:9px;
+  background:rgba(10,14,24,.88);
+  backdrop-filter:blur(9px);
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+  color:#7e899c;
+  font-size:9px;
+  white-space:nowrap;
+}
+.autosave-corner-label{
+  color:#a5afc0;
+  font-weight:800;
+}
+.autosave-corner-state{
+  color:#687588;
+  padding-left:6px;
+  border-left:1px solid #2a3445;
+}
+
+/* Larger minimap with Center integrated beside zoom. */
+.minimap{
+  width:262px;
+  height:196px;
+  right:14px;
+  bottom:14px;
+  border-radius:11px;
+}
+.minimap-header{
+  height:42px;
+  padding:6px 7px 4px 10px;
+}
+.minimap-controls{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.minimap-center-button{
+  height:25px;
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:0 7px;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:transparent;
+  color:#77839a;
+  cursor:pointer;
+  font-size:8px;
+  font-weight:800;
+}
+.minimap-center-button:hover{
+  border-color:#334058;
+  background:#151d2b;
+  color:#c1c9d6;
+}
+#minimapSvg{
+  height:151px;
+}
+.minimap-title{
+  font-size:8px;
+  letter-spacing:1.2px;
+}
+
+/* Data tools now belong to the account popover. */
+.account-popover{
+  width:min(320px,calc(100vw - 24px));
+}
+.account-popover-section{
+  margin-top:7px;
+  padding-top:8px;
+  border-top:1px solid #353535;
+}
+.account-popover-section-title{
+  display:block;
+  padding:0 8px 5px;
+  color:#666;
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:1.15px;
+}
+.account-popover-section .account-popover-actions{
+  padding-top:0;
+}
+.account-data-actions button{
+  color:#aeb9c6;
+}
+.account-data-actions button:hover{
+  color:#e0e6ed;
+}
+
+/* Mobile keeps the same hierarchy without showing the large map. */
+@media(max-width:850px){
+  .autosave-corner{
+    left:10px;
+    bottom:10px;
+  }
+}
+@media(max-width:620px){
+  .autosave-corner-state{
+    display:none;
+  }
+  .canvas-add-block-left{
+    min-width:112px;
+  }
+}
