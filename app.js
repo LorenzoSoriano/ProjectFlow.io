@@ -1623,19 +1623,51 @@
       const title = document.createElement("input");
       title.className = "graph-group-title";
       title.value = group.title || "Gruppo";
-      title.title = "Rinomina gruppo";
+      title.title = "Clicca per modificare il nome del gruppo";
       title.setAttribute("aria-label", "Nome gruppo");
-      title.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
+      title.spellcheck = false;
+
+      const beginTitleEdit = (selectAll) => {
         if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
+        requestAnimationFrame(() => {
+          title.focus({ preventScroll: true });
+          if (selectAll) title.select();
+        });
+      };
+
+      title.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        if (selectedGroupId !== group.id) beginTitleEdit(false);
+      });
+      title.addEventListener("click", (event) => {
+        event.stopPropagation();
+        beginTitleEdit(false);
+      });
+      title.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        beginTitleEdit(true);
       });
       title.addEventListener("input", () => {
         group.title = title.value || "Gruppo";
         markDirty();
       });
+      title.addEventListener("blur", () => {
+        if (!title.value.trim()) {
+          title.value = "Gruppo";
+          group.title = "Gruppo";
+          markDirty();
+        }
+      });
       title.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();
+          title.blur();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          title.value = group.title || "Gruppo";
           title.blur();
         }
       });
@@ -1656,11 +1688,14 @@
         if (event.button !== 0 || event.target.closest("input") || event.target.closest("button")) return;
         event.preventDefault();
         event.stopPropagation();
-        if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
-        requestAnimationFrame(() => {
-          title.focus();
-          title.select();
-        });
+        beginTitleEdit(true);
+      });
+
+      header.addEventListener("dblclick", (event) => {
+        if (event.target.closest("button")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        beginTitleEdit(true);
       });
 
       const dragZones = ["top", "right", "bottom", "left"].map((side) => {
@@ -1672,6 +1707,9 @@
           event.preventDefault();
           event.stopPropagation();
           if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
+          if (zone.setPointerCapture) {
+            try { zone.setPointerCapture(event.pointerId); } catch (error) {}
+          }
           startGroupDrag(event, group.id);
         });
         return zone;
