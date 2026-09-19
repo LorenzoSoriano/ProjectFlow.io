@@ -12,14 +12,19 @@
   const NODE_WIDTH = 440;
 
   function nodeWidthFor(nodeOrType) {
-    const type = typeof nodeOrType === "string" ? nodeOrType : (nodeOrType && nodeOrType.type) || "object";
+    const node = typeof nodeOrType === "object" && nodeOrType ? nodeOrType : null;
+    const type = typeof nodeOrType === "string" ? nodeOrType : (node && node.type) || "object";
     if (type === "object" || type === "class") return 500;
     if (type === "function") return 470;
     if (type === "enum") return 440;
     if (type === "component") return 430;
     if (["event", "action", "condition", "state", "enumSwitch"].includes(type)) return 420;
     if (type === "note") return 390;
-    if (type === "sketch") return 480;
+    if (type === "sketch") {
+      return node && typeof node.sketchWidth === "number"
+        ? Math.max(360, Math.min(1400, node.sketchWidth))
+        : 520;
+    }
     return 430;
   }
 
@@ -627,7 +632,8 @@
         .map((stroke) => ({
           id: stroke.id || uid("stroke"),
           color: typeof stroke.color === "string" ? stroke.color : "#52677c",
-          size: Math.max(1, Math.min(10, Number(stroke.size) || 3)),
+          size: Math.max(1, Math.min(16, Number(stroke.size) || 3)),
+          mode: stroke.mode === "erase" ? "erase" : "draw",
           points: stroke.points
             .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
             .map((point) => ({
@@ -638,6 +644,12 @@
         .filter((stroke) => stroke.points.length > 1);
       if (typeof node.sketchColor !== "string") node.sketchColor = "#52677c";
       if (typeof node.sketchSize !== "number") node.sketchSize = 3;
+      node.sketchSize = Math.max(1, Math.min(16, node.sketchSize));
+      if (node.sketchMode !== "erase") node.sketchMode = "draw";
+      if (typeof node.sketchWidth !== "number") node.sketchWidth = 520;
+      if (typeof node.sketchHeight !== "number") node.sketchHeight = 320;
+      node.sketchWidth = Math.max(360, Math.min(1400, node.sketchWidth));
+      node.sketchHeight = Math.max(220, Math.min(1000, node.sketchHeight));
     }
 
     if (node.type === "class") {
@@ -1197,6 +1209,13 @@
   let saveTimer = null;
   let toastTimer = null;
   let zoomSharpTimer = null;
+  let interactionFrame = null;
+  let interactionNeedsGroups = false;
+  let interactionNeedsMinimap = false;
+  let minimapRenderTimer = null;
+  let viewSaveTimer = null;
+  let presencePointerFrame = null;
+  let presencePointerClient = null;
   let connectMode = false;
 
   const historyState = {
@@ -1725,15 +1744,22 @@
       }
     });
 
-    renderGroups();
-    renderEdges();
-    renderMinimap();
+    scheduleInteractionRender(true, true);
   }
 
   function endGroupDrag() {
     window.removeEventListener("pointermove", moveGroup);
     if (!groupDrag) return;
     groupDrag = null;
+    if (interactionFrame) {
+      cancelAnimationFrame(interactionFrame);
+      interactionFrame = null;
+      interactionNeedsGroups = false;
+      interactionNeedsMinimap = false;
+    }
+    renderGroups();
+    renderEdges();
+    renderMinimap();
     markDirty();
   }
 
@@ -1856,8 +1882,6 @@
     resetHistory();
     requestAnimationFrame(() => {
       render();
-      renderEdges();
-      renderMinimap();
     });
   }
 
@@ -2681,12 +2705,12 @@
   function queuePresenceWrite(immediate) {
     if (!cloudState.sharedProjectId || !cloudState.user) return;
     const elapsed = Date.now() - cloudState.presenceLastWrite;
-    if (immediate || elapsed >= 250) {
+    if (immediate || elapsed >= 400) {
       writePresenceNow();
       return;
     }
     if (cloudState.presenceWriteTimer) return;
-    cloudState.presenceWriteTimer = setTimeout(writePresenceNow, Math.max(30, 250 - elapsed));
+    cloudState.presenceWriteTimer = setTimeout(writePresenceNow, Math.max(50, 400 - elapsed));
   }
 
   function broadcastActivity(text) {
@@ -3187,6 +3211,40 @@
     }, 90);
   }
 
+  function scheduleMinimapRender(delay) {
+    if (minimapRenderTimer) return;
+    minimapRenderTimer = setTimeout(() => {
+      minimapRenderTimer = null;
+      renderMinimap();
+    }, Math.max(0, Number(delay) || 0));
+  }
+
+  function scheduleViewPersist() {
+    clearTimeout(viewSaveTimer);
+    viewSaveTimer = setTimeout(() => {
+      viewSaveTimer = null;
+      localStorage.setItem(VIEW_KEY, JSON.stringify(view));
+    }, 180);
+  }
+
+  function scheduleInteractionRender(includeGroups, includeMinimap) {
+    interactionNeedsGroups = interactionNeedsGroups || !!includeGroups;
+    interactionNeedsMinimap = interactionNeedsMinimap || !!includeMinimap;
+    if (interactionFrame) return;
+
+    interactionFrame = requestAnimationFrame(() => {
+      interactionFrame = null;
+      const groups = interactionNeedsGroups;
+      const minimap = interactionNeedsMinimap;
+      interactionNeedsGroups = false;
+      interactionNeedsMinimap = false;
+
+      if (groups) renderGroups();
+      renderEdges();
+      if (minimap) scheduleMinimapRender(55);
+    });
+  }
+
   function setWorldTransform() {
     const scale = snapScale(view.scale);
     const tx = Math.round(view.x);
@@ -3196,8 +3254,8 @@
     view.y = ty;
     world.style.transform = "translate3d(" + tx + "px," + ty + "px,0) scale(" + scale + ")";
     $("zoomReadout").textContent = Math.round(scale * 100) + "%";
-    localStorage.setItem(VIEW_KEY, JSON.stringify(view));
-    renderMinimap();
+    scheduleViewPersist();
+    scheduleMinimapRender(45);
     refreshZoomSharpness();
   }
 
@@ -3946,13 +4004,36 @@
     });
   }
 
+  function applySketchStrokeStyle(ctx, stroke, pixelRatio) {
+    ctx.globalCompositeOperation = stroke && stroke.mode === "erase" ? "destination-out" : "source-over";
+    ctx.strokeStyle = stroke && stroke.color ? stroke.color : "#52677c";
+    ctx.lineWidth = (Number(stroke && stroke.size) || 3) * pixelRatio;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }
+
+  function drawSketchNodeSegment(canvas, stroke, from, to) {
+    if (!canvas || !stroke || !from || !to) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const ratio = canvas.width / Math.max(1, canvas.clientWidth || canvas.width);
+    ctx.save();
+    applySketchStrokeStyle(ctx, stroke, ratio);
+    ctx.beginPath();
+    ctx.moveTo(from.x * canvas.width, from.y * canvas.height);
+    ctx.lineTo(to.x * canvas.width, to.y * canvas.height);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function renderSketchNodeCanvas(canvas, node, draftStroke) {
     if (!canvas || !node) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    const widthCss = Math.max(1, canvas.clientWidth);
+    const heightCss = Math.max(1, canvas.clientHeight);
+    if (!widthCss || !heightCss) return;
     const ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const width = Math.max(1, Math.round(rect.width * ratio));
-    const height = Math.max(1, Math.round(rect.height * ratio));
+    const width = Math.max(1, Math.round(widthCss * ratio));
+    const height = Math.max(1, Math.round(heightCss * ratio));
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
@@ -3961,14 +4042,12 @@
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
 
     const drawStroke = (stroke) => {
       if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
+      ctx.save();
+      applySketchStrokeStyle(ctx, stroke, ratio);
       ctx.beginPath();
-      ctx.strokeStyle = stroke.color || "#52677c";
-      ctx.lineWidth = (Number(stroke.size) || 3) * ratio;
       stroke.points.forEach((point, index) => {
         const x = point.x * canvas.width;
         const y = point.y * canvas.height;
@@ -3976,6 +4055,7 @@
         else ctx.lineTo(x, y);
       });
       ctx.stroke();
+      ctx.restore();
     };
 
     (node.sketchStrokes || []).forEach(drawStroke);
@@ -4229,55 +4309,134 @@
       const tools = document.createElement("div");
       tools.className = "node-sketch-tools";
 
+      const modeGroup = document.createElement("div");
+      modeGroup.className = "node-sketch-mode-group";
+
+      const drawMode = document.createElement("button");
+      drawMode.type = "button";
+      drawMode.className = "node-sketch-mode-button";
+      drawMode.innerHTML = '<span>✎</span><span>Penna</span>';
+      drawMode.title = "Disegna";
+
+      const eraseMode = document.createElement("button");
+      eraseMode.type = "button";
+      eraseMode.className = "node-sketch-mode-button";
+      eraseMode.innerHTML = '<span>⌫</span><span>Gomma</span>';
+      eraseMode.title = "Gomma";
+
+      const syncModeUI = () => {
+        drawMode.classList.toggle("active", node.sketchMode !== "erase");
+        eraseMode.classList.toggle("active", node.sketchMode === "erase");
+        canvas.classList.toggle("erase-mode", node.sketchMode === "erase");
+      };
+
+      drawMode.addEventListener("pointerdown", (event) => event.stopPropagation());
+      eraseMode.addEventListener("pointerdown", (event) => event.stopPropagation());
+      drawMode.addEventListener("click", (event) => {
+        event.stopPropagation();
+        node.sketchMode = "draw";
+        syncModeUI();
+        markDirty();
+      });
+      eraseMode.addEventListener("click", (event) => {
+        event.stopPropagation();
+        node.sketchMode = "erase";
+        syncModeUI();
+        markDirty();
+      });
+      modeGroup.append(drawMode, eraseMode);
+
+      const colorWrap = document.createElement("label");
+      colorWrap.className = "node-sketch-color-wrap";
+      colorWrap.title = "Colore penna";
       const color = document.createElement("input");
       color.type = "color";
       color.className = "node-sketch-color";
       color.value = node.sketchColor || "#52677c";
-      color.title = "Colore tratto";
       color.addEventListener("pointerdown", (event) => event.stopPropagation());
       color.addEventListener("input", () => {
         node.sketchColor = color.value;
         markDirty();
       });
+      const colorLabel = document.createElement("span");
+      colorLabel.textContent = "Colore";
+      colorWrap.append(color, colorLabel);
 
+      const sizeWrap = document.createElement("label");
+      sizeWrap.className = "node-sketch-size-wrap";
       const size = document.createElement("input");
       size.type = "range";
       size.className = "node-sketch-size";
       size.min = "1";
-      size.max = "10";
+      size.max = "16";
       size.value = String(node.sketchSize || 3);
       size.title = "Spessore tratto";
       size.addEventListener("pointerdown", (event) => event.stopPropagation());
+      const sizeValue = document.createElement("span");
+      sizeValue.className = "node-sketch-size-value";
+      sizeValue.textContent = String(node.sketchSize || 3) + " px";
       size.addEventListener("input", () => {
         node.sketchSize = Number(size.value) || 3;
+        sizeValue.textContent = node.sketchSize + " px";
         markDirty();
       });
+      sizeWrap.append(size, sizeValue);
+
+      const toolSpacer = document.createElement("span");
+      toolSpacer.className = "node-sketch-tool-spacer";
 
       const undoStroke = document.createElement("button");
       undoStroke.type = "button";
-      undoStroke.textContent = "↶";
+      undoStroke.className = "node-sketch-action";
+      undoStroke.innerHTML = '<span>↶</span><span>Ultimo</span>';
       undoStroke.title = "Rimuovi ultimo tratto";
       undoStroke.addEventListener("pointerdown", (event) => event.stopPropagation());
 
       const clearSketch = document.createElement("button");
       clearSketch.type = "button";
-      clearSketch.textContent = "Pulisci";
+      clearSketch.className = "node-sketch-action danger";
+      clearSketch.innerHTML = '<span>⌫</span><span>Pulisci</span>';
       clearSketch.title = "Pulisci Sketch";
       clearSketch.addEventListener("pointerdown", (event) => event.stopPropagation());
 
-      tools.append(color, size, undoStroke, clearSketch);
+      tools.append(modeGroup, colorWrap, sizeWrap, toolSpacer, undoStroke, clearSketch);
 
       const canvasWrap = document.createElement("div");
       canvasWrap.className = "node-sketch-paper";
+      canvasWrap.style.height = Math.round(node.sketchHeight || 320) + "px";
+
       const canvas = document.createElement("canvas");
       canvas.className = "node-sketch-canvas";
       canvas.setAttribute("aria-label", "Area disegno Sketch");
-      canvasWrap.appendChild(canvas);
+
+      const resizeHandle = document.createElement("button");
+      resizeHandle.type = "button";
+      resizeHandle.className = "node-sketch-resize";
+      resizeHandle.innerHTML = "↘";
+      resizeHandle.title = "Trascina per ridimensionare lo Sketch";
+      resizeHandle.setAttribute("aria-label", "Ridimensiona Sketch");
+      resizeHandle.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+      canvasWrap.append(canvas, resizeHandle);
+
+      const footer = document.createElement("div");
+      footer.className = "node-sketch-footer";
+      const hint = document.createElement("span");
+      hint.textContent = "Disegna direttamente nel riquadro";
+      const dimensions = document.createElement("span");
+      dimensions.className = "node-sketch-dimensions";
+      const updateDimensions = () => {
+        dimensions.textContent = Math.round(node.sketchWidth || nodeWidthFor(node)) + " × " + Math.round(node.sketchHeight || 320) + " · trascina ↘";
+      };
+      updateDimensions();
+      footer.append(hint, dimensions);
 
       let draft = null;
       let pointerId = null;
+      let drawRect = null;
+
       const pointFromEvent = (event) => {
-        const rect = canvas.getBoundingClientRect();
+        const rect = drawRect || canvas.getBoundingClientRect();
         return {
           x: Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(1, rect.width))),
           y: Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)))
@@ -4297,18 +4456,20 @@
           element.classList.add("selected");
           renderEdges();
           renderInspector();
-          renderMinimap();
+          scheduleMinimapRender(0);
           updateGroupActionUI();
         }
         pointerId = event.pointerId;
+        drawRect = canvas.getBoundingClientRect();
         if (canvas.setPointerCapture) canvas.setPointerCapture(pointerId);
         draft = {
           id: uid("stroke"),
           color: node.sketchColor || "#52677c",
           size: Number(node.sketchSize) || 3,
+          mode: node.sketchMode === "erase" ? "erase" : "draw",
           points: [pointFromEvent(event)]
         };
-        broadcastActivity("Disegna nello Sketch " + (node.title || ""));
+        broadcastActivity((draft.mode === "erase" ? "Cancella" : "Disegna") + " nello Sketch " + (node.title || ""));
       });
 
       canvas.addEventListener("pointermove", (event) => {
@@ -4319,9 +4480,9 @@
         const previous = draft.points[draft.points.length - 1];
         const dx = point.x - previous.x;
         const dy = point.y - previous.y;
-        if (dx * dx + dy * dy < 0.00001) return;
+        if (dx * dx + dy * dy < 0.000008) return;
         draft.points.push(point);
-        renderSketchNodeCanvas(canvas, node, draft);
+        drawSketchNodeSegment(canvas, draft, previous, point);
       });
 
       const finishStroke = (event) => {
@@ -4338,6 +4499,7 @@
         }
         draft = null;
         pointerId = null;
+        drawRect = null;
         renderSketchNodeCanvas(canvas, node, null);
       };
       canvas.addEventListener("pointerup", finishStroke);
@@ -4360,7 +4522,54 @@
         markDirty();
       });
 
-      body.append(tools, canvasWrap);
+      resizeHandle.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const startWidth = nodeWidthFor(node);
+        const startHeight = Number(node.sketchHeight) || 320;
+        const pointer = event.pointerId;
+        if (resizeHandle.setPointerCapture) resizeHandle.setPointerCapture(pointer);
+        element.classList.add("sketch-resizing");
+        broadcastActivity("Ridimensiona Sketch " + (node.title || ""));
+
+        const moveResize = (moveEvent) => {
+          if (moveEvent.pointerId !== pointer) return;
+          const dx = (moveEvent.clientX - startX) / Math.max(.01, view.scale);
+          const dy = (moveEvent.clientY - startY) / Math.max(.01, view.scale);
+          node.sketchWidth = Math.max(360, Math.min(1400, Math.round(startWidth + dx)));
+          node.sketchHeight = Math.max(220, Math.min(1000, Math.round(startHeight + dy)));
+          element.style.width = node.sketchWidth + "px";
+          canvasWrap.style.height = node.sketchHeight + "px";
+          updateDimensions();
+          renderSketchNodeCanvas(canvas, node, null);
+          scheduleInteractionRender(true, true);
+        };
+
+        const endResize = (upEvent) => {
+          if (upEvent.pointerId !== pointer) return;
+          resizeHandle.removeEventListener("pointermove", moveResize);
+          resizeHandle.removeEventListener("pointerup", endResize);
+          resizeHandle.removeEventListener("pointercancel", endResize);
+          element.classList.remove("sketch-resizing");
+          if (resizeHandle.releasePointerCapture) {
+            try { resizeHandle.releasePointerCapture(pointer); } catch (error) {}
+          }
+          renderGroups();
+          renderEdges();
+          renderMinimap();
+          markDirty();
+        };
+
+        resizeHandle.addEventListener("pointermove", moveResize);
+        resizeHandle.addEventListener("pointerup", endResize);
+        resizeHandle.addEventListener("pointercancel", endResize);
+      });
+
+      body.append(tools, canvasWrap, footer);
+      syncModeUI();
       requestAnimationFrame(() => renderSketchNodeCanvas(canvas, node, null));
     } else if (node.type === "note") {
       const noteEditor = document.createElement("textarea");
@@ -6442,7 +6651,7 @@
       point.x = Math.round((startPoint.x + dx) / 10) * 10;
       point.y = Math.round((startPoint.y + dy) / 10) * 10;
     });
-    renderEdges();
+    scheduleInteractionRender(false, false);
   }
 
   function endJunctionDrag() {
@@ -7355,14 +7564,21 @@
       }
     });
 
-    renderGroups();
-    renderEdges();
-    renderMinimap();
+    scheduleInteractionRender(true, true);
   }
 
   function endNodeDrag() {
     window.removeEventListener("pointermove", moveNode);
     dragState = null;
+    if (interactionFrame) {
+      cancelAnimationFrame(interactionFrame);
+      interactionFrame = null;
+      interactionNeedsGroups = false;
+      interactionNeedsMinimap = false;
+    }
+    renderGroups();
+    renderEdges();
+    renderMinimap();
     markDirty();
   }
 
@@ -7646,7 +7862,10 @@
         extra: {
           sketchStrokes: [],
           sketchColor: "#52677c",
-          sketchSize: 3
+          sketchSize: 3,
+          sketchMode: "draw",
+          sketchWidth: 520,
+          sketchHeight: 320
         }
       }
     };
@@ -8133,12 +8352,19 @@
 
   viewport.addEventListener("pointermove", (event) => {
     if (!cloudState.sharedProjectId || !cloudState.user) return;
-    const point = screenToWorld(event.clientX, event.clientY);
-    cloudState.presenceCursor = {
-      x: Math.round(point.x),
-      y: Math.round(point.y)
-    };
-    queuePresenceWrite(false);
+    presencePointerClient = { x: event.clientX, y: event.clientY };
+    if (presencePointerFrame) return;
+    presencePointerFrame = requestAnimationFrame(() => {
+      presencePointerFrame = null;
+      if (!presencePointerClient) return;
+      const point = screenToWorld(presencePointerClient.x, presencePointerClient.y);
+      presencePointerClient = null;
+      cloudState.presenceCursor = {
+        x: Math.round(point.x),
+        y: Math.round(point.y)
+      };
+      queuePresenceWrite(false);
+    });
   });
 
   viewport.addEventListener("pointerleave", () => {
@@ -8474,6 +8700,8 @@
   });
 
   window.addEventListener("beforeunload", () => {
+    clearTimeout(viewSaveTimer);
+    localStorage.setItem(VIEW_KEY, JSON.stringify(view));
     if (currentProjectId) saveProject(false);
     stopSharedProjectSession();
   });
