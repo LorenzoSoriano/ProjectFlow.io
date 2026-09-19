@@ -900,7 +900,10 @@
   function memberSummary(item) {
     if (item.kind === "function") {
       const kind = METHOD_KIND_LABELS[item.methodKind] || "Custom";
-      return item.access + " " + methodReturnTypeLabel(item) + " (" + (item.parameters || "") + ") · " + kind;
+      ensureFunctionSignature(item, item.access);
+      return item.access + " " + methodReturnTypeLabel(item) + " (" +
+        item.methodParameters.map((parameter) => parameterTypeKey(parameter) + " " + parameter.name).join(", ") +
+        ") · " + kind;
     }
     if (item.kind === "unityEvent") {
       return item.access + " UnityEvent" + (item.payloadType && item.payloadType !== "void" ? "<" + item.payloadType + ">" : "");
@@ -1895,8 +1898,18 @@
           showToast("Transform è obbligatorio su ogni GameObject.");
           return;
         }
+
+        const nestedRefs = new Set([item.id]);
+        if (item.kind === "function") {
+          ensureFunctionSignature(item, item.access);
+          item.methodParameters.forEach((parameter) => nestedRefs.add(parameter.id));
+          nestedRefs.add(item.returnPortId);
+        }
+
         node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
-        project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
+        project.connections = project.connections.filter((edge) =>
+          !nestedRefs.has(edge.from.rowId) && !nestedRefs.has(edge.to.rowId)
+        );
         rerenderNode();
       };
 
@@ -1958,16 +1971,14 @@
           item.kind === "property" ||
           item.kind === "unityEvent" ||
           item.kind === "condition" ||
-          item.kind === "input" ||
-          (item.kind === "function" && firstParameterType(item.parameters) !== "any");
+          item.kind === "input";
         const allowOutput =
           item.kind === "variable" ||
           item.kind === "property" ||
           item.kind === "unityEvent" ||
           item.kind === "component" ||
           item.kind === "condition" ||
-          item.kind === "output" ||
-          (item.kind === "function" && normalizedType(item.returnType) !== "void");
+          item.kind === "output";
 
         if (allowInput) {
           rowElement.appendChild(decoratePort(makePort(node.id, item.id, "in", connectedPorts), inputType));
@@ -2112,66 +2123,14 @@
           second.append(reference, defaultValue, serialized);
           editor.append(topLine, collectionLine, second);
         } else if (item.kind === "function") {
+          ensureFunctionSignature(item, item.access);
+          rowElement.classList.add("method-member-row");
+
           const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
             item.access = value;
+            item.methodParameters.forEach((parameter) => { parameter.access = value; });
             rerenderNode();
           }, "inline-access-select");
-
-          const returnType = compactSelect(item.returnType, ["void"].concat(availableDataTypes()), (value) => {
-            item.returnType = value;
-            if (value === "void") item.returnCollectionKind = "single";
-            rerenderNode();
-          }, "inline-type-select");
-
-          const name = inlineInput(item.label, "Metodo", (value) => {
-            item.label = value;
-          }, "inline-name-input");
-
-          topLine.append(access, returnType, name);
-
-          if (item.returnType !== "void") {
-            const returnCollection = document.createElement("div");
-            returnCollection.className = "inline-collection-row method-return-collection";
-
-            returnCollection.appendChild(compactSelect(item.returnCollectionKind, [
-              ["single", "Single"],
-              ["array", "Array"],
-              ["list", "List"],
-              ["dictionary", "Dictionary"]
-            ], (value) => {
-              item.returnCollectionKind = value;
-              rerenderNode();
-            }, "inline-collection-select"));
-
-            if (item.returnCollectionKind === "array") {
-              const length = document.createElement("input");
-              length.type = "number";
-              length.min = "0";
-              length.className = "inline-size-input";
-              length.value = item.returnArrayLength || "";
-              length.placeholder = "Length";
-              length.addEventListener("pointerdown", (event) => event.stopPropagation());
-              length.addEventListener("input", () => {
-                item.returnArrayLength = Math.max(0, Number(length.value) || 0);
-                markDirty();
-              });
-              returnCollection.appendChild(length);
-            } else if (item.returnCollectionKind === "dictionary") {
-              returnCollection.appendChild(typePicker(item.returnDictionaryKeyType, (value) => {
-                item.returnDictionaryKeyType = value;
-                rerenderNode();
-              }, "inline-key-type-picker"));
-            }
-
-            const preview = document.createElement("span");
-            preview.className = "collection-preview";
-            preview.textContent = "→ " + methodReturnTypeLabel(item);
-            returnCollection.appendChild(preview);
-            editor.appendChild(returnCollection);
-          }
-
-          const second = document.createElement("div");
-          second.className = "inline-member-bottom";
 
           const methodKind = compactSelect(item.methodKind, [
             ["custom", "Custom"],
@@ -2181,19 +2140,29 @@
             ["coroutine", "Coroutine"]
           ], (value) => {
             item.methodKind = value;
-            if (value === "lifecycle") {
-              const preset = UNITY_LIFECYCLE[0];
-              applyLifecyclePreset(item, preset);
-            }
+            if (value === "lifecycle") applyLifecyclePreset(item, UNITY_LIFECYCLE[0]);
             rerenderNode();
           }, "inline-method-kind");
 
-          const params = inlineInput(item.parameters, "parametri: int score, Player player", (value) => {
-            item.parameters = value;
-          }, "inline-params-input");
+          const name = inlineInput(item.label, "Metodo", (value) => {
+            item.label = value;
+          }, "inline-name-input");
 
-          second.append(methodKind, params);
-          editor.append(topLine, second);
+          topLine.append(access, methodKind, name);
+          editor.appendChild(topLine);
+
+          if (item.methodKind === "lifecycle") {
+            const callbackLine = document.createElement("div");
+            callbackLine.className = "method-callback-line";
+            callbackLine.appendChild(compactSelect(item.label, UNITY_LIFECYCLE.map((preset) => [preset.name, preset.name + "()"]), (value) => {
+              const preset = UNITY_LIFECYCLE.find((entry) => entry.name === value);
+              if (preset) {
+                applyLifecyclePreset(item, preset);
+                rerenderNode();
+              }
+            }, "lifecycle-callback-select"));
+            editor.appendChild(callbackLine);
+          }
 
           const description = document.createElement("textarea");
           description.className = "method-description-inline";
@@ -2206,6 +2175,33 @@
             markDirty();
           });
           editor.appendChild(description);
+
+          editor.appendChild(makeParameterSection(item, item.access));
+
+          const returnSection = document.createElement("div");
+          returnSection.className = "method-return-section";
+          returnSection.append(
+            makeMethodMiniHeading("RETURN", item.returnType === "void" ? "void" : 1),
+            makeReturnEditor(item, item.access)
+          );
+          editor.appendChild(returnSection);
+
+          const logicSection = document.createElement("div");
+          logicSection.className = "method-logic-section";
+          logicSection.appendChild(makeMethodMiniHeading("LOGIC", "optional"));
+
+          const logic = document.createElement("textarea");
+          logic.className = "method-logic-inline";
+          logic.value = item.methodLogic || "";
+          logic.placeholder = "Pseudocodice o passaggi interni del metodo…";
+          logic.spellcheck = false;
+          logic.addEventListener("pointerdown", (event) => event.stopPropagation());
+          logic.addEventListener("input", () => {
+            item.methodLogic = logic.value;
+            markDirty();
+          });
+          logicSection.appendChild(logic);
+          editor.appendChild(logicSection);
         } else if (item.kind === "unityEvent") {
           const access = compactSelect(item.access, ["public", "private", "protected"], (value) => {
             item.access = value;
@@ -2766,7 +2762,7 @@
         node.rows.forEach((item) => body.appendChild(makeRowElement(item)));
       }
 
-      if (node.pseudo) {
+      if (node.pseudo && node.type !== "function") {
         const pseudo = document.createElement("textarea");
         pseudo.className = "node-pseudo-inline";
         pseudo.value = node.pseudo;
