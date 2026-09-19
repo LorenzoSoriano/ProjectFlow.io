@@ -858,7 +858,10 @@
 
     projects.push(entry);
     localStorage.setItem(ACTIVE_PROJECT_KEY, entry.id);
-    persistProjectLibrary();
+    localStorage.setItem(PROJECT_LIBRARY_KEY, JSON.stringify({
+      version: 1,
+      projects: projects
+    }));
     return projects;
   }
 
