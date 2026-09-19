@@ -1320,9 +1320,10 @@
         const path = document.createElement("strong");
         path.textContent = relation.fromLabel + " → " + relation.toLabel;
         const meta = document.createElement("small");
+        const relationType = relation.dataType === "__flow__" ? "FLOW" : (relation.dataType || "DATA");
         meta.textContent = relation.internal
-          ? "INTERNAL · " + (relation.dataType || "flow")
-          : (relation.direction === "out" ? "OUT → " : "IN ← ") + relation.otherNodeTitle;
+          ? "INTERNAL · " + relationType
+          : (relation.direction === "out" ? "OUT → " : "IN ← ") + relation.otherNodeTitle + " · " + relationType;
 
         copy.append(path, meta);
         item.append(dot, copy);
@@ -1352,6 +1353,43 @@
     return backbone;
   }
 
+  function renameDataTypeEverywhere(oldName, newName) {
+    if (!oldName || !newName || oldName === newName) return;
+
+    project.nodes.forEach((target) => {
+      if (target.type === "enumSwitch" && target.switchEnumType === oldName) {
+        target.switchEnumType = newName;
+      }
+
+      if (target.type === "function") {
+        ensureFunctionSignature(target, target.methodAccess);
+        if (target.returnType === oldName) target.returnType = newName;
+        if (target.returnDictionaryKeyType === oldName) target.returnDictionaryKeyType = newName;
+        target.methodParameters.forEach((parameter) => {
+          if (parameter.dataType === oldName) parameter.dataType = newName;
+          if (parameter.dictionaryKeyType === oldName) parameter.dictionaryKeyType = newName;
+        });
+        syncLegacyParameters(target);
+      }
+
+      target.rows.forEach((item) => {
+        if ((item.kind === "variable" || item.kind === "property") && item.dataType === oldName) item.dataType = newName;
+        if ((item.kind === "variable" || item.kind === "property") && item.dictionaryKeyType === oldName) item.dictionaryKeyType = newName;
+
+        if (item.kind === "function") {
+          ensureFunctionSignature(item, item.access);
+          if (item.returnType === oldName) item.returnType = newName;
+          if (item.returnDictionaryKeyType === oldName) item.returnDictionaryKeyType = newName;
+          item.methodParameters.forEach((parameter) => {
+            if (parameter.dataType === oldName) parameter.dataType = newName;
+            if (parameter.dictionaryKeyType === oldName) parameter.dictionaryKeyType = newName;
+          });
+          syncLegacyParameters(item);
+        }
+      });
+    });
+  }
+
   function createNodeElement(node, connectedPorts) {
     ensureNodeMeta(node);
     const meta = typeMeta(node.type);
@@ -1375,6 +1413,7 @@
     heading.className = "node-heading inline-heading";
 
     const titleInput = document.createElement("input");
+    const titleBeforeEdit = node.title;
     titleInput.className = "node-title-inline";
     titleInput.value = node.title;
     titleInput.setAttribute("aria-label", "Nome blocco");
@@ -1384,9 +1423,13 @@
       markDirty();
     });
     titleInput.addEventListener("change", () => {
+      if ((node.type === "enum" || node.type === "class") && titleBeforeEdit !== node.title) {
+        renameDataTypeEverywhere(titleBeforeEdit, node.title);
+      }
       renderInspector();
       renderNodes();
       renderEdges();
+      markDirty();
     });
 
     const label = document.createElement("small");
@@ -3002,6 +3045,10 @@
           remove.addEventListener("pointerdown", (event) => event.stopPropagation());
           remove.addEventListener("click", (event) => {
             event.stopPropagation();
+            const casePortId = "case_" + entry.id;
+            project.connections = project.connections.filter((edge) =>
+              edge.from.rowId !== casePortId && edge.to.rowId !== casePortId
+            );
             node.enumValues = node.enumValues.filter((value) => value.id !== entry.id);
             rerenderNode();
           });
@@ -3424,14 +3471,16 @@
         ? dataTypeColor(edgeType)
         : (sourceNode ? typeMeta(sourceNode.type).color : "#7c6cff");
 
+      const isFlowEdge = edgeType === "__flow__";
+
       const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
       glow.setAttribute("d", routePath);
-      glow.setAttribute("class", "edge-glow");
+      glow.setAttribute("class", "edge-glow" + (isFlowEdge ? " flow-edge" : ""));
       edgeLayer.appendChild(glow);
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", routePath);
-      path.setAttribute("class", "edge" + (selectedEdgeId === edge.id ? " selected" : ""));
+      path.setAttribute("class", "edge" + (isFlowEdge ? " flow-edge" : "") + (selectedEdgeId === edge.id ? " selected" : ""));
       path.style.stroke = edgeColor;
       path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
       edgeLayer.appendChild(path);
