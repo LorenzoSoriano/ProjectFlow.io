@@ -185,7 +185,8 @@
       returnCollectionKind: "single",
       returnArrayLength: 0,
       returnDictionaryKeyType: "string",
-      parameters: ""
+      parameters: "",
+      methodDescription: ""
     });
   }
 
@@ -306,6 +307,7 @@
       if (typeof item.returnArrayLength !== "number") item.returnArrayLength = 0;
       if (typeof item.returnDictionaryKeyType !== "string" || !item.returnDictionaryKeyType) item.returnDictionaryKeyType = "string";
       if (typeof item.parameters !== "string") item.parameters = "";
+      if (typeof item.methodDescription !== "string") item.methodDescription = "";
     }
 
     if (item.kind === "unityEvent") {
@@ -359,6 +361,7 @@
       if (typeof node.returnArrayLength !== "number") node.returnArrayLength = 0;
       if (typeof node.returnDictionaryKeyType !== "string" || !node.returnDictionaryKeyType) node.returnDictionaryKeyType = "string";
       if (typeof node.parameters !== "string") node.parameters = "";
+      if (typeof node.methodDescription !== "string") node.methodDescription = node.description || "";
     }
   }
 
@@ -887,6 +890,114 @@
       handlePortClick({ nodeId: nodeId, rowId: rowId, side: side });
     });
     return port;
+  }
+
+  function refLabel(ref) {
+    const node = nodeById(ref.nodeId);
+    if (!node) return "Unknown";
+    if (ref.rowId === "__node__") return node.title;
+    const item = node.rows.find((rowItem) => rowItem.id === ref.rowId);
+    return item ? item.label : node.title;
+  }
+
+  function connectionRelationsForNode(nodeId) {
+    return project.connections
+      .filter((edge) => edge.from.nodeId === nodeId || edge.to.nodeId === nodeId)
+      .map((edge) => {
+        const internal = edge.from.nodeId === nodeId && edge.to.nodeId === nodeId;
+        const direction = edge.from.nodeId === nodeId ? "out" : "in";
+        const otherNodeId = direction === "out" ? edge.to.nodeId : edge.from.nodeId;
+        const otherNode = nodeById(otherNodeId);
+        return {
+          edgeId: edge.id,
+          internal,
+          direction,
+          fromLabel: refLabel(edge.from),
+          toLabel: refLabel(edge.to),
+          otherNodeTitle: internal ? "Internal" : (otherNode ? otherNode.title : "External"),
+          dataType: edge.dataType || memberOutputType(memberByRef(edge.from))
+        };
+      });
+  }
+
+  function createNodeBackbone(node) {
+    const relations = connectionRelationsForNode(node.id);
+    if (!relations.length) return null;
+
+    const backbone = document.createElement("aside");
+    backbone.className = "node-backbone" + (node.uiBackboneCollapsed ? " collapsed" : "");
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "backbone-toggle";
+    toggle.title = node.uiBackboneCollapsed ? "Espandi backbone" : "Comprimi backbone";
+    toggle.addEventListener("pointerdown", (event) => event.stopPropagation());
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      node.uiBackboneCollapsed = !node.uiBackboneCollapsed;
+      renderNodes();
+      renderEdges();
+      markDirty();
+    });
+
+    const railDot = document.createElement("span");
+    railDot.className = "backbone-main-dot";
+    const label = document.createElement("span");
+    label.className = "backbone-title";
+    label.textContent = node.uiBackboneCollapsed ? String(relations.length) : "FLOW";
+    toggle.append(railDot, label);
+    backbone.appendChild(toggle);
+
+    if (!node.uiBackboneCollapsed) {
+      const list = document.createElement("div");
+      list.className = "backbone-list";
+      const visibleRelations = relations.slice(0, 8);
+
+      visibleRelations.forEach((relation) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "backbone-relation " + (relation.internal ? "internal" : "external");
+        item.title = relation.fromLabel + " → " + relation.toLabel;
+        item.style.setProperty("--relation-color", dataTypeColor(relation.dataType));
+
+        const dot = document.createElement("span");
+        dot.className = "backbone-dot";
+
+        const copy = document.createElement("span");
+        copy.className = "backbone-copy";
+        const path = document.createElement("strong");
+        path.textContent = relation.fromLabel + " → " + relation.toLabel;
+        const meta = document.createElement("small");
+        meta.textContent = relation.internal
+          ? "INTERNAL · " + (relation.dataType || "flow")
+          : (relation.direction === "out" ? "OUT → " : "IN ← ") + relation.otherNodeTitle;
+
+        copy.append(path, meta);
+        item.append(dot, copy);
+        item.addEventListener("pointerdown", (event) => event.stopPropagation());
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectedEdgeId = relation.edgeId;
+          selectedNodeIds.clear();
+          selectedNodeId = null;
+          renderNodes();
+          renderEdges();
+          renderInspector();
+        });
+        list.appendChild(item);
+      });
+
+      if (relations.length > visibleRelations.length) {
+        const more = document.createElement("div");
+        more.className = "backbone-more";
+        more.textContent = "+" + (relations.length - visibleRelations.length) + " relazioni";
+        list.appendChild(more);
+      }
+
+      backbone.appendChild(list);
+    }
+
+    return backbone;
   }
 
   function createNodeElement(node, connectedPorts) {
@@ -3003,7 +3114,8 @@
           returnCollectionKind: "single",
           returnArrayLength: 0,
           returnDictionaryKeyType: "string",
-          parameters: ""
+          parameters: "",
+          methodDescription: ""
         }
       },
       variable: {
