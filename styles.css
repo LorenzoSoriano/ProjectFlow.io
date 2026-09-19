@@ -6543,3 +6543,109 @@ body,
   pointer-events:none;
   opacity:.86;
 }
+
+
+/* v2.11 — collapsible New Block categories + collaborator markers on minimap */
+.new-block-results{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  padding:0 8px 9px;
+}
+.new-block-category-section{
+  overflow:hidden;
+  border:1px solid #343434;
+  border-radius:9px;
+  background:#202020;
+}
+.new-block-category{
+  width:100%;
+  min-height:37px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:0 10px;
+  border:0;
+  background:#242424;
+  color:#888;
+  cursor:pointer;
+  text-align:left;
+}
+.new-block-category:hover{
+  background:#292929;
+  color:#bcbcbc;
+}
+.new-block-category-copy{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.new-block-category-copy strong{
+  overflow:hidden;
+  color:#8d8d8d;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:1.05px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.new-block-category-copy small{
+  min-width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  border:1px solid #3d3d3d;
+  border-radius:9px;
+  background:#1e1e1e;
+  color:#666;
+  font-size:7px;
+  font-weight:900;
+}
+.new-block-category-chevron{
+  color:#666;
+  font-size:11px;
+  transform:rotate(0deg);
+  transition:transform .15s ease,color .15s ease;
+}
+.new-block-category-section.collapsed .new-block-category-chevron{
+  transform:rotate(-90deg);
+}
+.new-block-category-section:not(.collapsed) .new-block-category{
+  border-bottom:1px solid #343434;
+}
+.new-block-category-body{
+  padding:4px;
+}
+.new-block-category-body[hidden]{
+  display:none!important;
+}
+.new-block-category-body .new-block-result{
+  min-height:46px;
+}
+.new-block-category-body .new-block-result-category:empty{
+  display:none;
+}
+
+.minimap-collaborator{
+  pointer-events:none;
+}
+.minimap-collaborator-halo{
+  fill:rgba(106,180,219,.18);
+  stroke:rgba(122,196,232,.28);
+  stroke-width:1;
+}
+.minimap-collaborator-dot{
+  fill:#6eb4d7;
+  stroke:#d8eef8;
+  stroke-width:.8;
+}
+.minimap-collaborator-initial{
+  fill:#0d1720;
+  font-size:4.1px;
+  font-weight:900;
+  text-anchor:middle;
+  dominant-baseline:middle;
+  pointer-events:none;
+}
