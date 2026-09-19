@@ -1974,3 +1974,18 @@ body.resizing-panel *{
 .type-picker-options{
   display:none!important;
 }
+
+
+/* Viewport-aware popup scaling v1.2 */
+.section-add-popup.fan-popup{
+  transform:translateX(-50%) scale(var(--popup-inverse-scale,1));
+  transform-origin:bottom center;
+}
+.section-add-popup.fan-popup.open-down{
+  top:34px;
+  bottom:auto;
+  transform-origin:top center;
+}
+.section-add-popup.fan-popup.needs-scroll{
+  max-height:var(--popup-max-height,560px);
+}
