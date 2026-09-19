@@ -7932,6 +7932,7 @@
 
   $("createGroup").addEventListener("click", toggleGrouping);
   $("shareProjectButton").addEventListener("click", openSharePanel);
+  $("shareLoginButton").addEventListener("click", startGoogleLogin);
   $("closeSharePanel").addEventListener("click", () => closeInterfaceSurfaces());
   $("shareInviteButton").addEventListener("click", () => {
     const input = $("shareEmailInput");
