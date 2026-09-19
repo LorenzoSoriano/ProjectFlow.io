@@ -1159,48 +1159,90 @@
       const popup = document.createElement("div");
       popup.className = "type-picker-popup";
 
-      dataTypeCategories().forEach((category) => {
-        const group = document.createElement("div");
-        group.className = "type-picker-group";
+      const homeView = document.createElement("div");
+      homeView.className = "type-picker-home";
 
+      const detailView = document.createElement("div");
+      detailView.className = "type-picker-detail";
+
+      const detailHeader = document.createElement("div");
+      detailHeader.className = "type-picker-detail-header";
+
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "type-picker-back";
+      back.innerHTML = '<span>←</span><span>Indietro</span>';
+      back.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+      const detailTitle = document.createElement("strong");
+      detailTitle.className = "type-picker-detail-title";
+      detailHeader.append(back, detailTitle);
+
+      const detailOptions = document.createElement("div");
+      detailOptions.className = "type-picker-detail-options";
+      detailView.append(detailHeader, detailOptions);
+
+      const resetTypePicker = () => {
+        popup.classList.remove("detail-mode");
+        detailTitle.textContent = "";
+        detailOptions.innerHTML = "";
+        popup.scrollTop = 0;
+      };
+
+      back.addEventListener("click", (event) => {
+        event.stopPropagation();
+        resetTypePicker();
+      });
+
+      dataTypeCategories().forEach((category) => {
         const categoryButton = document.createElement("button");
         categoryButton.type = "button";
         categoryButton.className = "type-picker-category";
-        categoryButton.innerHTML = '<span>' + category.label + '</span><span>›</span>';
+        categoryButton.innerHTML =
+          '<span class="type-category-copy"><strong>' + category.label + '</strong><small>' +
+          category.values.length + ' tipi</small></span><span class="type-category-arrow">›</span>';
         categoryButton.addEventListener("pointerdown", (event) => event.stopPropagation());
         categoryButton.addEventListener("click", (event) => {
           event.stopPropagation();
-          popup.querySelectorAll(".type-picker-group.open").forEach((openGroup) => {
-            if (openGroup !== group) openGroup.classList.remove("open");
+          detailTitle.textContent = category.label;
+          detailOptions.innerHTML = "";
+
+          category.values.forEach((typeValue) => {
+            const option = document.createElement("button");
+            option.type = "button";
+            option.className = "type-picker-option" + (typeValue === value ? " active" : "");
+            option.textContent = typeValue;
+            option.addEventListener("pointerdown", (pointerEvent) => pointerEvent.stopPropagation());
+            option.addEventListener("click", (clickEvent) => {
+              clickEvent.stopPropagation();
+              onChange(typeValue);
+            });
+            detailOptions.appendChild(option);
           });
-          group.classList.toggle("open");
+
+          popup.classList.add("detail-mode");
+          popup.scrollTop = 0;
         });
 
-        const options = document.createElement("div");
-        options.className = "type-picker-options";
-        category.values.forEach((typeValue) => {
-          const option = document.createElement("button");
-          option.type = "button";
-          option.className = "type-picker-option" + (typeValue === value ? " active" : "");
-          option.textContent = typeValue;
-          option.addEventListener("pointerdown", (event) => event.stopPropagation());
-          option.addEventListener("click", (event) => {
-            event.stopPropagation();
-            onChange(typeValue);
-          });
-          options.appendChild(option);
-        });
-
-        group.append(categoryButton, options);
-        popup.appendChild(group);
+        homeView.appendChild(categoryButton);
       });
+
+      popup._resetTypePicker = resetTypePicker;
+      popup.append(homeView, detailView);
 
       trigger.addEventListener("click", (event) => {
         event.stopPropagation();
+        const willOpen = !popup.classList.contains("open");
+
         document.querySelectorAll(".type-picker-popup.open").forEach((openPopup) => {
-          if (openPopup !== popup) openPopup.classList.remove("open");
+          if (openPopup !== popup) {
+            openPopup.classList.remove("open");
+            if (typeof openPopup._resetTypePicker === "function") openPopup._resetTypePicker();
+          }
         });
-        popup.classList.toggle("open");
+
+        if (willOpen) resetTypePicker();
+        popup.classList.toggle("open", willOpen);
       });
 
       wrap.append(trigger, popup);
@@ -1870,6 +1912,7 @@
                 const visibleRows = Array.from(group.querySelectorAll(".inline-edit-row")).some((row) => row.style.display !== "none");
                 group.style.display = visibleRows ? "" : "none";
               });
+              updateMemberScroll();
               renderEdges();
             });
 
@@ -1882,9 +1925,22 @@
           }
 
           memberList = document.createElement("div");
-          memberList.className = "section-member-list" + (items.length >= 6 ? " scrollable" : "");
+          memberList.className = "section-member-list";
+
+          const updateMemberScroll = () => {
+            memberList.classList.remove("scrollable");
+            requestAnimationFrame(() => {
+              const needsScroll = memberList.scrollHeight > 270;
+              memberList.classList.toggle("scrollable", needsScroll);
+              if (!needsScroll) memberList.scrollTop = 0;
+              renderEdges();
+            });
+          };
+
           memberList.addEventListener("scroll", () => renderEdges(), { passive: true });
-          memberList.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+          memberList.addEventListener("wheel", (event) => {
+            if (memberList.classList.contains("scrollable")) event.stopPropagation();
+          }, { passive: true });
 
           if (titleText === "COMPONENTS") {
             const grouped = new Map();
@@ -1954,6 +2010,7 @@
             });
           }
           content.appendChild(memberList);
+          updateMemberScroll();
         } else {
           const emptyState = document.createElement("div");
           emptyState.className = "section-empty";
@@ -3721,7 +3778,7 @@
     if (!event.target.closest(".type-picker")) {
       document.querySelectorAll(".type-picker-popup.open").forEach((openPopup) => {
         openPopup.classList.remove("open");
-        openPopup.querySelectorAll(".type-picker-group.open").forEach((group) => group.classList.remove("open"));
+        if (typeof openPopup._resetTypePicker === "function") openPopup._resetTypePicker();
       });
     }
   });
