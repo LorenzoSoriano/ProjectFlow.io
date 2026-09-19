@@ -1977,9 +1977,9 @@
 
           if (titleText === "COMPONENTS") {
             popup.classList.add("fan-popup");
+
             const groups = [];
             let current = null;
-
             actions.forEach((action) => {
               if (action.header) {
                 current = { label: action.label, items: [] };
@@ -1993,42 +1993,86 @@
               }
             });
 
-            groups.forEach((groupData, index) => {
-              const fanGroup = document.createElement("div");
-              fanGroup.className = "fan-group";
-              fanGroup.style.setProperty("--fan-index", String(index));
+            const homeView = document.createElement("div");
+            homeView.className = "fan-home-view";
 
+            const detailView = document.createElement("div");
+            detailView.className = "fan-detail-view";
+
+            const detailHeader = document.createElement("div");
+            detailHeader.className = "fan-detail-header";
+
+            const backButton = document.createElement("button");
+            backButton.type = "button";
+            backButton.className = "fan-back-button";
+            backButton.innerHTML = '<span>←</span><span>Indietro</span>';
+            backButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+            const detailTitle = document.createElement("strong");
+            detailTitle.className = "fan-detail-title";
+            detailHeader.append(backButton, detailTitle);
+
+            const detailOptions = document.createElement("div");
+            detailOptions.className = "fan-detail-options";
+            detailView.append(detailHeader, detailOptions);
+
+            const updatePopupOverflow = () => {
+              popup.classList.remove("needs-scroll");
+              requestAnimationFrame(() => {
+                const maxHeight = Math.min(390, Math.max(220, window.innerHeight - 140));
+                popup.style.setProperty("--popup-max-height", maxHeight + "px");
+                popup.classList.toggle("needs-scroll", popup.scrollHeight > maxHeight + 2);
+              });
+            };
+
+            const resetFanPopup = () => {
+              popup.classList.remove("detail-mode");
+              detailTitle.textContent = "";
+              detailOptions.innerHTML = "";
+              updatePopupOverflow();
+            };
+
+            backButton.addEventListener("click", (event) => {
+              event.stopPropagation();
+              resetFanPopup();
+            });
+
+            groups.forEach((groupData, index) => {
               const categoryButton = document.createElement("button");
               categoryButton.type = "button";
               categoryButton.className = "fan-category";
-              categoryButton.innerHTML = '<span>' + groupData.label + '</span><span>＋</span>';
+              categoryButton.style.setProperty("--fan-index", String(index));
+              categoryButton.innerHTML =
+                '<span class="fan-category-copy"><strong>' + groupData.label + '</strong><small>' +
+                groupData.items.length + ' elementi</small></span><span class="fan-category-arrow">›</span>';
               categoryButton.addEventListener("pointerdown", (event) => event.stopPropagation());
               categoryButton.addEventListener("click", (event) => {
                 event.stopPropagation();
-                popup.querySelectorAll(".fan-group.open").forEach((openGroup) => {
-                  if (openGroup !== fanGroup) openGroup.classList.remove("open");
-                });
-                fanGroup.classList.toggle("open");
-              });
+                detailTitle.textContent = groupData.label;
+                detailOptions.innerHTML = "";
 
-              const choices = document.createElement("div");
-              choices.className = "fan-options";
-              groupData.items.forEach((action) => {
-                const button = document.createElement("button");
-                button.type = "button";
-                button.className = "fan-option";
-                button.textContent = action.label;
-                button.addEventListener("pointerdown", (event) => event.stopPropagation());
-                button.addEventListener("click", (event) => {
-                  event.stopPropagation();
-                  addMemberFromAction(action.value);
+                groupData.items.forEach((action) => {
+                  const button = document.createElement("button");
+                  button.type = "button";
+                  button.className = "fan-option";
+                  button.textContent = action.label;
+                  button.addEventListener("pointerdown", (pointerEvent) => pointerEvent.stopPropagation());
+                  button.addEventListener("click", (clickEvent) => {
+                    clickEvent.stopPropagation();
+                    addMemberFromAction(action.value);
+                  });
+                  detailOptions.appendChild(button);
                 });
-                choices.appendChild(button);
-              });
 
-              fanGroup.append(categoryButton, choices);
-              popup.appendChild(fanGroup);
+                popup.classList.add("detail-mode");
+                updatePopupOverflow();
+              });
+              homeView.appendChild(categoryButton);
             });
+
+            popup._resetFanPopup = resetFanPopup;
+            popup._updatePopupOverflow = updatePopupOverflow;
+            popup.append(homeView, detailView);
           } else {
             actions.forEach((action) => {
               if (action.header) {
@@ -2054,10 +2098,21 @@
 
           addButton.addEventListener("click", (event) => {
             event.stopPropagation();
-            element.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
-              if (openPopup !== popup) openPopup.classList.remove("open");
+            const willOpen = !popup.classList.contains("open");
+
+            document.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
+              if (openPopup !== popup) {
+                openPopup.classList.remove("open");
+                if (typeof openPopup._resetFanPopup === "function") openPopup._resetFanPopup();
+              }
             });
-            popup.classList.toggle("open");
+
+            if (willOpen && typeof popup._resetFanPopup === "function") popup._resetFanPopup();
+            popup.classList.toggle("open", willOpen);
+
+            if (willOpen && typeof popup._updatePopupOverflow === "function") {
+              popup._updatePopupOverflow();
+            }
           });
 
           addWrap.append(addButton, popup);
@@ -3655,6 +3710,20 @@
 
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".toolbar-menu")) $("dataMenu").classList.remove("open");
+
+    if (!event.target.closest(".section-add-wrap")) {
+      document.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
+        openPopup.classList.remove("open");
+        if (typeof openPopup._resetFanPopup === "function") openPopup._resetFanPopup();
+      });
+    }
+
+    if (!event.target.closest(".type-picker")) {
+      document.querySelectorAll(".type-picker-popup.open").forEach((openPopup) => {
+        openPopup.classList.remove("open");
+        openPopup.querySelectorAll(".type-picker-group.open").forEach((group) => group.classList.remove("open"));
+      });
+    }
   });
 
   $("exportProject").addEventListener("click", () => {
