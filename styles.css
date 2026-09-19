@@ -191,3 +191,5 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   .primary-button{padding:0 10px}
   .canvas-hint{right:12px;max-width:none;align-items:flex-start;flex-direction:column;gap:2px}
 }
+.node-layer{pointer-events:none}
+.flow-node{pointer-events:auto}
