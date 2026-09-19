@@ -14,6 +14,10 @@ It is intentionally not a compiler, UML validator, or programming language. Bloc
 - Pan with **Alt + drag** and zoom with the mouse wheel.
 - Edit title, description, rows, type, and pseudocode in the Inspector.
 - Duplicate or delete blocks.
+- Select and drag connection curve points, including multi-selection and marquee selection.
+- Double-click a connection to add a curve point; press Delete to remove selected points.
+- Group selected blocks inside auto-sizing Shader Graph-style frames with **Ctrl/Cmd + G**.
+- Rename a group directly on the canvas and drag its header to move all contained blocks.
 - Double-click a connection to remove it.
 - Save automatically to browser local storage.
 - Export and import a complete flow as JSON.
