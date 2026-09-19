@@ -2106,9 +2106,45 @@
 
       grid.appendChild(inspectorField("RETURN TYPE", selectControl(node.returnType, ["void"].concat(availableDataTypes()), (value) => {
         node.returnType = value;
+        if (value === "void") node.returnCollectionKind = "single";
         renderNodes();
+        renderInspector();
         markDirty();
       })));
+
+      if (node.returnType !== "void") {
+        grid.appendChild(inspectorField("RETURN CONTENITORE", selectControl(node.returnCollectionKind, [
+          ["single", "Single"],
+          ["array", "Array"],
+          ["list", "List"],
+          ["dictionary", "Dictionary"]
+        ], (value) => {
+          node.returnCollectionKind = value;
+          renderNodes();
+          renderInspector();
+          markDirty();
+        })));
+
+        if (node.returnCollectionKind === "array") {
+          const length = document.createElement("input");
+          length.type = "number";
+          length.min = "0";
+          length.value = node.returnArrayLength || "";
+          length.placeholder = "Lunghezza";
+          length.addEventListener("input", () => {
+            node.returnArrayLength = Math.max(0, Number(length.value) || 0);
+            renderNodes();
+            markDirty();
+          });
+          grid.appendChild(inspectorField("RETURN LENGTH", length));
+        } else if (node.returnCollectionKind === "dictionary") {
+          grid.appendChild(inspectorField("RETURN KEY TYPE", selectControl(node.returnDictionaryKeyType, availableDataTypes(), (value) => {
+            node.returnDictionaryKeyType = value;
+            renderNodes();
+            markDirty();
+          })));
+        }
+      }
 
       grid.appendChild(inspectorField("PARAMETRI", textControl(node.parameters, "es. int score, Player player", (value) => {
         node.parameters = value;
@@ -2181,6 +2217,52 @@
         renderInspector();
         markDirty();
       })));
+
+      grid.appendChild(inspectorField("CONTENITORE", selectControl(item.collectionKind, [
+        ["single", "Single"],
+        ["array", "Array"],
+        ["list", "List"],
+        ["dictionary", "Dictionary"]
+      ], (value) => {
+        item.collectionKind = value;
+        if (value === "dictionary") item.serialized = false;
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+
+      if (item.collectionKind === "array") {
+        const length = document.createElement("input");
+        length.type = "number";
+        length.min = "0";
+        length.value = item.arrayLength || "";
+        length.placeholder = "Lunghezza";
+        length.addEventListener("input", () => {
+          item.arrayLength = Math.max(0, Number(length.value) || 0);
+          renderNodes();
+          markDirty();
+        });
+        grid.appendChild(inspectorField("LUNGHEZZA ARRAY", length));
+      } else if (item.collectionKind === "list") {
+        const initial = document.createElement("input");
+        initial.type = "number";
+        initial.min = "0";
+        initial.value = item.listInitialCount || "";
+        initial.placeholder = "Quantità iniziale";
+        initial.addEventListener("input", () => {
+          item.listInitialCount = Math.max(0, Number(initial.value) || 0);
+          renderNodes();
+          markDirty();
+        });
+        grid.appendChild(inspectorField("COUNT INIZIALE", initial));
+      } else if (item.collectionKind === "dictionary") {
+        grid.appendChild(inspectorField("TIPO CHIAVE", selectControl(item.dictionaryKeyType, availableDataTypes(), (value) => {
+          item.dictionaryKeyType = value;
+          renderNodes();
+          markDirty();
+        })));
+      }
+
       grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
         ["value", "Valore"],
         ["inspector", "Inspector reference"],
@@ -2198,7 +2280,15 @@
         markDirty();
       })));
       wrapper.appendChild(grid);
-      wrapper.appendChild(checkboxControl(item.serialized, "Mostra / serializza nell'Inspector", (checked) => {
+      wrapper.appendChild(checkboxControl(item.serialized, item.collectionKind === "dictionary"
+        ? "Dictionary: serializzazione Unity custom necessaria"
+        : "Mostra / serializza nell'Inspector", (checked) => {
+        if (item.collectionKind === "dictionary" && checked) {
+          item.serialized = false;
+          showToast("Unity non serializza Dictionary direttamente.");
+          renderInspector();
+          return;
+        }
         item.serialized = checked;
         renderNodes();
         markDirty();
@@ -2246,9 +2336,46 @@
 
       grid.appendChild(inspectorField("RETURN TYPE", selectControl(item.returnType, ["void"].concat(availableDataTypes()), (value) => {
         item.returnType = value;
+        if (value === "void") item.returnCollectionKind = "single";
         renderNodes();
+        renderInspector();
         markDirty();
       })));
+
+      if (item.returnType !== "void") {
+        grid.appendChild(inspectorField("RETURN CONTENITORE", selectControl(item.returnCollectionKind, [
+          ["single", "Single"],
+          ["array", "Array"],
+          ["list", "List"],
+          ["dictionary", "Dictionary"]
+        ], (value) => {
+          item.returnCollectionKind = value;
+          renderNodes();
+          renderInspector();
+          markDirty();
+        })));
+
+        if (item.returnCollectionKind === "array") {
+          const returnLength = document.createElement("input");
+          returnLength.type = "number";
+          returnLength.min = "0";
+          returnLength.value = item.returnArrayLength || "";
+          returnLength.placeholder = "Lunghezza";
+          returnLength.addEventListener("input", () => {
+            item.returnArrayLength = Math.max(0, Number(returnLength.value) || 0);
+            renderNodes();
+            markDirty();
+          });
+          grid.appendChild(inspectorField("RETURN LENGTH", returnLength));
+        } else if (item.returnCollectionKind === "dictionary") {
+          grid.appendChild(inspectorField("RETURN KEY TYPE", selectControl(item.returnDictionaryKeyType, availableDataTypes(), (value) => {
+            item.returnDictionaryKeyType = value;
+            renderNodes();
+            markDirty();
+          })));
+        }
+      }
+
       grid.appendChild(inspectorField("PARAMETRI", textControl(item.parameters, "es. Collider other", (value) => {
         item.parameters = value;
         renderNodes();
