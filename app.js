@@ -181,6 +181,7 @@
   function ensureNodeMeta(node) {
     if (!Array.isArray(node.rows)) node.rows = [];
     node.rows.forEach(normalizeMember);
+    if (!node.uiSections || typeof node.uiSections !== "object") node.uiSections = {};
 
     if (node.type === "class") {
       if (typeof node.classVisibility !== "string") node.classVisibility = "public";
@@ -1114,16 +1115,99 @@
       };
 
       const appendSection = (titleText, items, actions) => {
+        const sectionKey = titleText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const collapsed = !!node.uiSections[sectionKey];
         const section = document.createElement("div");
-        section.className = "node-member-section";
+        section.className = "node-member-section" + (collapsed ? " collapsed" : "");
+        section.dataset.sectionKey = sectionKey;
+
         const sectionTitle = document.createElement("div");
         sectionTitle.className = "node-member-title section-title-row";
+
+        const titleButton = document.createElement("button");
+        titleButton.type = "button";
+        titleButton.className = "section-collapse-button";
+        titleButton.title = collapsed ? "Espandi sezione" : "Comprimi sezione";
+        titleButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+        titleButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          node.uiSections[sectionKey] = !node.uiSections[sectionKey];
+          rerenderNode();
+        });
+
+        const chevron = document.createElement("span");
+        chevron.className = "section-chevron";
+        chevron.textContent = collapsed ? "▸" : "▾";
+
         const titleSpan = document.createElement("span");
+        titleSpan.className = "section-title-text";
         titleSpan.textContent = titleText;
-        sectionTitle.appendChild(titleSpan);
+
+        const count = document.createElement("span");
+        count.className = "section-count";
+        count.textContent = String(items.length);
+        count.title = items.length + " elementi";
+
+        titleButton.append(chevron, titleSpan, count);
+        sectionTitle.appendChild(titleButton);
         section.appendChild(sectionTitle);
 
-        items.forEach((item) => section.appendChild(makeRowElement(item)));
+        const content = document.createElement("div");
+        content.className = "section-content";
+
+        let memberList = null;
+        if (items.length) {
+          if (items.length >= 6) {
+            const tools = document.createElement("div");
+            tools.className = "section-tools";
+
+            const search = document.createElement("input");
+            search.className = "section-search";
+            search.type = "search";
+            search.placeholder = "Cerca in " + titleText.toLowerCase() + "…";
+            search.setAttribute("aria-label", "Cerca in " + titleText);
+            search.addEventListener("pointerdown", (event) => event.stopPropagation());
+            search.addEventListener("input", () => {
+              const query = search.value.toLowerCase().trim();
+              memberList.querySelectorAll(".inline-edit-row").forEach((row) => {
+                row.style.display = !query || (row.dataset.search || "").includes(query) ? "" : "none";
+              });
+              renderEdges();
+            });
+
+            const density = document.createElement("span");
+            density.className = "section-density-label";
+            density.textContent = items.length + " elementi";
+
+            tools.append(search, density);
+            content.appendChild(tools);
+          }
+
+          memberList = document.createElement("div");
+          memberList.className = "section-member-list" + (items.length >= 6 ? " scrollable" : "");
+          memberList.addEventListener("scroll", () => renderEdges(), { passive: true });
+          memberList.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
+
+          items.forEach((item) => {
+            const rowElement = makeRowElement(item);
+            rowElement.dataset.search = [
+              item.label,
+              item.dataType,
+              item.returnType,
+              item.parameters,
+              item.access,
+              item.methodKind,
+              item.payloadType
+            ].filter(Boolean).join(" ").toLowerCase();
+            memberList.appendChild(rowElement);
+          });
+          content.appendChild(memberList);
+        } else {
+          const emptyState = document.createElement("div");
+          emptyState.className = "section-empty";
+          emptyState.textContent = "Nessun elemento";
+          content.appendChild(emptyState);
+        }
 
         if (actions && actions.length) {
           const addWrap = document.createElement("div");
@@ -1161,9 +1245,10 @@
           });
 
           addWrap.append(addButton, popup);
-          section.appendChild(addWrap);
+          content.appendChild(addWrap);
         }
 
+        section.appendChild(content);
         body.appendChild(section);
       };
 
@@ -1265,9 +1350,13 @@
     if (!nodeElement) return null;
     const port = nodeElement.querySelector('.port[data-row="' + portRef.rowId + '"][data-side="' + portRef.side + '"]');
     if (!port) return null;
-    const local = localCenter(port, nodeElement);
-    const node = nodeById(portRef.nodeId);
-    return { x: node.x + local.x, y: node.y + local.y };
+
+    const rect = port.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    return {
+      x: (rect.left + rect.width / 2 - viewportRect.left - view.x) / view.scale,
+      y: (rect.top + rect.height / 2 - viewportRect.top - view.y) / view.scale
+    };
   }
 
   function pushRoutePoint(points, point) {
