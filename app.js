@@ -1134,6 +1134,8 @@
   let groupDrag = null;
   let junctionDrag = null;
   let marqueeState = null;
+  let minimapProjection = null;
+  let minimapDrag = false;
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -1209,6 +1211,8 @@
 
     closeSurface($("dataMenu"));
     closeSurface($("accountMenu"));
+    closeSurface($("newBlockPalette"));
+    if ($("addObjectTop")) $("addObjectTop").setAttribute("aria-expanded", "false");
     document.querySelectorAll(".section-add-popup.open, .type-picker-popup.open").forEach(closeSurface);
 
     if ($("editorAuthButton") && except !== $("accountMenu")) {
@@ -1324,7 +1328,20 @@
     };
   }
 
-  function selectGroup(groupId) {
+  function updateGroupActionUI() {
+    const button = $("createGroup");
+    const label = $("groupActionLabel");
+    if (!button || !label) return;
+    const hasGroup = !!(selectedGroupId && groupById(selectedGroupId));
+    label.textContent = hasGroup ? "Disgruppa" : "Raggruppa";
+    button.classList.toggle("ungroup", hasGroup);
+    button.disabled = !hasGroup && selectedNodeIds.size < 2;
+    button.title = hasGroup
+      ? "Disgruppa mantenendo i blocchi nel canvas"
+      : "Raggruppa i blocchi selezionati (Ctrl/Cmd+G)";
+  }
+
+  function applyGroupSelection(groupId, rerenderGroupLayer) {
     const group = groupById(groupId);
     if (!group) return;
     selectedGroupId = group.id;
@@ -1332,16 +1349,33 @@
     syncPrimarySelection();
     selectedEdgeId = null;
     selectedJunctionIds.clear();
-    renderNodes();
+    updateGroupActionUI();
+
+    if (rerenderGroupLayer !== false) {
+      renderNodes();
+    } else {
+      nodeLayer.querySelectorAll(".flow-node").forEach((element) => {
+        element.classList.toggle("selected", selectedNodeIds.has(element.dataset.nodeId));
+      });
+      groupLayer.querySelectorAll(".graph-group").forEach((element) => {
+        element.classList.toggle("selected", element.dataset.groupId === group.id);
+      });
+    }
+
     renderEdges();
     renderInspector();
     renderMinimap();
+  }
+
+  function selectGroup(groupId) {
+    applyGroupSelection(groupId, true);
   }
 
   function removeGroup(groupId) {
     if (!Array.isArray(project.groups)) return;
     project.groups = project.groups.filter((group) => group.id !== groupId);
     if (selectedGroupId === groupId) selectedGroupId = null;
+    updateGroupActionUI();
     renderGroups();
     renderInspector();
     renderMinimap();
@@ -1374,17 +1408,29 @@
       const header = document.createElement("div");
       header.className = "graph-group-header";
 
-      const mark = document.createElement("span");
-      mark.className = "graph-group-mark";
+      const dragHandle = document.createElement("span");
+      dragHandle.className = "graph-group-drag";
+      dragHandle.textContent = "⠿";
+      dragHandle.title = "Trascina l'intero gruppo";
 
       const title = document.createElement("input");
       title.className = "graph-group-title";
       title.value = group.title || "Gruppo";
+      title.title = "Clicca per rinominare il gruppo";
       title.setAttribute("aria-label", "Nome gruppo");
-      title.addEventListener("pointerdown", (event) => event.stopPropagation());
+      title.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+        if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
+      });
       title.addEventListener("input", () => {
         group.title = title.value || "Gruppo";
         markDirty();
+      });
+      title.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          title.blur();
+        }
       });
 
       const remove = document.createElement("button");
@@ -1407,10 +1453,12 @@
         startGroupDrag(event, group.id);
       });
 
-      header.append(mark, title, remove);
+      header.append(dragHandle, title, remove);
       frame.appendChild(header);
       groupLayer.appendChild(frame);
     });
+
+    updateGroupActionUI();
   }
 
   function createGroupFromSelection() {
@@ -1448,6 +1496,14 @@
       }
     });
     showToast("Gruppo creato · scrivi il nome nell'intestazione");
+  }
+
+  function toggleGrouping() {
+    if (selectedGroupId && groupById(selectedGroupId)) {
+      removeGroup(selectedGroupId);
+      return;
+    }
+    createGroupFromSelection();
   }
 
   function startGroupDrag(event, groupId) {
@@ -5476,18 +5532,27 @@
   function renderMinimap() {
     const svg = $("minimapSvg");
     svg.innerHTML = "";
-    if (!project.nodes.length) return;
+    if (!project.nodes.length) {
+      minimapProjection = null;
+      return;
+    }
 
+    const groupBounds = (project.groups || []).map(groupWorldBounds).filter(Boolean);
     const padding = 90;
-    const minX = Math.min.apply(null, project.nodes.map((node) => node.x)) - padding;
-    const minY = Math.min.apply(null, project.nodes.map((node) => node.y)) - padding;
-    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node))) + padding;
-    const maxY = Math.max.apply(null, project.nodes.map((node) => node.y + 220)) + padding;
+    const minX = Math.min.apply(null, project.nodes.map((node) => node.x).concat(groupBounds.map((bounds) => bounds.x))) - padding;
+    const minY = Math.min.apply(null, project.nodes.map((node) => node.y).concat(groupBounds.map((bounds) => bounds.y))) - padding;
+    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)).concat(groupBounds.map((bounds) => bounds.x + bounds.width))) + padding;
+    const maxY = Math.max.apply(null, project.nodes.map((node) => {
+      const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      return node.y + (element ? element.offsetHeight : 220);
+    }).concat(groupBounds.map((bounds) => bounds.y + bounds.height))) + padding;
     const width = Math.max(1, maxX - minX);
     const height = Math.max(1, maxY - minY);
     const scale = Math.min(170 / width, 94 / height);
     const offsetX = (180 - width * scale) / 2;
     const offsetY = (100 - height * scale) / 2 + 2;
+
+    minimapProjection = { minX, minY, scale, offsetX, offsetY };
 
     (project.groups || []).forEach((group) => {
       const bounds = groupWorldBounds(group);
@@ -5527,6 +5592,43 @@
     visible.setAttribute("height", worldHeight * scale);
     visible.setAttribute("class", "minimap-view");
     svg.appendChild(visible);
+  }
+
+  function navigateMinimap(event) {
+    if (!minimapProjection) return;
+    const svg = $("minimapSvg");
+    const svgRect = svg.getBoundingClientRect();
+    if (!svgRect.width || !svgRect.height) return;
+
+    const localX = (event.clientX - svgRect.left) / svgRect.width * 180;
+    const localY = (event.clientY - svgRect.top) / svgRect.height * 110;
+    const worldX = minimapProjection.minX + (localX - minimapProjection.offsetX) / minimapProjection.scale;
+    const worldY = minimapProjection.minY + (localY - minimapProjection.offsetY) / minimapProjection.scale;
+    const viewportRect = viewport.getBoundingClientRect();
+
+    view.x = viewportRect.width / 2 - worldX * view.scale;
+    view.y = viewportRect.height / 2 - worldY * view.scale;
+    setWorldTransform();
+  }
+
+  function startMinimapNavigation(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    minimapDrag = true;
+    navigateMinimap(event);
+    window.addEventListener("pointermove", moveMinimapNavigation);
+    window.addEventListener("pointerup", endMinimapNavigation, { once: true });
+  }
+
+  function moveMinimapNavigation(event) {
+    if (!minimapDrag) return;
+    navigateMinimap(event);
+  }
+
+  function endMinimapNavigation() {
+    minimapDrag = false;
+    window.removeEventListener("pointermove", moveMinimapNavigation);
   }
 
   function inspectorField(labelText, control) {
@@ -6496,6 +6598,118 @@
     };
   }
 
+  function blockPaletteItems() {
+    const items = [];
+    const seen = new Set();
+
+    document.querySelectorAll(".library-section[data-library-section]").forEach((section) => {
+      const categoryNode = section.querySelector(".library-section-toggle span:last-child");
+      const category = categoryNode ? categoryNode.textContent.trim() : "BLOCCHI";
+
+      section.querySelectorAll(".block-template").forEach((button) => {
+        const type = button.dataset.template || "object";
+        const component = button.dataset.component || "";
+        const key = type + "::" + component;
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        const strong = button.querySelector("strong");
+        const small = button.querySelector("small");
+        const icon = button.querySelector(".template-icon");
+        items.push({
+          type: type,
+          component: component,
+          category: category,
+          label: strong ? strong.textContent.trim() : (TYPE_META[type] || TYPE_META.object).label,
+          description: small ? small.textContent.trim() : "",
+          icon: icon ? icon.textContent.trim() : (TYPE_META[type] || TYPE_META.object).icon
+        });
+      });
+    });
+
+    return items;
+  }
+
+  function renderNewBlockPalette(query) {
+    const container = $("newBlockResults");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const term = String(query || "").trim().toLowerCase();
+    const items = blockPaletteItems().filter((item) => {
+      const haystack = [item.label, item.description, item.category, item.type, item.component].join(" ").toLowerCase();
+      return !term || haystack.includes(term);
+    });
+
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "new-block-empty";
+      empty.textContent = "Nessun blocco trovato. Prova con un nome o una categoria diversa.";
+      container.appendChild(empty);
+      return;
+    }
+
+    let currentCategory = "";
+    items.forEach((item, index) => {
+      if (item.category !== currentCategory) {
+        currentCategory = item.category;
+        const heading = document.createElement("div");
+        heading.className = "new-block-category";
+        heading.textContent = currentCategory;
+        container.appendChild(heading);
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "new-block-result";
+      if (index === 0) button.classList.add("keyboard-active");
+
+      const icon = document.createElement("span");
+      icon.className = "new-block-result-icon";
+      icon.textContent = item.icon || "◇";
+
+      const copy = document.createElement("span");
+      copy.className = "new-block-result-copy";
+      const name = document.createElement("strong");
+      name.textContent = item.label;
+      const description = document.createElement("small");
+      description.textContent = item.description || (item.component ? "Componente Unity" : item.category);
+      copy.append(name, description);
+
+      const category = document.createElement("span");
+      category.className = "new-block-result-category";
+      category.textContent = item.component || item.category;
+
+      button.append(icon, copy, category);
+      button.addEventListener("click", () => {
+        addNode(item.type, item.component);
+        closeNewBlockPalette();
+      });
+      container.appendChild(button);
+    });
+  }
+
+  function openNewBlockPalette() {
+    const palette = $("newBlockPalette");
+    const search = $("newBlockSearch");
+    if (!palette || !search) return;
+    closeInterfaceSurfaces(palette);
+    palette.classList.add("open");
+    palette.setAttribute("aria-hidden", "false");
+    $("addObjectTop").setAttribute("aria-expanded", "true");
+    search.value = "";
+    renderNewBlockPalette("");
+    requestAnimationFrame(() => search.focus());
+  }
+
+  function closeNewBlockPalette() {
+    const palette = $("newBlockPalette");
+    if (!palette) return;
+    palette.classList.remove("open");
+    palette.setAttribute("aria-hidden", "true");
+    $("addObjectTop").setAttribute("aria-expanded", "false");
+  }
+
   function addNode(type, presetComponent) {
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
@@ -6504,6 +6718,8 @@
     selectedNodeIds = new Set([node.id]);
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedGroupId = null;
+    selectedJunctionIds.clear();
     render();
     markDirty();
     showToast((TYPE_META[type] || TYPE_META.object).label + " aggiunto");
@@ -6736,12 +6952,36 @@
     button.addEventListener("click", () => addNode(button.dataset.template, button.dataset.component || ""));
   });
 
-  $("addObjectTop").addEventListener("click", () => addNode("object"));
-  $("createGroup").addEventListener("click", createGroupFromSelection);
+  $("addObjectTop").addEventListener("click", (event) => {
+    event.stopPropagation();
+    const palette = $("newBlockPalette");
+    if (palette.classList.contains("open")) closeNewBlockPalette();
+    else openNewBlockPalette();
+  });
+  $("closeNewBlockPalette").addEventListener("click", closeNewBlockPalette);
+  $("newBlockPalette").addEventListener("click", (event) => event.stopPropagation());
+  $("newBlockSearch").addEventListener("input", (event) => renderNewBlockPalette(event.target.value));
+  $("newBlockSearch").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeNewBlockPalette();
+      return;
+    }
+    if (event.key === "Enter") {
+      const first = $("newBlockResults").querySelector(".new-block-result");
+      if (first) {
+        event.preventDefault();
+        first.click();
+      }
+    }
+  });
+
+  $("createGroup").addEventListener("click", toggleGrouping);
   $("fitView").addEventListener("click", fitView);
   $("zoomIn").addEventListener("click", () => setZoom(view.scale + 0.1));
   $("zoomOut").addEventListener("click", () => setZoom(view.scale - 0.1));
   $("zoomReadout").addEventListener("click", () => setZoom(1));
+  $("minimapSvg").addEventListener("pointerdown", startMinimapNavigation);
 
   $("connectTool").addEventListener("click", () => {
     connectMode = !connectMode;
@@ -6768,6 +7008,7 @@
   });
 
   document.addEventListener("click", (event) => {
+    if (!event.target.closest(".new-block-wrap")) closeNewBlockPalette();
     if (!event.target.closest(".toolbar-menu")) $("dataMenu").classList.remove("open");
     if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
       closeAccountMenu();
@@ -7019,6 +7260,10 @@
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
     if (event.key === "Escape") {
+      if ($("newBlockPalette") && $("newBlockPalette").classList.contains("open")) {
+        closeNewBlockPalette();
+        return;
+      }
       cancelConnection();
       clearSelection();
       return;
@@ -7046,7 +7291,7 @@
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g" && !typing) {
       event.preventDefault();
-      createGroupFromSelection();
+      toggleGrouping();
       return;
     }
 
