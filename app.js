@@ -3377,6 +3377,8 @@
 
       grid.appendChild(inspectorField("PARAMETRI", textControl(node.parameters, "es. int score, Player player", (value) => {
         node.parameters = value;
+        node.methodParameters = parseParameterString(value, node.methodAccess);
+        syncLegacyParameters(node);
         renderNodes();
         markDirty();
       })));
@@ -3605,6 +3607,8 @@
 
       grid.appendChild(inspectorField("PARAMETRI", textControl(item.parameters, "es. Collider other", (value) => {
         item.parameters = value;
+        item.methodParameters = parseParameterString(value, item.access);
+        syncLegacyParameters(item);
         renderNodes();
         markDirty();
       })));
