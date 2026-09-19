@@ -1219,7 +1219,7 @@
   let minimapProjection = null;
   let minimapDrag = false;
   let minimapResizeState = null;
-  const collapsedBlockCategories = new Set();
+  let activeBlockFanCategory = "";
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -8289,13 +8289,148 @@
     return items;
   }
 
+  function createNewBlockResultButton(item, onPick) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "new-block-result";
+
+    const icon = document.createElement("span");
+    icon.className = "new-block-result-icon";
+    icon.textContent = item.icon || "◇";
+
+    const copy = document.createElement("span");
+    copy.className = "new-block-result-copy";
+    const name = document.createElement("strong");
+    name.textContent = item.label;
+    const description = document.createElement("small");
+    description.textContent = item.description || (item.component ? "Componente Unity" : item.category);
+    copy.append(name, description);
+
+    const category = document.createElement("span");
+    category.className = "new-block-result-category";
+    category.textContent = item.component || "";
+
+    button.append(icon, copy, category);
+    button.addEventListener("click", () => {
+      if (typeof onPick === "function") onPick(item);
+    });
+    return button;
+  }
+
+  function closeNewBlockFan() {
+    const fan = $("newBlockFan");
+    if (!fan) return;
+    fan.classList.remove("open");
+    fan.setAttribute("aria-hidden", "true");
+    fan.innerHTML = "";
+    activeBlockFanCategory = "";
+    document.querySelectorAll(".new-block-category.active").forEach((button) => {
+      button.classList.remove("active");
+      button.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function positionNewBlockFan(anchor) {
+    const fan = $("newBlockFan");
+    if (!fan || !anchor) return;
+
+    fan.style.left = "0px";
+    fan.style.top = "0px";
+    fan.style.width = "";
+    fan.classList.add("open");
+    fan.setAttribute("aria-hidden", "false");
+
+    requestAnimationFrame(() => {
+      const anchorRect = anchor.getBoundingClientRect();
+      const fanRect = fan.getBoundingClientRect();
+      const safe = 12;
+      const gap = 8;
+      const maxAvailable = Math.max(240, window.innerWidth - safe * 2);
+      const desiredWidth = Math.min(340, maxAvailable);
+      fan.style.width = desiredWidth + "px";
+
+      requestAnimationFrame(() => {
+        const measured = fan.getBoundingClientRect();
+        let left = anchorRect.right + gap;
+        if (left + measured.width > window.innerWidth - safe) {
+          left = Math.max(safe, window.innerWidth - measured.width - safe);
+        }
+
+        let top = anchorRect.top;
+        if (top + measured.height > window.innerHeight - safe) {
+          top = Math.max(safe, window.innerHeight - measured.height - safe);
+        }
+        if (top < safe) top = safe;
+
+        fan.style.left = Math.round(left) + "px";
+        fan.style.top = Math.round(top) + "px";
+      });
+    });
+  }
+
+  function openNewBlockFan(group, anchor) {
+    const fan = $("newBlockFan");
+    if (!fan || !group || !anchor) return;
+
+    if (activeBlockFanCategory === group.category && fan.classList.contains("open")) {
+      closeNewBlockFan();
+      return;
+    }
+
+    activeBlockFanCategory = group.category;
+    document.querySelectorAll(".new-block-category.active").forEach((button) => {
+      button.classList.remove("active");
+      button.setAttribute("aria-expanded", "false");
+    });
+    anchor.classList.add("active");
+    anchor.setAttribute("aria-expanded", "true");
+
+    fan.innerHTML = "";
+
+    const head = document.createElement("div");
+    head.className = "new-block-fan-head";
+    const titleWrap = document.createElement("div");
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = "CATEGORIA";
+    const title = document.createElement("strong");
+    title.textContent = group.category;
+    titleWrap.append(eyebrow, title);
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "new-block-fan-close";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Chiudi categoria");
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeNewBlockFan();
+    });
+    head.append(titleWrap, close);
+
+    const list = document.createElement("div");
+    list.className = "new-block-fan-list";
+    group.items.forEach((item) => {
+      list.appendChild(createNewBlockResultButton(item, (picked) => {
+        addNode(picked.type, picked.component);
+        closeNewBlockFan();
+        closeNewBlockPalette();
+      }));
+    });
+
+    fan.append(head, list);
+    positionNewBlockFan(anchor);
+  }
+
   function renderNewBlockPalette(query) {
     const container = $("newBlockResults");
     if (!container) return;
     container.innerHTML = "";
+    closeNewBlockFan();
 
     const term = String(query || "").trim().toLowerCase();
-    const items = blockPaletteItems().filter((item) => {
+    const allItems = blockPaletteItems();
+    const items = allItems.filter((item) => {
       const haystack = [item.label, item.description, item.category, item.type, item.component].join(" ").toLowerCase();
       return !term || haystack.includes(term);
     });
@@ -8308,9 +8443,27 @@
       return;
     }
 
+    // Search bypasses categories and shows direct choices.
+    if (term) {
+      const searchLabel = document.createElement("div");
+      searchLabel.className = "new-block-search-results-label";
+      searchLabel.textContent = items.length + (items.length === 1 ? " risultato" : " risultati");
+      container.appendChild(searchLabel);
+
+      items.forEach((item, index) => {
+        const button = createNewBlockResultButton(item, (picked) => {
+          addNode(picked.type, picked.component);
+          closeNewBlockPalette();
+        });
+        if (index === 0) button.classList.add("keyboard-active");
+        container.appendChild(button);
+      });
+      return;
+    }
+
     const groups = [];
     const byCategory = new Map();
-    items.forEach((item) => {
+    allItems.forEach((item) => {
       if (!byCategory.has(item.category)) {
         const group = { category: item.category, items: [] };
         byCategory.set(item.category, group);
@@ -8319,16 +8472,11 @@
       byCategory.get(item.category).items.push(item);
     });
 
-    let firstVisibleResult = null;
-
     groups.forEach((group) => {
-      const section = document.createElement("section");
-      section.className = "new-block-category-section";
-
-      const header = document.createElement("button");
-      header.type = "button";
-      header.className = "new-block-category";
-      header.setAttribute("aria-expanded", "true");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "new-block-category";
+      button.setAttribute("aria-expanded", "false");
 
       const categoryCopy = document.createElement("span");
       categoryCopy.className = "new-block-category-copy";
@@ -8340,69 +8488,16 @@
 
       const chevron = document.createElement("span");
       chevron.className = "new-block-category-chevron";
-      chevron.textContent = "⌄";
-      header.append(categoryCopy, chevron);
+      chevron.textContent = "›";
+      button.append(categoryCopy, chevron);
 
-      const body = document.createElement("div");
-      body.className = "new-block-category-body";
-
-      // During search, matching categories stay open so results are immediately visible.
-      const collapsed = !term && collapsedBlockCategories.has(group.category);
-      section.classList.toggle("collapsed", collapsed);
-      body.hidden = collapsed;
-      header.setAttribute("aria-expanded", collapsed ? "false" : "true");
-
-      group.items.forEach((item) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "new-block-result";
-
-        const icon = document.createElement("span");
-        icon.className = "new-block-result-icon";
-        icon.textContent = item.icon || "◇";
-
-        const copy = document.createElement("span");
-        copy.className = "new-block-result-copy";
-        const name = document.createElement("strong");
-        name.textContent = item.label;
-        const description = document.createElement("small");
-        description.textContent = item.description || (item.component ? "Componente Unity" : item.category);
-        copy.append(name, description);
-
-        const category = document.createElement("span");
-        category.className = "new-block-result-category";
-        category.textContent = item.component || "";
-
-        button.append(icon, copy, category);
-        button.addEventListener("click", () => {
-          addNode(item.type, item.component);
-          closeNewBlockPalette();
-        });
-
-        if (!collapsed && !firstVisibleResult) {
-          firstVisibleResult = button;
-          button.classList.add("keyboard-active");
-        }
-        body.appendChild(button);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openNewBlockFan(group, button);
       });
 
-      header.addEventListener("click", () => {
-        if (term) return;
-        const willCollapse = !section.classList.contains("collapsed");
-        section.classList.toggle("collapsed", willCollapse);
-        body.hidden = willCollapse;
-        header.setAttribute("aria-expanded", willCollapse ? "false" : "true");
-
-        if (willCollapse) collapsedBlockCategories.add(group.category);
-        else collapsedBlockCategories.delete(group.category);
-
-        container.querySelectorAll(".new-block-result.keyboard-active").forEach((button) => button.classList.remove("keyboard-active"));
-        const first = container.querySelector(".new-block-category-body:not([hidden]) .new-block-result");
-        if (first) first.classList.add("keyboard-active");
-      });
-
-      section.append(header, body);
-      container.appendChild(section);
+      container.appendChild(button);
     });
   }
 
@@ -8425,6 +8520,7 @@
   function closeNewBlockPalette() {
     const palette = $("newBlockPalette");
     if (!palette) return;
+    closeNewBlockFan();
     palette.classList.remove("open");
     palette.setAttribute("aria-hidden", "true");
     $("addObjectTop").setAttribute("aria-expanded", "false");
@@ -8643,6 +8739,7 @@
   });
   $("closeNewBlockPalette").addEventListener("click", closeNewBlockPalette);
   $("newBlockPalette").addEventListener("click", (event) => event.stopPropagation());
+  $("newBlockFan").addEventListener("click", (event) => event.stopPropagation());
   $("newBlockSearch").addEventListener("input", (event) => renderNewBlockPalette(event.target.value));
   $("newBlockSearch").addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -8651,10 +8748,13 @@
       return;
     }
     if (event.key === "Enter") {
-      const first = $("newBlockResults").querySelector(".new-block-category-body:not([hidden]) .new-block-result");
-      if (first) {
+      const results = $("newBlockResults");
+      const firstResult = results.querySelector(".new-block-result");
+      const firstCategory = results.querySelector(".new-block-category");
+      const target = firstResult || firstCategory;
+      if (target) {
         event.preventDefault();
-        first.click();
+        target.click();
       }
     }
   });
@@ -8702,7 +8802,9 @@
   });
 
   document.addEventListener("click", (event) => {
-    if (!event.target.closest("#newBlockPalette") && !event.target.closest("#addObjectTop")) closeNewBlockPalette();
+    if (!event.target.closest("#newBlockPalette") &&
+        !event.target.closest("#newBlockFan") &&
+        !event.target.closest("#addObjectTop")) closeNewBlockPalette();
     if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
       closeAccountMenu();
     }
@@ -9108,6 +9210,7 @@
   });
 
   window.addEventListener("resize", () => {
+    closeNewBlockFan();
     closeInterfaceSurfaces();
     reconcileWorkspacePanels();
     renderEdges();
