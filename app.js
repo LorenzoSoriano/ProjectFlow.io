@@ -1046,7 +1046,52 @@
         body.appendChild(desc);
       }
 
-      if (node.type === "class") {
+      if (node.type === "object") {
+        const categoryOrder = UNITY_COMPONENT_CATEGORIES.map((category) => category.id).concat(["scripts", "other"]);
+        const components = node.rows
+          .filter((item) => item.kind === "component")
+          .slice()
+          .sort((a, b) => {
+            const categoryDelta = categoryOrder.indexOf(a.componentCategory) - categoryOrder.indexOf(b.componentCategory);
+            return categoryDelta || a.componentType.localeCompare(b.componentType);
+          });
+
+        const componentActions = [];
+        UNITY_COMPONENT_CATEGORIES.forEach((category) => {
+          const choices = category.components.filter((type) => type !== "Transform");
+          if (!choices.length) return;
+          componentActions.push({ header: true, label: category.label });
+          choices.forEach((type) => componentActions.push({
+            label: type,
+            value: "component:" + type
+          }));
+        });
+
+        const scripts = attachableScriptNodes().filter((script) => script.id !== node.id);
+        if (scripts.length) {
+          componentActions.push({ header: true, label: "SCRIPTS" });
+          scripts.forEach((script) => componentActions.push({
+            label: script.title,
+            value: "script:" + script.id
+          }));
+        }
+
+        appendSection("COMPONENTS", components, componentActions);
+
+        const dataMembers = node.rows.filter((item) => item.kind === "variable" || item.kind === "property");
+        appendSection("DATA", dataMembers, [
+          { label: "Single variable", value: "variable" },
+          { label: "Array variable", value: "arrayVariable" },
+          { label: "List variable", value: "listVariable" },
+          { label: "Dictionary variable", value: "dictionaryVariable" }
+        ]);
+
+        const methods = node.rows.filter((item) => item.kind === "function");
+        if (methods.length) appendSection("LEGACY LOGIC", methods, []);
+
+        const events = node.rows.filter((item) => item.kind === "unityEvent");
+        if (events.length) appendSection("EVENTS", events, []);
+      } else if (node.type === "class") {
         const classMeta = document.createElement("div");
         classMeta.className = "node-meta-inline";
         classMeta.append(
@@ -1136,6 +1181,10 @@
       }
 
       const removeMember = (item) => {
+        if (item.kind === "component" && item.locked) {
+          showToast("Transform è obbligatorio su ogni GameObject.");
+          return;
+        }
         node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
         project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
         rerenderNode();
@@ -1205,6 +1254,7 @@
           item.kind === "variable" ||
           item.kind === "property" ||
           item.kind === "unityEvent" ||
+          item.kind === "component" ||
           item.kind === "condition" ||
           item.kind === "output" ||
           (item.kind === "function" && normalizedType(item.returnType) !== "void");
@@ -1454,6 +1504,37 @@
 
           topLine.append(access, payload, name);
           editor.appendChild(topLine);
+        } else if (item.kind === "component") {
+          rowElement.classList.add("unity-component-row");
+          rowElement.dataset.componentCategory = item.componentCategory;
+
+          const componentName = document.createElement("div");
+          componentName.className = "component-inline-name";
+          const strong = document.createElement("strong");
+          strong.textContent = item.componentType;
+          const source = document.createElement("small");
+          source.textContent = item.componentSource === "script"
+            ? "Script · " + componentCategoryLabel(item.componentCategory)
+            : "Unity · " + componentCategoryLabel(item.componentCategory);
+          componentName.append(strong, source);
+
+          const enabled = document.createElement("button");
+          enabled.type = "button";
+          enabled.className = "component-enabled" + (item.enabled ? " active" : "");
+          enabled.textContent = item.enabled ? "ON" : "OFF";
+          enabled.title = item.locked ? "Transform è sempre presente" : "Abilita / disabilita componente";
+          enabled.disabled = !!item.locked;
+          enabled.addEventListener("pointerdown", (event) => event.stopPropagation());
+          enabled.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (item.locked) return;
+            item.enabled = !item.enabled;
+            rerenderNode();
+          });
+
+          topLine.classList.add("component-member-top");
+          topLine.append(componentName, enabled);
+          editor.appendChild(topLine);
         } else {
           const name = inlineInput(item.label, "nome", (value) => {
             item.label = value;
@@ -1466,10 +1547,10 @@
         }
 
         const remove = document.createElement("button");
-        remove.className = "inline-remove-member";
+        remove.className = "inline-remove-member" + (item.kind === "component" && item.locked ? " locked" : "");
         remove.type = "button";
-        remove.textContent = "×";
-        remove.title = "Rimuovi membro";
+        remove.textContent = item.kind === "component" && item.locked ? "•" : "×";
+        remove.title = item.kind === "component" && item.locked ? "Componente obbligatorio" : "Rimuovi membro";
         remove.addEventListener("pointerdown", (event) => event.stopPropagation());
         remove.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -1510,6 +1591,24 @@
           node.rows.push(method);
         }
         if (action === "event") node.rows.push(eventRow("OnEvent", "void"));
+        if (action.startsWith("component:")) {
+          const componentType = action.slice("component:".length);
+          if (componentType === "Transform" && node.rows.some((item) => item.kind === "component" && item.componentType === "Transform")) {
+            showToast("Il GameObject ha già Transform.");
+          } else {
+            node.rows.push(componentRow(componentType, componentCategoryFor(componentType), "unity"));
+          }
+        }
+        if (action.startsWith("script:")) {
+          const classId = action.slice("script:".length);
+          const scriptClass = nodeById(classId);
+          if (scriptClass) {
+            node.rows.push(componentRow(scriptClass.title, "scripts", "script", {
+              componentClassId: scriptClass.id,
+              locked: false
+            }));
+          }
+        }
         if (action.startsWith("class:")) {
           const className = action.slice(6);
           const variable = variableRow(className.charAt(0).toLowerCase() + className.slice(1), className, "private");
@@ -1594,10 +1693,21 @@
           memberList.addEventListener("scroll", () => renderEdges(), { passive: true });
           memberList.addEventListener("wheel", (event) => event.stopPropagation(), { passive: true });
 
+          let previousComponentCategory = "";
           items.forEach((item) => {
+            if (titleText === "COMPONENTS" && item.kind === "component" && item.componentCategory !== previousComponentCategory) {
+              previousComponentCategory = item.componentCategory;
+              const categoryLabel = document.createElement("div");
+              categoryLabel.className = "component-category-label";
+              categoryLabel.textContent = componentCategoryLabel(item.componentCategory);
+              memberList.appendChild(categoryLabel);
+            }
+
             const rowElement = makeRowElement(item);
             rowElement.dataset.search = [
               item.label,
+              item.componentType,
+              item.componentCategory,
               item.dataType,
               item.returnType,
               item.parameters,
@@ -1630,6 +1740,14 @@
           popup.className = "section-add-popup";
 
           actions.forEach((action) => {
+            if (action.header) {
+              const header = document.createElement("div");
+              header.className = "section-add-group";
+              header.textContent = action.label;
+              popup.appendChild(header);
+              return;
+            }
+
             const button = document.createElement("button");
             button.type = "button";
             button.className = "section-add-option";
@@ -1687,7 +1805,7 @@
           node.rows.filter((item) => item.kind === "unityEvent"),
           [{ label: "UnityEvent", value: "event" }]
         );
-        const otherItems = node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind));
+        const otherItems = node.rows.filter((item) => !["variable", "property", "function", "unityEvent", "component"].includes(item.kind));
         if (otherItems.length) appendSection("OTHER", otherItems, []);
       } else {
         node.rows.forEach((item) => body.appendChild(makeRowElement(item)));
