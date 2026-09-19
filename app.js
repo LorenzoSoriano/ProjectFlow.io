@@ -3720,6 +3720,43 @@
         edgeLayer.appendChild(junction);
       });
     });
+
+    if (selectedNodeIds.size) {
+      const groupedTypeRelations = new Map();
+
+      buildTypeRelations().forEach((relation) => {
+        if (!selectedNodeIds.has(relation.sourceNodeId) && !selectedNodeIds.has(relation.targetNodeId)) return;
+
+        const key = relation.sourceNodeId + "|" + relation.targetNodeId;
+        if (!groupedTypeRelations.has(key)) {
+          groupedTypeRelations.set(key, Object.assign({}, relation, { count: 1 }));
+        } else {
+          groupedTypeRelations.get(key).count += 1;
+        }
+      });
+
+      groupedTypeRelations.forEach((relation) => {
+        const anchors = autoTypeRelationAnchors(relation);
+        if (!anchors) return;
+
+        const pathData = pathForRoute([anchors.a, anchors.b]);
+        const targetNode = nodeById(relation.targetNodeId);
+        const color = targetNode ? typeMeta(targetNode.type).color : dataTypeColor(relation.targetType);
+
+        const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        glow.setAttribute("d", pathData);
+        glow.setAttribute("class", "auto-type-glow " + (relation.targetNodeType === "enum" ? "enum-link" : "class-link"));
+        glow.style.stroke = color;
+        edgeLayer.insertBefore(glow, edgeLayer.firstChild);
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", pathData);
+        path.setAttribute("class", "auto-type-edge " + (relation.targetNodeType === "enum" ? "enum-link" : "class-link"));
+        path.style.stroke = color;
+        path.style.setProperty("--relation-count", String(relation.count));
+        edgeLayer.insertBefore(path, edgeLayer.firstChild);
+      });
+    }
   }
 
   function renderMinimap() {
@@ -4742,7 +4779,10 @@
     const minX = Math.min.apply(null, project.nodes.map((node) => node.x));
     const minY = Math.min.apply(null, project.nodes.map((node) => node.y));
     const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)));
-    const maxY = Math.max.apply(null, project.nodes.map((node) => node.y + 260));
+    const maxY = Math.max.apply(null, project.nodes.map((node) => {
+      const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      return node.y + (element ? element.offsetHeight : 260);
+    }));
     const width = Math.max(400, maxX - minX);
     const height = Math.max(300, maxY - minY);
     const scale = Math.max(0.35, Math.min(1.05, Math.min((rect.width - 150) / width, (rect.height - 150) / height)));
