@@ -69,8 +69,42 @@
             </button>
             <button class="block-template" data-template="function">
               <span class="template-icon function-icon">ƒ</span>
-              <span><strong>Funzione</strong><small>Input, logica e risultato</small></span>
+              <span><strong>Funzione</strong><small>Parametri, return e logica</small></span>
               <kbd>F</kbd>
+            </button>
+            <button class="block-template" data-template="enum">
+              <span class="template-icon enum-icon">E</span>
+              <span><strong>Enum</strong><small>Stati, modalità e scelte nominate</small></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="library-section" data-library-section="game-flow">
+          <button class="library-section-toggle" type="button" aria-expanded="true">
+            <span class="library-section-chevron">▾</span>
+            <span>GAME FLOW</span>
+          </button>
+          <div class="block-list">
+            <button class="block-template" data-template="event">
+              <span class="template-icon event-icon">⚡</span>
+              <span><strong>Evento</strong><small>Avvia il flusso di gameplay</small></span>
+            </button>
+            <button class="block-template" data-template="action">
+              <span class="template-icon action-icon">▶</span>
+              <span><strong>Azione</strong><small>Esegue una modifica o un metodo</small></span>
+            </button>
+            <button class="block-template" data-template="condition">
+              <span class="template-icon condition-icon">?</span>
+              <span><strong>Condizione</strong><small>True / False con dati tipati</small></span>
+              <kbd>D</kbd>
+            </button>
+            <button class="block-template" data-template="state">
+              <span class="template-icon state-icon">S</span>
+              <span><strong>Stato</strong><small>Fase o modalità del gameplay</small></span>
+            </button>
+            <button class="block-template" data-template="enumSwitch">
+              <span class="template-icon enum-switch-icon">⇆</span>
+              <span><strong>Switch Enum</strong><small>Un'uscita flow per ogni valore</small></span>
             </button>
           </div>
         </div>
@@ -112,21 +146,16 @@
           </div>
         </div>
 
-        <div class="library-section" data-library-section="logic">
+        <div class="library-section" data-library-section="data">
           <button class="library-section-toggle" type="button" aria-expanded="true">
             <span class="library-section-chevron">▾</span>
-            <span>LOGICA</span>
+            <span>DATI</span>
           </button>
           <div class="block-list">
             <button class="block-template" data-template="variable">
               <span class="template-icon variable-icon">x</span>
               <span><strong>Variabile</strong><small>Dato o stato condiviso</small></span>
               <kbd>V</kbd>
-            </button>
-            <button class="block-template" data-template="condition">
-              <span class="template-icon condition-icon">?</span>
-              <span><strong>Condizione</strong><small>Confronto o decisione</small></span>
-              <kbd>D</kbd>
             </button>
           </div>
         </div>
@@ -181,7 +210,7 @@
 
           <div class="canvas-hint" id="canvasHint">
             <strong>Trascina per muovere i blocchi.</strong>
-            <span>Modifica direttamente i blocchi. Trascina i membri per riordinarli, usa + nelle sezioni e collega solo tipi compatibili.</span>
+            <span>FLOW = esecuzione, DATA = valori tipati. Usa Event → Condition → Action / State per prototipare il gameplay.</span>
           </div>
 
           <div class="connection-banner" id="connectionBanner">
@@ -221,8 +250,13 @@
                 <option value="component">Componente Unity</option>
                 <option value="class">Classe</option>
                 <option value="function">Funzione</option>
-                <option value="variable">Variabile</option>
+                <option value="enum">Enum</option>
+                <option value="event">Evento</option>
+                <option value="action">Azione</option>
                 <option value="condition">Condizione</option>
+                <option value="state">Stato</option>
+                <option value="enumSwitch">Switch Enum</option>
+                <option value="variable">Variabile</option>
                 <option value="ui">Interfaccia</option>
                 <option value="note">Nota</option>
               </select>
