@@ -17,6 +17,8 @@ It is intentionally not a compiler, UML validator, or programming language. Bloc
 - Select and drag connection curve points, including multi-selection and marquee selection.
 - Double-click a connection to add a curve point; press Delete to remove selected points.
 - Group selected blocks inside auto-sizing Shader Graph-style frames with **Ctrl/Cmd + G**.
+- Rename groups from the whole top title band and drag the entire group from any frame edge.
+- Undo / Redo history for project edits with **Ctrl/Cmd + Z**, **Ctrl/Cmd + Shift + Z**, or **Ctrl/Cmd + Y**.
 - Rename a group directly on the canvas and drag its header to move all contained blocks.
 - Double-click a connection to remove it.
 - Save automatically to browser local storage.
