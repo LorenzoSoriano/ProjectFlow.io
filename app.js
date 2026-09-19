@@ -2681,6 +2681,7 @@
 
     if (!cloudState.sharedProjectId || !cloudState.user) {
       if (collaborationLayer) collaborationLayer.innerHTML = "";
+      nodeLayer.querySelectorAll(".remote-sketch-preview-canvas").forEach((canvas) => canvas.remove());
       return;
     }
 
