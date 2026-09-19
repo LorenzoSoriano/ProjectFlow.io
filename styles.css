@@ -6859,3 +6859,37 @@ body,
   transform:none!important;
   transition:none!important;
 }
+
+
+/* v2.16 — groups stay in the background; dropping blocks inside assigns them */
+.group-layer{
+  z-index:0!important;
+  pointer-events:none;
+}
+.edge-layer{
+  z-index:1;
+  pointer-events:none;
+}
+.node-layer{
+  z-index:2;
+}
+.graph-group{
+  pointer-events:none;
+}
+.graph-group-header,
+.graph-group-title,
+.graph-group-remove,
+.graph-group-drag-zone{
+  pointer-events:auto;
+}
+/* Individual connection hit targets remain interactive even though the SVG
+   surface itself no longer blocks the group frame below it. */
+.edge-hit{
+  pointer-events:stroke;
+}
+.edge-junction{
+  pointer-events:all;
+}
+.collaboration-layer{
+  z-index:5;
+}
