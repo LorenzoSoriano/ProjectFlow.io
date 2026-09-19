@@ -703,6 +703,11 @@
     if (item.kind === "unityEvent") {
       return item.access + " UnityEvent" + (item.payloadType && item.payloadType !== "void" ? "<" + item.payloadType + ">" : "");
     }
+    if (item.kind === "component") {
+      const category = componentCategoryLabel(item.componentCategory);
+      const source = item.componentSource === "script" ? "Script" : "Unity";
+      return source + " · " + category + (item.enabled === false ? " · Disabled" : "");
+    }
     if (item.kind === "variable" || item.kind === "property") {
       const reference = item.referenceMode && item.referenceMode !== "value" ? " · " + (REFERENCE_MODE_LABELS[item.referenceMode] || item.referenceMode) : "";
       const inspector = item.serialized ? " · Inspector" : "";
@@ -719,6 +724,9 @@
     if (node.type === "function") {
       const owner = ownerClassName(node);
       return (owner ? owner + " · " : "") + node.methodAccess + " " + nodeReturnTypeLabel(node);
+    }
+    if (node.type === "component") {
+      return componentCategoryLabel(node.componentCategory) + " · Unity Component";
     }
     return typeMeta(node.type).label;
   }
@@ -745,6 +753,7 @@
     if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
     if (item.kind === "function") return firstParameterType(item.parameters);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
+    if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "input") return normalizedType(item.value);
     if (item.kind === "condition") return "any";
     return "any";
@@ -755,6 +764,7 @@
     if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
     if (item.kind === "function") return methodReturnTypeKey(item);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
+    if (item.kind === "component") return normalizedType(item.componentType);
     if (item.kind === "output") return normalizedType(item.value);
     if (item.kind === "condition") return normalizedType(item.value || "bool");
     return "any";
@@ -816,7 +826,14 @@
     if (["int", "float", "double"].includes(value)) return "#f3bd59";
     if (value === "string") return "#e979c6";
     if (["Vector2", "Vector3", "Quaternion", "Color"].includes(value)) return "#42d4df";
-    if (["GameObject", "Transform", "Rigidbody", "Collider", "Animator", "AudioSource", "Camera", "SpriteRenderer"].includes(value)) return "#55d69e";
+    if ([
+      "GameObject", "Transform", "Rigidbody", "Rigidbody2D", "Collider", "Collider2D",
+      "BoxCollider", "SphereCollider", "CapsuleCollider", "Animator", "Animation",
+      "AudioSource", "AudioListener", "Camera", "Light", "SpriteRenderer",
+      "MeshRenderer", "SkinnedMeshRenderer", "ParticleSystem", "TrailRenderer",
+      "LineRenderer", "Canvas", "CanvasGroup", "RectTransform",
+      "NavMeshAgent", "NavMeshObstacle"
+    ].includes(value)) return "#55d69e";
     if (value === "void") return "#68748a";
     if (publicClassNodes().some((node) => node.title === value)) return "#9b8cff";
     return "#7d8aa3";
