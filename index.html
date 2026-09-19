@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1020" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260919-2354" />
+  <link rel="stylesheet" href="styles.css?v=20260919-2456" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,8 +14,14 @@
       <a class="brand home-brand" href="#" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v1.6</span>
+        <span class="build-badge" title="Build corrente">v1.7</span>
       </a>
+
+      <nav class="home-nav" aria-label="Navigazione principale">
+        <a href="#projects">Progetti</a>
+        <a href="#about">About</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
 
       <div class="home-account">
         <div class="sync-state" id="homeSyncState">
@@ -43,7 +49,7 @@
         </div>
       </section>
 
-      <section class="project-library-section">
+      <section class="project-library-section" id="projects">
         <div class="project-library-head">
           <div>
             <span class="eyebrow">LIBRERIA</span>
@@ -64,7 +70,86 @@
           <button class="primary-button" id="createProjectEmpty" type="button">＋ Crea schema</button>
         </div>
       </section>
+
+      <section class="home-info-grid" id="about">
+        <article class="home-info-card home-info-card-large">
+          <span class="eyebrow">ABOUT PROJECTFLOW</span>
+          <h2>Progetta il comportamento prima del codice.</h2>
+          <p>ProjectFlow è uno spazio visuale per prototipare sistemi di gameplay, classi, GameObject, componenti Unity, eventi, stati, enum, funzioni e relazioni tra dati prima di passare all'implementazione.</p>
+          <div class="about-pill-row">
+            <span>Game Design</span>
+            <span>Unity Architecture</span>
+            <span>Gameplay Flow</span>
+            <span>Code Planning</span>
+          </div>
+        </article>
+
+        <article class="home-info-card">
+          <span class="eyebrow">COME FUNZIONA</span>
+          <h3>FLOW + DATA + STRUCTURE</h3>
+          <p><strong>FLOW</strong> descrive quando accade qualcosa. <strong>DATA</strong> mostra quali valori passano. <strong>STRUCTURE</strong> collega classi, enum, componenti e dipendenze.</p>
+        </article>
+
+        <article class="home-info-card">
+          <span class="eyebrow">SALVATAGGIO</span>
+          <h3>Locale o sincronizzato.</h3>
+          <p>Senza account i progetti restano nel browser. Con Google login, gli schemi possono essere sincronizzati sul proprio spazio Firebase e riaperti da altri dispositivi.</p>
+        </article>
+      </section>
+
+      <section class="privacy-section" id="privacy">
+        <div class="privacy-heading">
+          <div>
+            <span class="eyebrow">PRIVACY</span>
+            <h2>Controllo semplice dei tuoi schemi.</h2>
+          </div>
+          <span class="privacy-updated">Aggiornato: 19 settembre 2026</span>
+        </div>
+
+        <div class="privacy-grid">
+          <article>
+            <h3>Senza login</h3>
+            <p>Gli schemi vengono salvati nel <strong>localStorage</strong> del browser. Restano sul dispositivo e nel profilo browser utilizzato finché non vengono eliminati o cancellati i dati del sito.</p>
+          </article>
+          <article>
+            <h3>Con Google</h3>
+            <p>Firebase Authentication gestisce l'accesso Google. ProjectFlow usa l'identificativo dell'account per salvare gli schemi in Cloud Firestore sotto il percorso personale dell'utente.</p>
+          </article>
+          <article>
+            <h3>Dati salvati</h3>
+            <p>Il cloud contiene il nome dello schema, date di creazione/modifica e dati del diagramma. Il codice attuale non attiva Firebase Analytics.</p>
+          </article>
+          <article>
+            <h3>Eliminazione</h3>
+            <p>Il comando <strong>Elimina</strong> rimuove lo schema dalla libreria locale e, quando autenticato e sincronizzato, anche dal documento cloud corrispondente.</p>
+          </article>
+        </div>
+
+        <div class="privacy-note">
+          <span>ⓘ</span>
+          <p>Google e Firebase possono trattare dati tecnici necessari ai loro servizi secondo le rispettive informative. Le regole Firestore di ProjectFlow limitano i documenti degli schemi all'UID autenticato proprietario.</p>
+        </div>
+      </section>
     </main>
+
+    <footer class="home-footer">
+      <div class="footer-brand">
+        <span class="brand-mark">PF</span>
+        <div>
+          <strong>ProjectFlow.io</strong>
+          <small>Visual game systems workspace</small>
+        </div>
+      </div>
+
+      <nav class="footer-links" aria-label="Link footer">
+        <a href="#projects">Progetti</a>
+        <a href="#about">About</a>
+        <a href="#privacy">Privacy</a>
+        <a href="https://github.com/LorenzoSoriano/ProjectFlow.io" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </nav>
+
+      <div class="footer-copy">© 2026 ProjectFlow.io · Concept by Lorenzo Soriano</div>
+    </footer>
   </section>
 
   <div class="app-shell editor-view hidden" id="editorView">
@@ -74,7 +159,7 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.6</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v1.7</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -365,7 +450,7 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="firebase-config.js?v=20260919-2354"></script>
-  <script src="app.js?v=20260919-2354"></script>
+  <script src="firebase-config.js?v=20260919-2456"></script>
+  <script src="app.js?v=20260919-2456"></script>
 </body>
 </html>
