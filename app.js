@@ -1623,6 +1623,13 @@
     const syncState = $("homeSyncState");
     const avatar = $("editorAccountAvatar");
     const label = $("editorAccountLabel");
+    const menuAvatar = $("accountMenuAvatar");
+    const menuName = $("accountMenuName");
+    const menuEmail = $("accountMenuEmail");
+    const menuDot = $("accountMenuSyncDot");
+    const menuSync = $("accountMenuSyncText");
+    const logout = $("accountLogout");
+    const syncNow = $("accountSyncNow");
 
     if (syncState) {
       const dot = syncState.querySelector(".sync-dot");
@@ -1633,17 +1640,17 @@
       }
       if (copy) {
         copy.textContent = user
-          ? "Sincronizzato con " + (user.displayName || user.email || "Google")
-          : configured ? "Salvataggio locale · Google disponibile" : "Salvataggio locale";
+          ? "Cloud attivo · " + (user.displayName || user.email || "Google")
+          : configured ? "Modalità locale" : "Salvataggio locale";
       }
     }
 
     if (homeButton) {
       const text = homeButton.querySelector("span:last-child");
       homeButton.classList.toggle("signed-in", !!user);
-      if (text) text.textContent = user ? "Esci da " + (user.displayName || "Google") : "Accedi con Google";
+      if (text) text.textContent = user ? (user.displayName || "Account") : "Accedi con Google";
       homeButton.title = configured
-        ? (user ? "Disconnetti account Google" : "Sincronizza i progetti con Google")
+        ? (user ? "Apri menu account" : "Accedi per sincronizzare i progetti")
         : "Configura Firebase per attivare Google login e cloud";
     }
 
@@ -1658,89 +1665,157 @@
         avatar.style.backgroundImage = user && user.photoURL ? 'url("' + user.photoURL + '")' : "";
       }
     }
-  }
 
-  async function initCloud() {
-    updateAccountUI();
-    if (!cloudState.configured) return;
-
-    try {
-      const base = "https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/";
-      const [appApi, authApi, firestoreApi] = await Promise.all([
-        import(base + "firebase-app.js"),
-        import(base + "firebase-auth.js"),
-        import(base + "firebase-firestore.js")
-      ]);
-
-      const firebaseApp = appApi.initializeApp(window.PROJECTFLOW_FIREBASE_CONFIG);
-      const auth = authApi.getAuth(firebaseApp);
-      const db = firestoreApi.getFirestore(firebaseApp);
-      const provider = new authApi.GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-
-      cloudState.auth = auth;
-      cloudState.db = db;
-      cloudState.provider = provider;
-      cloudState.api = Object.assign({}, authApi, firestoreApi);
-      cloudState.ready = true;
-
-      authApi.onAuthStateChanged(auth, async (user) => {
-        cloudState.user = user || null;
-        updateAccountUI();
-
-        if (user) {
-          await mergeCloudLibrary();
-          renderProjectLibrary();
-        }
-      });
-    } catch (error) {
-      console.warn("ProjectFlow: Firebase non disponibile.", error);
-      cloudState.ready = false;
-      updateAccountUI();
+    if (menuAvatar) {
+      const initial = user && (user.displayName || user.email)
+        ? (user.displayName || user.email).trim().charAt(0).toUpperCase()
+        : "G";
+      menuAvatar.textContent = initial;
+      menuAvatar.style.backgroundImage = user && user.photoURL ? 'url("' + user.photoURL + '")' : "";
     }
+    if (menuName) menuName.textContent = user ? (user.displayName || "Account Google") : "Modalità locale";
+    if (menuEmail) menuEmail.textContent = user ? (user.email || "Account Google") : "Nessun account collegato";
+    if (menuDot) {
+      menuDot.classList.toggle("cloud", !!user);
+      menuDot.classList.toggle("local", !user);
+    }
+    if (menuSync) menuSync.textContent = user ? "Sincronizzazione Firebase attiva" : "Solo salvataggio locale";
+    if (logout) logout.hidden = !user;
+    if (syncNow) syncNow.disabled = !user;
   }
 
-  async function toggleGoogleAuth() {
-    if (!cloudState.configured) {
-      alert(
-        "Google login è già predisposto, ma manca la configurazione Firebase. " +
-        "Inserisci il firebaseConfig in firebase-config.js e abilita Google + Firestore."
+  async function initCloud(force) {
+    updateAccountUI();
+    if (!cloudState.configured) return false;
+    if (cloudState.ready) return true;
+    if (cloudState.loadingPromise) return cloudState.loadingPromise;
+
+    const optedIn = localStorage.getItem(CLOUD_OPT_IN_KEY) === "1";
+    if (!force && !optedIn) return false;
+
+    cloudState.loadingPromise = (async () => {
+      try {
+        const base = "https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/";
+        const [appApi, authApi, firestoreApi] = await Promise.all([
+          import(base + "firebase-app.js"),
+          import(base + "firebase-auth.js"),
+          import(base + "firebase-firestore.js")
+        ]);
+
+        const firebaseApp = appApi.initializeApp(window.PROJECTFLOW_FIREBASE_CONFIG);
+        const auth = authApi.getAuth(firebaseApp);
+        const db = firestoreApi.getFirestore(firebaseApp);
+        const provider = new authApi.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+
+        cloudState.auth = auth;
+        cloudState.db = db;
+        cloudState.provider = provider;
+        cloudState.api = Object.assign({}, authApi, firestoreApi);
+        cloudState.ready = true;
+
+        authApi.onAuthStateChanged(auth, async (user) => {
+          cloudState.user = user || null;
+          updateAccountUI();
+
+          if (user) {
+            localStorage.setItem(CLOUD_OPT_IN_KEY, "1");
+            await mergeCloudLibrary();
+            renderProjectLibrary();
+            setAutosaveState("cloud", "Autosave · Cloud");
+          } else {
+            setAutosaveState("saved", "Autosave");
+          }
+        });
+        return true;
+      } catch (error) {
+        console.warn("ProjectFlow: Firebase non disponibile.", error);
+        cloudState.ready = false;
+        updateAccountUI();
+        return false;
+      } finally {
+        cloudState.loadingPromise = null;
+      }
+    })();
+
+    return cloudState.loadingPromise;
+  }
+
+  function authErrorMessage(error) {
+    const code = error && error.code ? String(error.code) : "";
+    if (code === "auth/configuration-not-found") {
+      return (
+        "Firebase Authentication non è ancora configurato per questo progetto.\n\n" +
+        "Apri Firebase Console → projectflow-7ce02 → Authentication → Sign-in method → Google, " +
+        "attiva il provider, scegli l'email di supporto e premi Salva."
       );
+    }
+    if (code === "auth/unauthorized-domain") {
+      return (
+        "Il dominio non è autorizzato per Firebase Authentication.\n\n" +
+        "Aggiungi lorenzosoriano.github.io in Authentication → Settings → Authorized domains."
+      );
+    }
+    if (code === "auth/popup-blocked") {
+      return "Il browser ha bloccato il popup Google. Consenti i popup per questo sito e riprova.";
+    }
+    if (code === "auth/popup-closed-by-user") {
+      return "Accesso annullato: la finestra Google è stata chiusa prima di completare il login.";
+    }
+    return "Accesso Google non riuscito: " + (error.message || code || "errore sconosciuto");
+  }
+
+  async function startGoogleLogin() {
+    if (!cloudState.configured) {
+      alert("Firebase non è configurato per il login Google.");
       return;
     }
 
-    if (!cloudState.ready || !cloudState.api) return;
+    localStorage.setItem(CLOUD_OPT_IN_KEY, "1");
+    const ready = await initCloud(true);
+    if (!ready || !cloudState.api) {
+      alert("Impossibile inizializzare Firebase.");
+      return;
+    }
 
     try {
-      if (cloudState.user) {
-        await cloudState.api.signOut(cloudState.auth);
-      } else {
-        await cloudState.api.signInWithPopup(cloudState.auth, cloudState.provider);
-      }
+      await cloudState.api.signInWithPopup(cloudState.auth, cloudState.provider);
     } catch (error) {
       console.warn("ProjectFlow: accesso Google non riuscito.", error);
-
-      const code = error && error.code ? String(error.code) : "";
-      let message = "Accesso Google non riuscito: " + (error.message || code || "errore sconosciuto");
-
-      if (code === "auth/configuration-not-found") {
-        message =
-          "Firebase Authentication non è ancora configurato per questo progetto.\n\n" +
-          "Apri Firebase Console → projectflow-7ce02 → Authentication → Sign-in method → Google, " +
-          "attiva il provider, scegli l'email di supporto e premi Salva.\n\n" +
-          "Se Google risulta già attivo, disattivalo e riattivalo, poi riprova.";
-      } else if (code === "auth/unauthorized-domain") {
-        message =
-          "Il dominio non è autorizzato per Firebase Authentication.\n\n" +
-          "Aggiungi lorenzosoriano.github.io in Authentication → Settings → Authorized domains.";
-      } else if (code === "auth/popup-blocked") {
-        message = "Il browser ha bloccato il popup Google. Consenti i popup per questo sito e riprova.";
-      } else if (code === "auth/popup-closed-by-user") {
-        message = "Accesso annullato: la finestra Google è stata chiusa prima di completare il login.";
-      }
-
-      alert(message);
+      alert(authErrorMessage(error));
     }
+  }
+
+  async function logoutGoogleAuth() {
+    if (!cloudState.user || !cloudState.api || !cloudState.auth) return;
+    try {
+      await cloudState.api.signOut(cloudState.auth);
+      localStorage.removeItem(CLOUD_OPT_IN_KEY);
+      closeAccountMenu();
+      showToast("Logout completato · modalità locale");
+    } catch (error) {
+      console.warn("ProjectFlow: logout non riuscito.", error);
+    }
+  }
+
+  async function handleAccountButton(anchor) {
+    if (!cloudState.user) {
+      await startGoogleLogin();
+      return;
+    }
+
+    const menu = $("accountMenu");
+    const alreadyOpen = menu && menu.classList.contains("open") && cloudState.accountAnchor === anchor;
+    if (alreadyOpen) {
+      closeAccountMenu();
+      return;
+    }
+
+    closeInterfaceSurfaces(menu);
+    cloudState.accountAnchor = anchor;
+    updateAccountUI();
+    positionAccountMenu(anchor);
+    if (anchor === $("editorAuthButton")) anchor.setAttribute("aria-expanded", "true");
   }
 
   async function mergeCloudLibrary() {
