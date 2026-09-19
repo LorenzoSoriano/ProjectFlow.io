@@ -110,7 +110,11 @@
       access: access || "private",
       serialized: false,
       referenceMode: "value",
-      defaultValue: ""
+      defaultValue: "",
+      collectionKind: "single",
+      arrayLength: 0,
+      listInitialCount: 0,
+      dictionaryKeyType: "string"
     });
   }
 
@@ -119,6 +123,9 @@
       access: "private",
       methodKind: methodKind || "custom",
       returnType: returnType || "void",
+      returnCollectionKind: "single",
+      returnArrayLength: 0,
+      returnDictionaryKeyType: "string",
       parameters: ""
     });
   }
@@ -158,6 +165,11 @@
       if (typeof item.serialized !== "boolean") item.serialized = item.access === "public";
       if (typeof item.referenceMode !== "string") item.referenceMode = "value";
       if (typeof item.defaultValue !== "string") item.defaultValue = "";
+      if (typeof item.collectionKind !== "string") item.collectionKind = "single";
+      if (!["single", "array", "list", "dictionary"].includes(item.collectionKind)) item.collectionKind = "single";
+      if (typeof item.arrayLength !== "number") item.arrayLength = 0;
+      if (typeof item.listInitialCount !== "number") item.listInitialCount = 0;
+      if (typeof item.dictionaryKeyType !== "string" || !item.dictionaryKeyType) item.dictionaryKeyType = "string";
     }
 
     if (item.kind === "function") {
@@ -167,6 +179,10 @@
         const match = item.value.match(/returns?\s+([^\s]+)/i);
         item.returnType = match ? match[1] : "void";
       }
+      if (typeof item.returnCollectionKind !== "string") item.returnCollectionKind = "single";
+      if (!["single", "array", "list", "dictionary"].includes(item.returnCollectionKind)) item.returnCollectionKind = "single";
+      if (typeof item.returnArrayLength !== "number") item.returnArrayLength = 0;
+      if (typeof item.returnDictionaryKeyType !== "string" || !item.returnDictionaryKeyType) item.returnDictionaryKeyType = "string";
       if (typeof item.parameters !== "string") item.parameters = "";
     }
 
@@ -195,6 +211,10 @@
       if (typeof node.methodAccess !== "string") node.methodAccess = "public";
       if (typeof node.methodKind !== "string") node.methodKind = "custom";
       if (typeof node.returnType !== "string") node.returnType = "void";
+      if (typeof node.returnCollectionKind !== "string") node.returnCollectionKind = "single";
+      if (!["single", "array", "list", "dictionary"].includes(node.returnCollectionKind)) node.returnCollectionKind = "single";
+      if (typeof node.returnArrayLength !== "number") node.returnArrayLength = 0;
+      if (typeof node.returnDictionaryKeyType !== "string" || !node.returnDictionaryKeyType) node.returnDictionaryKeyType = "string";
       if (typeof node.parameters !== "string") node.parameters = "";
     }
   }
@@ -475,10 +495,60 @@
     return owner ? owner.title : "";
   }
 
+  function collectionTypeLabel(kind, valueType, keyType, length) {
+    const base = normalizedType(valueType);
+    const mode = kind || "single";
+    if (mode === "array") {
+      const size = Number(length) > 0 ? Number(length) : "";
+      return base + "[" + size + "]";
+    }
+    if (mode === "list") return "List<" + base + ">";
+    if (mode === "dictionary") return "Dictionary<" + normalizedType(keyType || "string") + ", " + base + ">";
+    return base;
+  }
+
+  function variableTypeLabel(item) {
+    return collectionTypeLabel(
+      item.collectionKind,
+      item.dataType,
+      item.dictionaryKeyType,
+      item.arrayLength
+    );
+  }
+
+  function methodReturnTypeLabel(item) {
+    return collectionTypeLabel(
+      item.returnCollectionKind,
+      item.returnType,
+      item.returnDictionaryKeyType,
+      item.returnArrayLength
+    );
+  }
+
+  function nodeReturnTypeLabel(node) {
+    return collectionTypeLabel(
+      node.returnCollectionKind,
+      node.returnType,
+      node.returnDictionaryKeyType,
+      node.returnArrayLength
+    );
+  }
+
+  function collectionWarning(item) {
+    if (
+      (item.kind === "variable" || item.kind === "property") &&
+      item.collectionKind === "dictionary" &&
+      item.serialized
+    ) {
+      return "Unity non serializza Dictionary direttamente.";
+    }
+    return "";
+  }
+
   function memberSummary(item) {
     if (item.kind === "function") {
       const kind = METHOD_KIND_LABELS[item.methodKind] || "Custom";
-      return item.access + " " + (item.returnType || "void") + " (" + (item.parameters || "") + ") · " + kind;
+      return item.access + " " + methodReturnTypeLabel(item) + " (" + (item.parameters || "") + ") · " + kind;
     }
     if (item.kind === "unityEvent") {
       return item.access + " UnityEvent" + (item.payloadType && item.payloadType !== "void" ? "<" + item.payloadType + ">" : "");
@@ -486,7 +556,8 @@
     if (item.kind === "variable" || item.kind === "property") {
       const reference = item.referenceMode && item.referenceMode !== "value" ? " · " + (REFERENCE_MODE_LABELS[item.referenceMode] || item.referenceMode) : "";
       const inspector = item.serialized ? " · Inspector" : "";
-      return item.access + " " + (item.dataType || "value") + inspector + reference;
+      const sizeInfo = item.collectionKind === "list" && item.listInitialCount > 0 ? " · initial " + item.listInitialCount : "";
+      return item.access + " " + variableTypeLabel(item) + inspector + reference + sizeInfo;
     }
     return item.value || "";
   }
@@ -497,7 +568,7 @@
     }
     if (node.type === "function") {
       const owner = ownerClassName(node);
-      return (owner ? owner + " · " : "") + node.methodAccess + " " + node.returnType;
+      return (owner ? owner + " · " : "") + node.methodAccess + " " + nodeReturnTypeLabel(node);
     }
     return typeMeta(node.type).label;
   }
@@ -521,7 +592,7 @@
 
   function memberInputType(item) {
     if (!item) return "any";
-    if (item.kind === "variable" || item.kind === "property") return normalizedType(item.dataType);
+    if (item.kind === "variable" || item.kind === "property") return variableTypeLabel(item);
     if (item.kind === "function") return firstParameterType(item.parameters);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "input") return normalizedType(item.value);
@@ -531,8 +602,8 @@
 
   function memberOutputType(item) {
     if (!item) return "any";
-    if (item.kind === "variable" || item.kind === "property") return normalizedType(item.dataType);
-    if (item.kind === "function") return normalizedType(item.returnType);
+    if (item.kind === "variable" || item.kind === "property") return variableTypeLabel(item);
+    if (item.kind === "function") return methodReturnTypeLabel(item);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "output") return normalizedType(item.value);
     if (item.kind === "condition") return normalizedType(item.value || "bool");
@@ -586,7 +657,11 @@
   }
 
   function dataTypeColor(type) {
-    const value = normalizedType(type);
+    const raw = normalizedType(type);
+    const dictionaryMatch = raw.match(/^Dictionary<[^,]+,\s*(.+)>$/);
+    const listMatch = raw.match(/^List<(.+)>$/);
+    const arrayMatch = raw.match(/^(.+)\[[0-9]*\]$/);
+    const value = dictionaryMatch ? dictionaryMatch[1] : listMatch ? listMatch[1] : arrayMatch ? arrayMatch[1] : raw;
     if (value === "bool") return "#ff966d";
     if (["int", "float", "double"].includes(value)) return "#f3bd59";
     if (value === "string") return "#e979c6";
