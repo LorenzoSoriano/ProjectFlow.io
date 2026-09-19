@@ -1750,8 +1750,11 @@
     const node = selectedNode();
     if (!node) return;
     node.type = $("nodeType").value;
+    ensureNodeMeta(node);
     $("inspectorTitle").textContent = node.title;
-    refreshCanvas();
+    render();
+    renderInspector();
+    markDirty();
   });
 
   $("nodeTitle").addEventListener("input", () => {
@@ -1760,6 +1763,12 @@
     node.title = $("nodeTitle").value;
     $("inspectorTitle").textContent = node.title || "Blocco";
     refreshCanvas();
+  });
+  $("nodeTitle").addEventListener("blur", () => {
+    const node = selectedNode();
+    if (!node) return;
+    renderNodes();
+    renderInspector();
   });
 
   $("nodeDescription").addEventListener("input", () => {
@@ -1776,10 +1785,37 @@
     refreshCanvas();
   });
 
+  $("addVariable").addEventListener("click", () => {
+    const node = selectedNode();
+    if (!node) return;
+    node.rows.push(variableRow("newVariable", "int", "private"));
+    render();
+    renderInspector();
+    markDirty();
+  });
+
+  $("addMethod").addEventListener("click", () => {
+    const node = selectedNode();
+    if (!node) return;
+    node.rows.push(methodRow("NewMethod", "void", "custom"));
+    render();
+    renderInspector();
+    markDirty();
+  });
+
+  $("addEvent").addEventListener("click", () => {
+    const node = selectedNode();
+    if (!node) return;
+    node.rows.push(eventRow("OnEvent", "void"));
+    render();
+    renderInspector();
+    markDirty();
+  });
+
   $("addRow").addEventListener("click", () => {
     const node = selectedNode();
     if (!node) return;
-    node.rows.push(row("newValue", "type / value", "variable"));
+    node.rows.push(row("newValue", "type / value", "text"));
     render();
     renderInspector();
     markDirty();
