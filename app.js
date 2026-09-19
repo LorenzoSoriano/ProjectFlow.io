@@ -2225,9 +2225,23 @@
             rerenderNode();
           }, "inline-reference-select");
 
-          const defaultValue = inlineInput(item.defaultValue, "default", (value) => {
-            item.defaultValue = value;
-          }, "inline-default-input");
+          const enumType = enumByName(item.dataType);
+          let defaultValue;
+          if (enumType && item.collectionKind === "single" && !enumType.enumFlags) {
+            const enumOptions = enumType.enumValues.map((entry) => [entry.name, entry.name]);
+            if (!item.defaultValue && enumOptions.length) item.defaultValue = enumOptions[0][0];
+            defaultValue = compactSelect(item.defaultValue, enumOptions, (value) => {
+              item.defaultValue = value;
+              markDirty();
+            }, "inline-default-select");
+          } else {
+            defaultValue = inlineInput(
+              item.defaultValue,
+              enumType && enumType.enumFlags ? "None | FlagA | FlagB" : "default",
+              (value) => { item.defaultValue = value; },
+              "inline-default-input"
+            );
+          }
 
           const serialized = document.createElement("button");
           serialized.type = "button";
@@ -2819,7 +2833,107 @@
         body.appendChild(section);
       };
 
-      if (node.type === "object") {
+      if (node.type === "enum") {
+        const enumMeta = document.createElement("div");
+        enumMeta.className = "enum-meta-row";
+        enumMeta.append(
+          compactSelect(node.enumVisibility, [["public", "public"], ["internal", "internal"]], (value) => {
+            node.enumVisibility = value;
+            rerenderNode();
+          }, "enum-meta-select"),
+          compactSelect(node.enumUnderlyingType, [
+            "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong"
+          ], (value) => {
+            node.enumUnderlyingType = value;
+            rerenderNode();
+          }, "enum-meta-select")
+        );
+
+        const flags = document.createElement("button");
+        flags.type = "button";
+        flags.className = "enum-flags-button" + (node.enumFlags ? " active" : "");
+        flags.textContent = node.enumFlags ? "[Flags] ON" : "[Flags] OFF";
+        flags.title = "Permette di combinare più valori dell'enum come bit flags";
+        flags.addEventListener("pointerdown", (event) => event.stopPropagation());
+        flags.addEventListener("click", (event) => {
+          event.stopPropagation();
+          node.enumFlags = !node.enumFlags;
+          rerenderNode();
+        });
+        enumMeta.appendChild(flags);
+        body.appendChild(enumMeta);
+
+        const enumSection = document.createElement("div");
+        enumSection.className = "enum-values-section";
+
+        const heading = document.createElement("div");
+        heading.className = "enum-values-heading";
+        heading.innerHTML = '<span>VALUES</span><span class="section-count">' + node.enumValues.length + '</span>';
+        enumSection.appendChild(heading);
+
+        const list = document.createElement("div");
+        list.className = "enum-values-list";
+
+        node.enumValues.forEach((entry, valueIndex) => {
+          const valueRow = document.createElement("div");
+          valueRow.className = "enum-value-row";
+
+          const indexLabel = document.createElement("span");
+          indexLabel.className = "enum-value-index";
+          indexLabel.textContent = String(valueIndex);
+
+          const name = inlineInput(entry.name, "Value", (value) => {
+            entry.name = value;
+          }, "enum-value-name");
+
+          const numeric = document.createElement("input");
+          numeric.type = "number";
+          numeric.className = "enum-value-number";
+          numeric.value = entry.value;
+          numeric.addEventListener("pointerdown", (event) => event.stopPropagation());
+          numeric.addEventListener("input", () => {
+            entry.value = Number(numeric.value) || 0;
+            markDirty();
+          });
+
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "enum-value-remove";
+          remove.textContent = "×";
+          remove.title = "Rimuovi valore";
+          remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+          remove.addEventListener("click", (event) => {
+            event.stopPropagation();
+            node.enumValues = node.enumValues.filter((value) => value.id !== entry.id);
+            rerenderNode();
+          });
+
+          valueRow.append(indexLabel, name, numeric, remove);
+          list.appendChild(valueRow);
+        });
+
+        const addValue = document.createElement("button");
+        addValue.type = "button";
+        addValue.className = "enum-add-value";
+        addValue.textContent = "＋ Value";
+        addValue.addEventListener("pointerdown", (event) => event.stopPropagation());
+        addValue.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const used = node.enumValues.map((entry) => Number(entry.value) || 0);
+          let nextValue = 0;
+          if (node.enumFlags) {
+            const positives = used.filter((value) => value > 0);
+            nextValue = positives.length ? Math.pow(2, Math.floor(Math.log2(Math.max(...positives))) + 1) : 1;
+          } else {
+            nextValue = used.length ? Math.max(...used) + 1 : 0;
+          }
+          node.enumValues.push(enumValue("Value" + node.enumValues.length, nextValue));
+          rerenderNode();
+        });
+
+        enumSection.append(list, addValue);
+        body.appendChild(enumSection);
+      } else if (node.type === "object") {
         const categoryOrder = UNITY_COMPONENT_CATEGORIES.map((category) => category.id).concat(["scripts", "other"]);
         const components = node.rows
           .filter((item) => item.kind === "component")
