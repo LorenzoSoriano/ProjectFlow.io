@@ -1219,6 +1219,7 @@
   let minimapProjection = null;
   let minimapDrag = false;
   let minimapResizeState = null;
+  const collapsedBlockCategories = new Set();
   let panelResizeState = null;
   let inspectorVisible = false;
   let panState = null;
@@ -2989,6 +2990,7 @@
     cloudState.presencePreview = null;
     cloudState.presenceActivity = "Attivo";
     renderRemotePresence();
+    scheduleMinimapRender(0);
   }
 
   function startSharedProjectSession(record) {
@@ -3059,6 +3061,7 @@
       });
       cloudState.remotePresence = next;
       renderRemotePresence();
+      scheduleMinimapRender(0);
     }, (error) => {
       console.warn("ProjectFlow: cursori collaborativi non disponibili.", error);
     });
@@ -7145,6 +7148,54 @@
       svg.appendChild(rect);
     });
 
+    if (cloudState.sharedProjectId && cloudState.user) {
+      const now = Date.now();
+      Array.from(cloudState.remotePresence.values())
+        .filter((entry) =>
+          entry &&
+          entry.uid !== cloudState.user.uid &&
+          entry.cursor &&
+          typeof entry.cursor.x === "number" &&
+          typeof entry.cursor.y === "number" &&
+          now - Number(entry.updatedAt || 0) < 45000
+        )
+        .forEach((entry) => {
+          const rawX = offsetX + (entry.cursor.x - minX) * scale;
+          const rawY = offsetY + (entry.cursor.y - minY) * scale;
+          const x = Math.max(5, Math.min(175, rawX));
+          const y = Math.max(5, Math.min(105, rawY));
+          const label = entry.name || entry.email || "Collaboratore";
+          const initial = label.trim().charAt(0).toUpperCase() || "?";
+
+          const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          group.setAttribute("class", "minimap-collaborator");
+
+          const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          halo.setAttribute("cx", x);
+          halo.setAttribute("cy", y);
+          halo.setAttribute("r", "5.5");
+          halo.setAttribute("class", "minimap-collaborator-halo");
+
+          const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          dot.setAttribute("cx", x);
+          dot.setAttribute("cy", y);
+          dot.setAttribute("r", "3.7");
+          dot.setAttribute("class", "minimap-collaborator-dot");
+
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", x);
+          text.setAttribute("y", y + .2);
+          text.setAttribute("class", "minimap-collaborator-initial");
+          text.textContent = initial;
+
+          const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+          title.textContent = label + " · " + (entry.activity || "Attivo");
+
+          group.append(title, halo, dot, text);
+          svg.appendChild(group);
+        });
+    }
+
     const bounds = viewport.getBoundingClientRect();
     const worldLeft = -view.x / view.scale;
     const worldTop = -view.y / view.scale;
@@ -8241,43 +8292,101 @@
       return;
     }
 
-    let currentCategory = "";
-    items.forEach((item, index) => {
-      if (item.category !== currentCategory) {
-        currentCategory = item.category;
-        const heading = document.createElement("div");
-        heading.className = "new-block-category";
-        heading.textContent = currentCategory;
-        container.appendChild(heading);
+    const groups = [];
+    const byCategory = new Map();
+    items.forEach((item) => {
+      if (!byCategory.has(item.category)) {
+        const group = { category: item.category, items: [] };
+        byCategory.set(item.category, group);
+        groups.push(group);
       }
+      byCategory.get(item.category).items.push(item);
+    });
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "new-block-result";
-      if (index === 0) button.classList.add("keyboard-active");
+    let firstVisibleResult = null;
 
-      const icon = document.createElement("span");
-      icon.className = "new-block-result-icon";
-      icon.textContent = item.icon || "◇";
+    groups.forEach((group) => {
+      const section = document.createElement("section");
+      section.className = "new-block-category-section";
 
-      const copy = document.createElement("span");
-      copy.className = "new-block-result-copy";
-      const name = document.createElement("strong");
-      name.textContent = item.label;
-      const description = document.createElement("small");
-      description.textContent = item.description || (item.component ? "Componente Unity" : item.category);
-      copy.append(name, description);
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "new-block-category";
+      header.setAttribute("aria-expanded", "true");
 
-      const category = document.createElement("span");
-      category.className = "new-block-result-category";
-      category.textContent = item.component || item.category;
+      const categoryCopy = document.createElement("span");
+      categoryCopy.className = "new-block-category-copy";
+      const categoryName = document.createElement("strong");
+      categoryName.textContent = group.category;
+      const categoryCount = document.createElement("small");
+      categoryCount.textContent = String(group.items.length);
+      categoryCopy.append(categoryName, categoryCount);
 
-      button.append(icon, copy, category);
-      button.addEventListener("click", () => {
-        addNode(item.type, item.component);
-        closeNewBlockPalette();
+      const chevron = document.createElement("span");
+      chevron.className = "new-block-category-chevron";
+      chevron.textContent = "⌄";
+      header.append(categoryCopy, chevron);
+
+      const body = document.createElement("div");
+      body.className = "new-block-category-body";
+
+      // During search, matching categories stay open so results are immediately visible.
+      const collapsed = !term && collapsedBlockCategories.has(group.category);
+      section.classList.toggle("collapsed", collapsed);
+      body.hidden = collapsed;
+      header.setAttribute("aria-expanded", collapsed ? "false" : "true");
+
+      group.items.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "new-block-result";
+
+        const icon = document.createElement("span");
+        icon.className = "new-block-result-icon";
+        icon.textContent = item.icon || "◇";
+
+        const copy = document.createElement("span");
+        copy.className = "new-block-result-copy";
+        const name = document.createElement("strong");
+        name.textContent = item.label;
+        const description = document.createElement("small");
+        description.textContent = item.description || (item.component ? "Componente Unity" : item.category);
+        copy.append(name, description);
+
+        const category = document.createElement("span");
+        category.className = "new-block-result-category";
+        category.textContent = item.component || "";
+
+        button.append(icon, copy, category);
+        button.addEventListener("click", () => {
+          addNode(item.type, item.component);
+          closeNewBlockPalette();
+        });
+
+        if (!collapsed && !firstVisibleResult) {
+          firstVisibleResult = button;
+          button.classList.add("keyboard-active");
+        }
+        body.appendChild(button);
       });
-      container.appendChild(button);
+
+      header.addEventListener("click", () => {
+        if (term) return;
+        const willCollapse = !section.classList.contains("collapsed");
+        section.classList.toggle("collapsed", willCollapse);
+        body.hidden = willCollapse;
+        header.setAttribute("aria-expanded", willCollapse ? "false" : "true");
+
+        if (willCollapse) collapsedBlockCategories.add(group.category);
+        else collapsedBlockCategories.delete(group.category);
+
+        container.querySelectorAll(".new-block-result.keyboard-active").forEach((button) => button.classList.remove("keyboard-active"));
+        const first = container.querySelector(".new-block-category-body:not([hidden]) .new-block-result");
+        if (first) first.classList.add("keyboard-active");
+      });
+
+      section.append(header, body);
+      container.appendChild(section);
     });
   }
 
@@ -8526,7 +8635,7 @@
       return;
     }
     if (event.key === "Enter") {
-      const first = $("newBlockResults").querySelector(".new-block-result");
+      const first = $("newBlockResults").querySelector(".new-block-category-body:not([hidden]) .new-block-result");
       if (first) {
         event.preventDefault();
         first.click();
