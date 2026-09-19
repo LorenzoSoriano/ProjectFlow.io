@@ -943,6 +943,365 @@
     svg.appendChild(visible);
   }
 
+  function inspectorField(labelText, control) {
+    const label = document.createElement("label");
+    label.className = "field-label inspector-dynamic-field";
+    label.append(document.createTextNode(labelText));
+    label.appendChild(control);
+    return label;
+  }
+
+  function selectControl(value, options, onChange) {
+    const select = document.createElement("select");
+    options.forEach((optionValue) => {
+      const option = document.createElement("option");
+      const pair = Array.isArray(optionValue) ? optionValue : [optionValue, optionValue];
+      option.value = pair[0];
+      option.textContent = pair[1];
+      select.appendChild(option);
+    });
+    if (value && !Array.from(select.options).some((option) => option.value === value)) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.appendChild(option);
+    }
+    select.value = value || select.options[0]?.value || "";
+    select.addEventListener("change", () => onChange(select.value));
+    return select;
+  }
+
+  function textControl(value, placeholder, onInput) {
+    const input = document.createElement("input");
+    input.value = value || "";
+    input.placeholder = placeholder || "";
+    input.addEventListener("input", () => onInput(input.value));
+    return input;
+  }
+
+  function checkboxControl(checked, text, onChange) {
+    const label = document.createElement("label");
+    label.className = "inline-check";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = !!checked;
+    checkbox.addEventListener("change", () => onChange(checkbox.checked));
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    label.append(checkbox, copy);
+    return label;
+  }
+
+  function renderTypeSettings(node) {
+    const container = $("nodeTypeSettings");
+    container.innerHTML = "";
+    ensureNodeMeta(node);
+
+    if (node.type === "class") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "CLASSE / UNITY";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+
+      grid.appendChild(inspectorField("VISIBILITÀ", selectControl(node.classVisibility, [
+        ["public", "public"],
+        ["internal", "internal"]
+      ], (value) => {
+        node.classVisibility = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("BASE", selectControl(node.baseType, [
+        ["MonoBehaviour", "MonoBehaviour"],
+        ["ScriptableObject", "ScriptableObject"],
+        ["Plain C#", "Plain C# class"]
+      ], (value) => {
+        node.baseType = value;
+        if (value === "ScriptableObject") node.instanceAccess = "scriptableObject";
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("ACCESSO / CONDIVISIONE", selectControl(node.instanceAccess, [
+        ["value", "Locale / non condivisa"],
+        ["inspector", "Inspector reference"],
+        ["getComponent", "GetComponent"],
+        ["instance", "Instance / Singleton"],
+        ["findFirst", "FindFirstObjectByType"],
+        ["scriptableObject", "ScriptableObject asset"]
+      ], (value) => {
+        node.instanceAccess = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      const order = document.createElement("input");
+      order.type = "number";
+      order.value = node.executionOrder || 0;
+      order.addEventListener("input", () => {
+        node.executionOrder = Number(order.value) || 0;
+        markDirty();
+      });
+      grid.appendChild(inspectorField("EXECUTION ORDER", order));
+
+      container.appendChild(grid);
+
+      const hint = document.createElement("div");
+      hint.className = "unity-hint";
+      hint.textContent = node.classVisibility === "public"
+        ? "Questa classe è disponibile come tipo nelle variabili degli altri blocchi."
+        : "Rendi la classe public per renderla disponibile come tipo nelle altre variabili.";
+      container.appendChild(hint);
+    }
+
+    if (node.type === "function") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "FIRMA METODO";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+
+      const ownerOptions = [["", "— Nessuna classe —"]].concat(allClassNodes().map((item) => [item.id, item.title]));
+      grid.appendChild(inspectorField("CLASSE", selectControl(node.ownerClassId, ownerOptions, (value) => {
+        node.ownerClassId = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("ACCESSO", selectControl(node.methodAccess, [
+        ["public", "public"],
+        ["private", "private"],
+        ["protected", "protected"],
+        ["internal", "internal"]
+      ], (value) => {
+        node.methodAccess = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("TIPO METODO", selectControl(node.methodKind, [
+        ["custom", "Custom"],
+        ["lifecycle", "Unity lifecycle"],
+        ["eventHandler", "Event handler"],
+        ["unityEventListener", "UnityEvent listener"],
+        ["coroutine", "Coroutine"]
+      ], (value) => {
+        node.methodKind = value;
+        if (value === "lifecycle") {
+          const preset = UNITY_LIFECYCLE[0];
+          node.title = preset.name;
+          node.returnType = preset.returnType;
+          node.parameters = preset.parameters;
+          $("nodeTitle").value = node.title;
+        }
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+
+      if (node.methodKind === "lifecycle") {
+        grid.appendChild(inspectorField("UNITY CALLBACK", selectControl(node.title, UNITY_LIFECYCLE.map((item) => [item.name, item.name + "()"]), (value) => {
+          const preset = UNITY_LIFECYCLE.find((item) => item.name === value);
+          if (preset) {
+            node.title = preset.name;
+            node.returnType = preset.returnType;
+            node.parameters = preset.parameters;
+            $("nodeTitle").value = node.title;
+            renderNodes();
+            renderInspector();
+            markDirty();
+          }
+        })));
+      }
+
+      grid.appendChild(inspectorField("RETURN TYPE", selectControl(node.returnType, ["void"].concat(availableDataTypes()), (value) => {
+        node.returnType = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("PARAMETRI", textControl(node.parameters, "es. int score, Player player", (value) => {
+        node.parameters = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      container.appendChild(grid);
+    }
+  }
+
+  function renderMemberEditor(node, item) {
+    normalizeMember(item);
+    const wrapper = document.createElement("div");
+    wrapper.className = "member-editor member-editor-" + item.kind;
+
+    const head = document.createElement("div");
+    head.className = "member-editor-head";
+    const badge = document.createElement("span");
+    badge.className = "member-kind-badge";
+    badge.textContent = (ROW_META[item.kind] || ROW_META.variable).label;
+
+    const remove = document.createElement("button");
+    remove.className = "row-delete";
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = "Rimuovi";
+    remove.addEventListener("click", () => {
+      node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
+      project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
+      render();
+      renderInspector();
+      markDirty();
+    });
+    head.append(badge, remove);
+    wrapper.appendChild(head);
+
+    if (node.type !== "class") {
+      const kindSelect = selectControl(item.kind, Object.keys(ROW_META).map((key) => [key, ROW_META[key].label]), (value) => {
+        item.kind = value;
+        normalizeMember(item);
+        renderNodes();
+        renderInspector();
+        markDirty();
+      });
+      wrapper.appendChild(inspectorField("TIPO", kindSelect));
+    }
+
+    wrapper.appendChild(inspectorField("NOME", textControl(item.label, "Nome", (value) => {
+      item.label = value;
+      renderNodes();
+      markDirty();
+    })));
+
+    if (item.kind === "variable" || item.kind === "property") {
+      const grid = document.createElement("div");
+      grid.className = "settings-grid member-grid";
+      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, ["public", "private", "protected", "internal"], (value) => {
+        item.access = value;
+        if (value === "public") item.serialized = true;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("TIPO", selectControl(item.dataType, availableDataTypes(), (value) => {
+        item.dataType = value;
+        if (publicClassNodes().some((classNode) => classNode.title === value) && item.referenceMode === "value") {
+          item.referenceMode = "inspector";
+        }
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
+        ["value", "Valore"],
+        ["inspector", "Inspector reference"],
+        ["getComponent", "GetComponent"],
+        ["instance", "Instance / Singleton"],
+        ["findFirst", "FindFirstObjectByType"],
+        ["scriptableObject", "ScriptableObject asset"]
+      ], (value) => {
+        item.referenceMode = value;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("DEFAULT", textControl(item.defaultValue, "Valore iniziale", (value) => {
+        item.defaultValue = value;
+        markDirty();
+      })));
+      wrapper.appendChild(grid);
+      wrapper.appendChild(checkboxControl(item.serialized, "Mostra / serializza nell'Inspector", (checked) => {
+        item.serialized = checked;
+        renderNodes();
+        markDirty();
+      }));
+    } else if (item.kind === "function") {
+      const grid = document.createElement("div");
+      grid.className = "settings-grid member-grid";
+      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, ["public", "private", "protected", "internal"], (value) => {
+        item.access = value;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("TIPO METODO", selectControl(item.methodKind, [
+        ["custom", "Custom"],
+        ["lifecycle", "Unity lifecycle"],
+        ["eventHandler", "Event handler"],
+        ["unityEventListener", "UnityEvent listener"],
+        ["coroutine", "Coroutine"]
+      ], (value) => {
+        item.methodKind = value;
+        if (value === "lifecycle") {
+          const preset = UNITY_LIFECYCLE[0];
+          item.label = preset.name;
+          item.returnType = preset.returnType;
+          item.parameters = preset.parameters;
+        }
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+
+      if (item.methodKind === "lifecycle") {
+        grid.appendChild(inspectorField("UNITY CALLBACK", selectControl(item.label, UNITY_LIFECYCLE.map((preset) => [preset.name, preset.name + "()"]), (value) => {
+          const preset = UNITY_LIFECYCLE.find((entry) => entry.name === value);
+          if (preset) {
+            item.label = preset.name;
+            item.returnType = preset.returnType;
+            item.parameters = preset.parameters;
+            renderNodes();
+            renderInspector();
+            markDirty();
+          }
+        })));
+      }
+
+      grid.appendChild(inspectorField("RETURN TYPE", selectControl(item.returnType, ["void"].concat(availableDataTypes()), (value) => {
+        item.returnType = value;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("PARAMETRI", textControl(item.parameters, "es. Collider other", (value) => {
+        item.parameters = value;
+        renderNodes();
+        markDirty();
+      })));
+      wrapper.appendChild(grid);
+    } else if (item.kind === "unityEvent") {
+      const grid = document.createElement("div");
+      grid.className = "settings-grid member-grid";
+      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, ["public", "private", "protected"], (value) => {
+        item.access = value;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("PAYLOAD", selectControl(item.payloadType, ["void"].concat(availableDataTypes()), (value) => {
+        item.payloadType = value;
+        renderNodes();
+        markDirty();
+      })));
+      wrapper.appendChild(grid);
+      wrapper.appendChild(checkboxControl(item.serialized, "Persistente / configurabile nell'Inspector", (checked) => {
+        item.serialized = checked;
+        renderNodes();
+        markDirty();
+      }));
+    } else {
+      wrapper.appendChild(inspectorField("VALORE / TIPO", textControl(item.value, "Tipo, valore o nota libera", (value) => {
+        item.value = value;
+        renderNodes();
+        markDirty();
+      })));
+    }
+
+    return wrapper;
+  }
+
   function renderInspector() {
     const node = selectedNode();
     const count = selectedNodeIds.size;
@@ -965,64 +1324,48 @@
       return;
     }
 
+    ensureNodeMeta(node);
     $("inspectorTitle").textContent = node.title;
     $("nodeType").value = node.type;
     $("nodeTitle").value = node.title;
     $("nodeDescription").value = node.description;
     $("nodePseudo").value = node.pseudo;
 
+    renderTypeSettings(node);
+
+    const classLike = node.type === "class" || node.type === "object";
+    $("addVariable").style.display = classLike ? "" : "none";
+    $("addMethod").style.display = classLike ? "" : "none";
+    $("addEvent").style.display = node.type === "class" ? "" : "none";
+    $("addRow").style.display = classLike ? "none" : "";
+
+    $("contentSectionLabel").textContent = node.type === "class" ? "MEMBRI DELLA CLASSE" : "CONTENUTO";
+    $("contentSectionHint").textContent = node.type === "class"
+      ? "Variabili, metodi e UnityEvent sono separati e collegabili."
+      : node.type === "function"
+        ? "Input, output o dati di supporto del metodo."
+        : "Contenuto libero del blocco.";
+
     const list = $("rowEditorList");
     list.innerHTML = "";
-    node.rows.forEach((item) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "row-edit";
 
-      const select = document.createElement("select");
-      Object.keys(ROW_META).forEach((key) => {
-        const option = document.createElement("option");
-        option.value = key;
-        option.textContent = ROW_META[key].label;
-        select.appendChild(option);
-      });
-      select.value = item.kind;
-      select.addEventListener("change", () => {
-        item.kind = select.value;
-        refreshCanvas();
-      });
+    const appendGroup = (titleText, items) => {
+      if (!items.length) return;
+      const title = document.createElement("div");
+      title.className = "member-list-title";
+      title.textContent = titleText;
+      list.appendChild(title);
+      items.forEach((item) => list.appendChild(renderMemberEditor(node, item)));
+    };
 
-      const name = document.createElement("input");
-      name.value = item.label;
-      name.placeholder = "Nome";
-      name.addEventListener("input", () => {
-        item.label = name.value;
-        refreshCanvas();
-      });
-
-      const remove = document.createElement("button");
-      remove.className = "row-delete";
-      remove.type = "button";
-      remove.textContent = "×";
-      remove.title = "Rimuovi riga";
-      remove.addEventListener("click", () => {
-        node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
-        project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
-        render();
-        renderInspector();
-        markDirty();
-      });
-
-      const value = document.createElement("input");
-      value.className = "row-value";
-      value.value = item.value;
-      value.placeholder = "Tipo, valore o nota libera";
-      value.addEventListener("input", () => {
-        item.value = value.value;
-        refreshCanvas();
-      });
-
-      wrapper.append(select, name, remove, value);
-      list.appendChild(wrapper);
-    });
+    if (node.type === "class") {
+      appendGroup("VARIABLES", node.rows.filter((item) => item.kind === "variable" || item.kind === "property"));
+      appendGroup("METHODS", node.rows.filter((item) => item.kind === "function"));
+      appendGroup("UNITY EVENTS", node.rows.filter((item) => item.kind === "unityEvent"));
+      appendGroup("OTHER", node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind)));
+    } else {
+      node.rows.forEach((item) => list.appendChild(renderMemberEditor(node, item)));
+    }
   }
 
   function refreshCanvas() {
