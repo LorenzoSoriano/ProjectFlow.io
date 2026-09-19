@@ -57,3 +57,42 @@ This project is fully static and can be published directly from the repository r
 ## Planned direction
 
 Good next steps for the tool include nested/sub-flow views, groups or frames, comments, richer connection labels, reusable templates, undo/redo history, shareable cloud projects, collaboration, and optional presets for gameplay architecture, UI flow, state machines, and narrative logic.
+
+
+## Project Library e Google Cloud Sync
+
+ProjectFlow apre ora una **Project Library** prima dell'editor. I progetti vengono salvati in locale nel browser e possono essere creati, duplicati, esportati, importati ed eliminati separatamente.
+
+Il progetto corrente viene migrato automaticamente dal vecchio salvataggio singolo alla nuova libreria.
+
+### Attivare Google login + salvataggio cloud
+
+Il frontend è predisposto per **Firebase Authentication + Cloud Firestore**.
+
+1. Crea un progetto su Firebase e aggiungi una Web App.
+2. In **Authentication > Sign-in method**, abilita **Google**.
+3. Crea un database **Cloud Firestore**.
+4. Copia l'oggetto `firebaseConfig` della Web App dentro `firebase-config.js`, sostituendo `null`.
+5. Applica le regole contenute in `firestore.rules` al database Firestore.
+6. Aggiungi `lorenzosoriano.github.io` tra i domini autorizzati di Firebase Authentication, se non presente.
+
+Esempio:
+
+```js
+window.PROJECTFLOW_FIREBASE_CONFIG = {
+  apiKey: "...",
+  authDomain: "project-id.firebaseapp.com",
+  projectId: "project-id",
+  storageBucket: "project-id.firebasestorage.app",
+  messagingSenderId: "...",
+  appId: "..."
+};
+```
+
+Con Firebase non configurato l'app continua a funzionare normalmente in modalità **Local**. Quando un utente effettua il login Google, i progetti vengono sincronizzati sotto:
+
+```text
+users/{uid}/projects/{projectId}
+```
+
+Le regole incluse limitano lettura e scrittura al proprietario autenticato.
