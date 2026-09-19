@@ -1617,6 +1617,58 @@
         body.appendChild(classMeta);
       }
 
+      if (node.type === "event") {
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        meta.appendChild(compactSelect(node.eventKind, [
+          ["custom", "Custom Event"],
+          ["start", "Start"],
+          ["update", "Update"],
+          ["input", "Input"],
+          ["trigger", "Trigger"],
+          ["collision", "Collision"],
+          ["unityEvent", "UnityEvent"]
+        ], (value) => {
+          node.eventKind = value;
+          rerenderNode();
+        }, "node-meta-select"));
+        body.appendChild(meta);
+      }
+
+      if (node.type === "action") {
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        meta.appendChild(compactSelect(node.actionKind, [
+          ["custom", "Custom"],
+          ["callMethod", "Call Method"],
+          ["setVariable", "Set Variable"],
+          ["animator", "Animator"],
+          ["audio", "Audio"],
+          ["spawn", "Spawn"],
+          ["destroy", "Destroy"],
+          ["enable", "Enable / Disable"]
+        ], (value) => {
+          node.actionKind = value;
+          rerenderNode();
+        }, "node-meta-select"));
+        body.appendChild(meta);
+      }
+
+      if (node.type === "state") {
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        meta.appendChild(compactSelect(node.stateKind, [
+          ["normal", "Normal State"],
+          ["start", "Start State"],
+          ["any", "Any State"],
+          ["super", "Super State"]
+        ], (value) => {
+          node.stateKind = value;
+          rerenderNode();
+        }, "node-meta-select"));
+        body.appendChild(meta);
+      }
+
       const removeConnectionsForRef = (refId) => {
         project.connections = project.connections.filter((edge) => edge.from.rowId !== refId && edge.to.rowId !== refId);
       };
@@ -1925,6 +1977,8 @@
 
         body.appendChild(functionMeta);
 
+        body.appendChild(makeParameterSection(node, node.methodAccess));
+
         const methodNotes = document.createElement("textarea");
         methodNotes.className = "method-description-inline standalone-method-description";
         methodNotes.value = node.methodDescription || "";
@@ -1936,8 +1990,6 @@
           markDirty();
         });
         body.appendChild(methodNotes);
-
-        body.appendChild(makeParameterSection(node, node.methodAccess));
 
         const returnSection = document.createElement("div");
         returnSection.className = "method-return-section";
@@ -2237,6 +2289,8 @@
             editor.appendChild(callbackLine);
           }
 
+          editor.appendChild(makeParameterSection(item, item.access));
+
           const description = document.createElement("textarea");
           description.className = "method-description-inline";
           description.value = item.methodDescription || "";
@@ -2248,8 +2302,6 @@
             markDirty();
           });
           editor.appendChild(description);
-
-          editor.appendChild(makeParameterSection(item, item.access));
 
           const returnSection = document.createElement("div");
           returnSection.className = "method-return-section";
