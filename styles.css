@@ -5410,3 +5410,78 @@ body,
 .minimap-view{
   pointer-events:none;
 }
+
+
+/* v2.2 — group edge dragging and edit-friendly titles */
+.graph-group{
+  --group-drag-hit:12px;
+}
+.graph-group-header{
+  pointer-events:auto;
+  cursor:text;
+}
+.graph-group-title{
+  min-width:0;
+  flex:1 1 auto;
+  cursor:text;
+}
+.graph-group-title:focus{
+  border-color:rgba(91,155,196,.52);
+  background:rgba(13,18,26,.72);
+}
+.graph-group-drag{
+  display:none!important;
+}
+.graph-group-drag-zone{
+  position:absolute;
+  z-index:4;
+  display:block;
+  pointer-events:auto;
+  cursor:move;
+}
+.graph-group-drag-zone.top{
+  left:var(--group-drag-hit);
+  right:var(--group-drag-hit);
+  top:calc(var(--group-drag-hit) / -2);
+  height:var(--group-drag-hit);
+}
+.graph-group-drag-zone.bottom{
+  left:var(--group-drag-hit);
+  right:var(--group-drag-hit);
+  bottom:calc(var(--group-drag-hit) / -2);
+  height:var(--group-drag-hit);
+}
+.graph-group-drag-zone.left{
+  left:calc(var(--group-drag-hit) / -2);
+  top:var(--group-drag-hit);
+  bottom:var(--group-drag-hit);
+  width:var(--group-drag-hit);
+}
+.graph-group-drag-zone.right{
+  right:calc(var(--group-drag-hit) / -2);
+  top:var(--group-drag-hit);
+  bottom:var(--group-drag-hit);
+  width:var(--group-drag-hit);
+}
+.graph-group.selected .graph-group-drag-zone:hover{
+  background:rgba(91,155,196,.08);
+}
+.graph-group-drag-zone.top:hover,
+.graph-group-drag-zone.bottom:hover{
+  box-shadow:0 0 0 1px rgba(91,155,196,.32);
+}
+.graph-group-drag-zone.left:hover,
+.graph-group-drag-zone.right:hover{
+  box-shadow:0 0 0 1px rgba(91,155,196,.32);
+}
+
+.history-tool{
+  font-size:16px;
+  line-height:1;
+}
+.history-tool:disabled{
+  opacity:.3;
+  cursor:default;
+  background:transparent;
+  border-color:transparent;
+}
