@@ -1261,6 +1261,18 @@
         }
 
         body.appendChild(functionMeta);
+
+        const methodNotes = document.createElement("textarea");
+        methodNotes.className = "method-description-inline standalone-method-description";
+        methodNotes.value = node.methodDescription || "";
+        methodNotes.placeholder = "Spiega cosa fa questo metodo, quali regole applica e cosa deve restituire…";
+        methodNotes.spellcheck = true;
+        methodNotes.addEventListener("pointerdown", (event) => event.stopPropagation());
+        methodNotes.addEventListener("input", () => {
+          node.methodDescription = methodNotes.value;
+          markDirty();
+        });
+        body.appendChild(methodNotes);
       }
 
       const removeMember = (item) => {
@@ -1570,6 +1582,18 @@
 
           second.append(methodKind, params);
           editor.append(topLine, second);
+
+          const description = document.createElement("textarea");
+          description.className = "method-description-inline";
+          description.value = item.methodDescription || "";
+          description.placeholder = "Cosa fa questo metodo? Regole, effetti e risultato…";
+          description.spellcheck = true;
+          description.addEventListener("pointerdown", (event) => event.stopPropagation());
+          description.addEventListener("input", () => {
+            item.methodDescription = description.value;
+            markDirty();
+          });
+          editor.appendChild(description);
         } else if (item.kind === "unityEvent") {
           const access = compactSelect(item.access, ["public", "private", "protected"], (value) => {
             item.access = value;
@@ -1980,6 +2004,9 @@
       ) return;
       selectNode(node.id, null, true);
     });
+
+    const backbone = createNodeBackbone(node);
+    if (backbone) element.appendChild(backbone);
 
     return element;
   }
@@ -2787,6 +2814,17 @@
         markDirty();
       })));
       wrapper.appendChild(grid);
+
+      const methodDescription = document.createElement("textarea");
+      methodDescription.rows = 4;
+      methodDescription.value = item.methodDescription || "";
+      methodDescription.placeholder = "Spiega cosa fa il metodo…";
+      methodDescription.addEventListener("input", () => {
+        item.methodDescription = methodDescription.value;
+        renderNodes();
+        markDirty();
+      });
+      wrapper.appendChild(inspectorField("DESCRIZIONE METODO", methodDescription));
     } else if (item.kind === "unityEvent") {
       const grid = document.createElement("div");
       grid.className = "settings-grid member-grid";
