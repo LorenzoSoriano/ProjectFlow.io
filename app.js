@@ -6093,6 +6093,7 @@
   }
 
   window.addEventListener("keydown", (event) => {
+    if ($("editorView") && $("editorView").classList.contains("hidden")) return;
     const tag = document.activeElement && document.activeElement.tagName;
     const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
@@ -6153,16 +6154,37 @@
   $("toggleLibrary").addEventListener("click", () => $("libraryPanel").classList.add("open"));
   $("closeLibrary").addEventListener("click", () => $("libraryPanel").classList.remove("open"));
 
+  $("backToProjects").addEventListener("click", () => {
+    saveProject(false);
+    showProjectHome();
+  });
+
+  $("createProjectHome").addEventListener("click", createProjectFromHome);
+  $("createProjectEmpty").addEventListener("click", createProjectFromHome);
+
+  $("uploadProjectHome").addEventListener("click", () => $("homeUploadFile").click());
+  $("homeUploadFile").addEventListener("change", (event) => {
+    importLibraryFile(event.target.files[0]);
+    event.target.value = "";
+  });
+
+  $("projectLibrarySearch").addEventListener("input", renderProjectLibrary);
+  $("homeAuthButton").addEventListener("click", toggleGoogleAuth);
+  $("editorAuthButton").addEventListener("click", toggleGoogleAuth);
+
   window.addEventListener("resize", () => {
     renderEdges();
     renderMinimap();
   });
 
-  window.addEventListener("beforeunload", () => saveProject(false));
+  window.addEventListener("beforeunload", () => {
+    if (currentProjectId) saveProject(false);
+  });
 
   setInspectorVisible(false);
+  renderProjectLibrary();
+  updateAccountUI();
+  initCloud();
   render();
-  if (!localStorage.getItem(VIEW_KEY)) {
-    setTimeout(fitView, 30);
-  }
+  showProjectHome();
 })();
