@@ -1408,7 +1408,27 @@
       }
     } catch (error) {
       console.warn("ProjectFlow: accesso Google non riuscito.", error);
-      alert("Accesso Google non riuscito: " + (error.message || error.code || "errore sconosciuto"));
+
+      const code = error && error.code ? String(error.code) : "";
+      let message = "Accesso Google non riuscito: " + (error.message || code || "errore sconosciuto");
+
+      if (code === "auth/configuration-not-found") {
+        message =
+          "Firebase Authentication non è ancora configurato per questo progetto.\n\n" +
+          "Apri Firebase Console → projectflow-7ce02 → Authentication → Sign-in method → Google, " +
+          "attiva il provider, scegli l'email di supporto e premi Salva.\n\n" +
+          "Se Google risulta già attivo, disattivalo e riattivalo, poi riprova.";
+      } else if (code === "auth/unauthorized-domain") {
+        message =
+          "Il dominio non è autorizzato per Firebase Authentication.\n\n" +
+          "Aggiungi lorenzosoriano.github.io in Authentication → Settings → Authorized domains.";
+      } else if (code === "auth/popup-blocked") {
+        message = "Il browser ha bloccato il popup Google. Consenti i popup per questo sito e riprova.";
+      } else if (code === "auth/popup-closed-by-user") {
+        message = "Accesso annullato: la finestra Google è stata chiusa prima di completare il login.";
+      }
+
+      alert(message);
     }
   }
 
