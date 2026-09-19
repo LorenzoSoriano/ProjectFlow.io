@@ -33,6 +33,7 @@
   const $ = (id) => document.getElementById(id);
   const nodeLayer = $("nodeLayer");
   const edgeLayer = $("edgeLayer");
+  const groupLayer = $("groupLayer");
   const viewport = $("canvasViewport");
   const world = $("world");
 
@@ -964,6 +965,7 @@
     const base = raw && typeof raw === "object" ? raw : sampleProject();
     if (!Array.isArray(base.nodes)) base.nodes = [];
     if (!Array.isArray(base.connections)) base.connections = [];
+    if (!Array.isArray(base.groups)) base.groups = [];
     base.connections.forEach((edge) => {
       if (!edge.id) edge.id = uid("edge");
       if (!Array.isArray(edge.points)) edge.points = [];
@@ -987,6 +989,16 @@
       node.rows.forEach(normalizeMember);
       ensureNodeMeta(node);
     });
+    const validNodeIds = new Set(base.nodes.map((node) => node.id));
+    base.groups = base.groups
+      .filter((group) => group && typeof group === "object")
+      .map((group, index) => ({
+        id: group.id || uid("group"),
+        title: typeof group.title === "string" && group.title.trim() ? group.title : "Gruppo " + (index + 1),
+        nodeIds: Array.from(new Set(Array.isArray(group.nodeIds) ? group.nodeIds.filter((id) => validNodeIds.has(id)) : []))
+      }))
+      .filter((group) => group.nodeIds.length);
+
     if (typeof base.name !== "string") base.name = "Untitled Flow";
     return base;
   }
@@ -1115,8 +1127,11 @@
   let selectedNodeId = null;
   let selectedNodeIds = new Set();
   let selectedEdgeId = null;
+  let selectedJunctionIds = new Set();
+  let selectedGroupId = null;
   let pendingPort = null;
   let dragState = null;
+  let groupDrag = null;
   let junctionDrag = null;
   let marqueeState = null;
   let panelResizeState = null;
@@ -1278,6 +1293,210 @@
     return project.nodes.filter((node) => selectedNodeIds.has(node.id));
   }
 
+  function groupById(id) {
+    return Array.isArray(project.groups) ? project.groups.find((group) => group.id === id) || null : null;
+  }
+
+  function groupWorldBounds(group) {
+    if (!group || !Array.isArray(group.nodeIds) || !group.nodeIds.length) return null;
+    const members = group.nodeIds.map(nodeById).filter(Boolean);
+    if (!members.length) return null;
+
+    const paddingX = 34;
+    const paddingBottom = 34;
+    const headerSpace = 54;
+    const minX = Math.min.apply(null, members.map((node) => node.x));
+    const minY = Math.min.apply(null, members.map((node) => node.y));
+    const maxX = Math.max.apply(null, members.map((node) => {
+      const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      return node.x + (el ? el.offsetWidth : nodeWidthFor(node));
+    }));
+    const maxY = Math.max.apply(null, members.map((node) => {
+      const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      return node.y + (el ? el.offsetHeight : 220);
+    }));
+
+    return {
+      x: minX - paddingX,
+      y: minY - headerSpace,
+      width: Math.max(180, maxX - minX + paddingX * 2),
+      height: Math.max(120, maxY - minY + headerSpace + paddingBottom)
+    };
+  }
+
+  function selectGroup(groupId) {
+    const group = groupById(groupId);
+    if (!group) return;
+    selectedGroupId = group.id;
+    selectedNodeIds = new Set(group.nodeIds.filter((id) => !!nodeById(id)));
+    syncPrimarySelection();
+    selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    renderNodes();
+    renderEdges();
+    renderInspector();
+    renderMinimap();
+  }
+
+  function removeGroup(groupId) {
+    if (!Array.isArray(project.groups)) return;
+    project.groups = project.groups.filter((group) => group.id !== groupId);
+    if (selectedGroupId === groupId) selectedGroupId = null;
+    renderGroups();
+    renderInspector();
+    renderMinimap();
+    markDirty();
+    showToast("Gruppo rimosso · i blocchi restano nel canvas");
+  }
+
+  function renderGroups() {
+    if (!groupLayer) return;
+    groupLayer.innerHTML = "";
+    if (!Array.isArray(project.groups)) project.groups = [];
+
+    project.groups = project.groups.filter((group) => {
+      group.nodeIds = Array.isArray(group.nodeIds) ? group.nodeIds.filter((id) => !!nodeById(id)) : [];
+      return group.nodeIds.length > 0;
+    });
+
+    project.groups.forEach((group) => {
+      const bounds = groupWorldBounds(group);
+      if (!bounds) return;
+
+      const frame = document.createElement("div");
+      frame.className = "graph-group" + (selectedGroupId === group.id ? " selected" : "");
+      frame.dataset.groupId = group.id;
+      frame.style.left = Math.round(bounds.x) + "px";
+      frame.style.top = Math.round(bounds.y) + "px";
+      frame.style.width = Math.round(bounds.width) + "px";
+      frame.style.height = Math.round(bounds.height) + "px";
+
+      const header = document.createElement("div");
+      header.className = "graph-group-header";
+
+      const mark = document.createElement("span");
+      mark.className = "graph-group-mark";
+
+      const title = document.createElement("input");
+      title.className = "graph-group-title";
+      title.value = group.title || "Gruppo";
+      title.setAttribute("aria-label", "Nome gruppo");
+      title.addEventListener("pointerdown", (event) => event.stopPropagation());
+      title.addEventListener("focus", () => {
+        if (selectedGroupId !== group.id) selectGroup(group.id);
+      });
+      title.addEventListener("input", () => {
+        group.title = title.value || "Gruppo";
+        markDirty();
+      });
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "graph-group-remove";
+      remove.textContent = "×";
+      remove.title = "Rimuovi gruppo";
+      remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+      remove.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        removeGroup(group.id);
+      });
+
+      header.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest("input") || event.target.closest("button")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (selectedGroupId !== group.id) selectGroup(group.id);
+        startGroupDrag(event, group.id);
+      });
+
+      header.append(mark, title, remove);
+      frame.appendChild(header);
+      groupLayer.appendChild(frame);
+    });
+  }
+
+  function createGroupFromSelection() {
+    const ids = Array.from(selectedNodeIds).filter((id) => !!nodeById(id));
+    if (ids.length < 2) {
+      showToast("Seleziona almeno 2 blocchi per creare un gruppo");
+      return;
+    }
+
+    const selected = new Set(ids);
+    project.groups.forEach((group) => {
+      group.nodeIds = group.nodeIds.filter((id) => !selected.has(id));
+    });
+    project.groups = project.groups.filter((group) => group.nodeIds.length);
+
+    const group = {
+      id: uid("group"),
+      title: "Nuovo gruppo",
+      nodeIds: ids
+    };
+    project.groups.push(group);
+    selectedGroupId = group.id;
+    selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    renderNodes();
+    renderInspector();
+    renderMinimap();
+    markDirty();
+
+    requestAnimationFrame(() => {
+      const input = groupLayer.querySelector('[data-group-id="' + group.id + '"] .graph-group-title');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    });
+    showToast("Gruppo creato · scrivi il nome nell'intestazione");
+  }
+
+  function startGroupDrag(event, groupId) {
+    const group = groupById(groupId);
+    if (!group) return;
+    const start = screenToWorld(event.clientX, event.clientY);
+    groupDrag = {
+      groupId: groupId,
+      startX: start.x,
+      startY: start.y,
+      starts: group.nodeIds.map(nodeById).filter(Boolean).map((node) => ({ id: node.id, x: node.x, y: node.y }))
+    };
+    window.addEventListener("pointermove", moveGroup);
+    window.addEventListener("pointerup", endGroupDrag, { once: true });
+  }
+
+  function moveGroup(event) {
+    if (!groupDrag) return;
+    const point = screenToWorld(event.clientX, event.clientY);
+    const dx = point.x - groupDrag.startX;
+    const dy = point.y - groupDrag.startY;
+
+    groupDrag.starts.forEach((startNode) => {
+      const node = nodeById(startNode.id);
+      if (!node) return;
+      node.x = Math.round(startNode.x + dx);
+      node.y = Math.round(startNode.y + dy);
+      const el = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
+      if (el) {
+        el.style.left = node.x + "px";
+        el.style.top = node.y + "px";
+      }
+    });
+
+    renderGroups();
+    renderEdges();
+    renderMinimap();
+  }
+
+  function endGroupDrag() {
+    window.removeEventListener("pointermove", moveGroup);
+    if (!groupDrag) return;
+    groupDrag = null;
+    markDirty();
+  }
+
   function projectStats(data) {
     const nodes = Array.isArray(data && data.nodes) ? data.nodes.length : 0;
     const connections = Array.isArray(data && data.connections) ? data.connections.length : 0;
@@ -1311,6 +1530,8 @@
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    selectedGroupId = null;
     pendingPort = null;
     $("connectionBanner").classList.remove("show");
   }
@@ -4809,6 +5030,7 @@
     nodeLayer.innerHTML = "";
     const connectedPorts = buildConnectedPortSet();
     project.nodes.forEach((node) => nodeLayer.appendChild(createNodeElement(node, connectedPorts)));
+    renderGroups();
   }
 
   function localCenter(element, ancestor) {
@@ -4989,6 +5211,44 @@
     return dx * dx + dy * dy;
   }
 
+  function junctionSelectionKey(edgeId, pointId) {
+    return edgeId + "::" + pointId;
+  }
+
+  function selectedJunctionRecords() {
+    const result = [];
+    project.connections.forEach((edge) => {
+      if (!Array.isArray(edge.points)) return;
+      edge.points.forEach((point) => {
+        if (selectedJunctionIds.has(junctionSelectionKey(edge.id, point.id))) {
+          result.push({ edge: edge, point: point });
+        }
+      });
+    });
+    return result;
+  }
+
+  function selectJunction(event, edgeId, pointId) {
+    const key = junctionSelectionKey(edgeId, pointId);
+    const additive = !!(event && (event.ctrlKey || event.metaKey || event.shiftKey));
+
+    if (additive) {
+      if (selectedJunctionIds.has(key)) selectedJunctionIds.delete(key);
+      else selectedJunctionIds.add(key);
+    } else if (!selectedJunctionIds.has(key) || selectedJunctionIds.size !== 1) {
+      selectedJunctionIds = new Set([key]);
+    }
+
+    selectedEdgeId = edgeId;
+    selectedNodeIds.clear();
+    selectedNodeId = null;
+    selectedGroupId = null;
+    renderNodes();
+    renderEdges();
+    renderInspector();
+    renderMinimap();
+  }
+
   function addJunction(edge, event, startPoint, endPoint) {
     const point = screenToWorld(event.clientX, event.clientY);
     if (!Array.isArray(edge.points)) edge.points = [];
@@ -5005,44 +5265,66 @@
       }
     }
 
-    edge.points.splice(bestSegment, 0, {
+    const junction = {
       id: uid("junction"),
-      x: Math.round(point.x),
-      y: Math.round(point.y)
-    });
+      x: Math.round(point.x / 10) * 10,
+      y: Math.round(point.y / 10) * 10
+    };
+    edge.points.splice(bestSegment, 0, junction);
 
     selectedEdgeId = edge.id;
+    selectedJunctionIds = new Set([junctionSelectionKey(edge.id, junction.id)]);
     selectedNodeIds.clear();
     selectedNodeId = null;
+    selectedGroupId = null;
     renderNodes();
     renderEdges();
     renderInspector();
     renderMinimap();
     markDirty();
-    showToast("Punto di snodo creato");
+    showToast("Punto di curva creato");
   }
 
   function startJunctionDrag(event, edgeId, pointId) {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    junctionDrag = { edgeId: edgeId, pointId: pointId };
-    selectedEdgeId = edgeId;
-    selectedNodeIds.clear();
-    selectedNodeId = null;
+
+    const key = junctionSelectionKey(edgeId, pointId);
+    if (!selectedJunctionIds.has(key) || !(event.ctrlKey || event.metaKey || event.shiftKey)) {
+      selectJunction(event, edgeId, pointId);
+    }
+    if (!selectedJunctionIds.has(key)) return;
+
+    const start = screenToWorld(event.clientX, event.clientY);
+    junctionDrag = {
+      startX: start.x,
+      startY: start.y,
+      starts: selectedJunctionRecords().map((entry) => ({
+        edgeId: entry.edge.id,
+        pointId: entry.point.id,
+        x: entry.point.x,
+        y: entry.point.y
+      }))
+    };
     window.addEventListener("pointermove", moveJunction);
     window.addEventListener("pointerup", endJunctionDrag, { once: true });
   }
 
   function moveJunction(event) {
     if (!junctionDrag) return;
-    const edge = project.connections.find((item) => item.id === junctionDrag.edgeId);
-    if (!edge || !Array.isArray(edge.points)) return;
-    const point = edge.points.find((item) => item.id === junctionDrag.pointId);
-    if (!point) return;
-
     const worldPoint = screenToWorld(event.clientX, event.clientY);
-    point.x = Math.round(worldPoint.x / 10) * 10;
-    point.y = Math.round(worldPoint.y / 10) * 10;
+    const dx = worldPoint.x - junctionDrag.startX;
+    const dy = worldPoint.y - junctionDrag.startY;
+
+    junctionDrag.starts.forEach((startPoint) => {
+      const edge = project.connections.find((item) => item.id === startPoint.edgeId);
+      if (!edge || !Array.isArray(edge.points)) return;
+      const point = edge.points.find((item) => item.id === startPoint.pointId);
+      if (!point) return;
+      point.x = Math.round((startPoint.x + dx) / 10) * 10;
+      point.y = Math.round((startPoint.y + dy) / 10) * 10;
+    });
     renderEdges();
   }
 
@@ -5059,9 +5341,11 @@
     const edge = project.connections.find((item) => item.id === edgeId);
     if (!edge || !Array.isArray(edge.points)) return;
     edge.points = edge.points.filter((point) => point.id !== pointId);
+    selectedJunctionIds.delete(junctionSelectionKey(edgeId, pointId));
     renderEdges();
+    renderInspector();
     markDirty();
-    showToast("Punto di snodo rimosso");
+    showToast("Punto di curva rimosso");
   }
 
   function renderEdges() {
@@ -5107,16 +5391,32 @@
         if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
+        selectedEdgeId = edge.id;
+        selectedJunctionIds.clear();
+        selectedNodeIds.clear();
+        selectedNodeId = null;
+        selectedGroupId = null;
+        renderNodes();
+        renderEdges();
+        renderInspector();
+        renderMinimap();
+      });
+      hitPath.addEventListener("dblclick", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
         addJunction(edge, event, a, b);
       });
       edgeLayer.appendChild(hitPath);
 
       edge.points.forEach((point) => {
+        const key = junctionSelectionKey(edge.id, point.id);
+        const pointSelected = selectedJunctionIds.has(key);
         const junction = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         junction.setAttribute("cx", point.x);
         junction.setAttribute("cy", point.y);
-        junction.setAttribute("r", selectedEdgeId === edge.id ? "6" : "5");
-        junction.setAttribute("class", "edge-junction" + (selectedEdgeId === edge.id ? " selected" : ""));
+        junction.setAttribute("r", pointSelected ? "7" : (selectedEdgeId === edge.id ? "6" : "5"));
+        junction.setAttribute("class", "edge-junction" + (pointSelected ? " selected" : ""));
         junction.style.setProperty("--junction-color", edgeColor);
         junction.addEventListener("pointerdown", (event) => startJunctionDrag(event, edge.id, point.id));
         junction.addEventListener("dblclick", (event) => {
@@ -5181,6 +5481,21 @@
     const scale = Math.min(170 / width, 94 / height);
     const offsetX = (180 - width * scale) / 2;
     const offsetY = (100 - height * scale) / 2 + 2;
+
+    project.groups.forEach((group) => {
+      const bounds = groupWorldBounds(group);
+      if (!bounds) return;
+      const groupRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      groupRect.setAttribute("x", offsetX + (bounds.x - minX) * scale);
+      groupRect.setAttribute("y", offsetY + (bounds.y - minY) * scale);
+      groupRect.setAttribute("width", Math.max(7, bounds.width * scale));
+      groupRect.setAttribute("height", Math.max(5, bounds.height * scale));
+      groupRect.setAttribute("rx", "3");
+      groupRect.setAttribute("fill", "rgba(63,127,166,.08)");
+      groupRect.setAttribute("stroke", selectedGroupId === group.id ? "#5f9fbe" : "#46556d");
+      groupRect.setAttribute("stroke-width", selectedGroupId === group.id ? "1.2" : ".8");
+      svg.appendChild(groupRect);
+    });
 
     project.nodes.forEach((node) => {
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -5716,9 +6031,16 @@
     $("inspectorPanel").classList.toggle("open", inspectorVisible && count > 0 && window.innerWidth <= 850);
 
     if (!node) {
-      if (count > 1) {
+      if (selectedGroupId) {
+        const group = groupById(selectedGroupId);
+        emptyTitle.textContent = group ? group.title : "Gruppo selezionato";
+        emptyText.textContent = "Trascina l'intestazione per muovere tutti i blocchi. Modifica il nome direttamente nel frame; Canc rimuove solo il gruppo.";
+      } else if (selectedJunctionIds.size) {
+        emptyTitle.textContent = selectedJunctionIds.size === 1 ? "Punto curva selezionato" : selectedJunctionIds.size + " punti curva selezionati";
+        emptyText.textContent = "Trascina i punti per modificare il percorso. Ctrl/Shift aggiunge punti alla selezione; Canc li elimina.";
+      } else if (count > 1) {
         emptyTitle.textContent = count + " blocchi selezionati";
-        emptyText.textContent = "Trascina un blocco selezionato per muovere tutto il gruppo. Canc elimina il gruppo e Ctrl/Cmd + D lo duplica.";
+        emptyText.textContent = "Trascina un blocco selezionato per muovere tutta la selezione. Ctrl/Cmd + G crea un frame di gruppo.";
       } else {
         emptyTitle.textContent = "Seleziona un blocco";
         emptyText.textContent = "Qui puoi modificarne contenuto, pseudocodice e campi senza imporre una sintassi.";
@@ -5802,6 +6124,8 @@
 
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    selectedGroupId = null;
     renderNodes();
     renderEdges();
     renderInspector();
@@ -5812,6 +6136,8 @@
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    selectedGroupId = null;
     renderNodes();
     renderEdges();
     renderInspector();
@@ -5854,6 +6180,7 @@
       }
     });
 
+    renderGroups();
     renderEdges();
     renderMinimap();
   }
@@ -5932,12 +6259,39 @@
   function removeEdge(id) {
     project.connections = project.connections.filter((edge) => edge.id !== id);
     selectedEdgeId = null;
+    selectedJunctionIds = new Set(Array.from(selectedJunctionIds).filter((key) => !key.startsWith(id + "::")));
     renderEdges();
+    renderInspector();
     markDirty();
     showToast("Collegamento rimosso");
   }
 
   function removeSelected() {
+    if (selectedJunctionIds.size) {
+      const keys = new Set(selectedJunctionIds);
+      let removed = 0;
+      project.connections.forEach((edge) => {
+        if (!Array.isArray(edge.points)) return;
+        edge.points = edge.points.filter((point) => {
+          const selected = keys.has(junctionSelectionKey(edge.id, point.id));
+          if (selected) removed += 1;
+          return !selected;
+        });
+      });
+      selectedJunctionIds.clear();
+      selectedEdgeId = null;
+      renderEdges();
+      renderInspector();
+      markDirty();
+      showToast(removed === 1 ? "Punto curva eliminato" : removed + " punti curva eliminati");
+      return;
+    }
+
+    if (selectedGroupId) {
+      removeGroup(selectedGroupId);
+      return;
+    }
+
     if (selectedEdgeId) {
       removeEdge(selectedEdgeId);
       return;
@@ -5950,9 +6304,14 @@
     project.connections = project.connections.filter((edge) =>
       !ids.has(edge.from.nodeId) && !ids.has(edge.to.nodeId)
     );
+    project.groups.forEach((group) => {
+      group.nodeIds = group.nodeIds.filter((id) => !ids.has(id));
+    });
+    project.groups = project.groups.filter((group) => group.nodeIds.length);
 
     selectedNodeIds.clear();
     selectedNodeId = null;
+    selectedGroupId = null;
     render();
     markDirty();
     showToast(count === 1 ? "Blocco eliminato" : count + " blocchi eliminati");
@@ -6183,13 +6542,14 @@
       return;
     }
     const rect = viewport.getBoundingClientRect();
-    const minX = Math.min.apply(null, project.nodes.map((node) => node.x));
-    const minY = Math.min.apply(null, project.nodes.map((node) => node.y));
-    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)));
+    const groupBounds = project.groups.map(groupWorldBounds).filter(Boolean);
+    const minX = Math.min.apply(null, project.nodes.map((node) => node.x).concat(groupBounds.map((bounds) => bounds.x)));
+    const minY = Math.min.apply(null, project.nodes.map((node) => node.y).concat(groupBounds.map((bounds) => bounds.y)));
+    const maxX = Math.max.apply(null, project.nodes.map((node) => node.x + nodeWidthFor(node)).concat(groupBounds.map((bounds) => bounds.x + bounds.width)));
     const maxY = Math.max.apply(null, project.nodes.map((node) => {
       const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"]');
       return node.y + (element ? element.offsetHeight : 260);
-    }));
+    }).concat(groupBounds.map((bounds) => bounds.y + bounds.height)));
     const width = Math.max(400, maxX - minX);
     const height = Math.max(300, maxY - minY);
     const scale = Math.max(0.35, Math.min(1.05, Math.min((rect.width - 150) / width, (rect.height - 150) / height)));
@@ -6370,6 +6730,7 @@
   });
 
   $("addObjectTop").addEventListener("click", () => addNode("object"));
+  $("createGroup").addEventListener("click", createGroupFromSelection);
   $("fitView").addEventListener("click", fitView);
   $("zoomIn").addEventListener("click", () => setZoom(view.scale + 0.1));
   $("zoomOut").addEventListener("click", () => setZoom(view.scale - 0.1));
@@ -6443,6 +6804,8 @@
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
+    selectedJunctionIds.clear();
+    selectedGroupId = null;
     pendingPort = null;
     saveProject(false);
     render();
@@ -6555,7 +6918,19 @@
       }
     });
 
+    const nextJunctions = state.additive ? new Set(selectedJunctionIds) : new Set();
+    project.connections.forEach((edge) => {
+      if (!Array.isArray(edge.points)) return;
+      edge.points.forEach((point) => {
+        if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
+          nextJunctions.add(junctionSelectionKey(edge.id, point.id));
+        }
+      });
+    });
+
     selectedNodeIds = next;
+    selectedJunctionIds = nextJunctions;
+    selectedGroupId = null;
     syncPrimarySelection();
     selectedEdgeId = null;
     renderNodes();
@@ -6653,10 +7028,18 @@
       selectedNodeIds = new Set(project.nodes.map((node) => node.id));
       syncPrimarySelection();
       selectedEdgeId = null;
+      selectedJunctionIds.clear();
+      selectedGroupId = null;
       renderNodes();
       renderEdges();
       renderInspector();
       renderMinimap();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g" && !typing) {
+      event.preventDefault();
+      createGroupFromSelection();
       return;
     }
 
