@@ -1144,6 +1144,14 @@
   let zoomSharpTimer = null;
   let connectMode = false;
 
+  const historyState = {
+    entries: [],
+    index: -1,
+    timer: null,
+    restoring: false,
+    limit: 120
+  };
+
   const cloudState = {
     configured: !!(window.PROJECTFLOW_FIREBASE_CONFIG && window.PROJECTFLOW_FIREBASE_CONFIG.projectId),
     ready: false,
@@ -1156,6 +1164,103 @@
     saveTimer: null,
     accountAnchor: null
   };
+
+  function historySnapshot() {
+    return JSON.stringify(project);
+  }
+
+  function updateHistoryUI() {
+    const undoButton = $("undoAction");
+    const redoButton = $("redoAction");
+    if (undoButton) undoButton.disabled = historyState.index <= 0;
+    if (redoButton) redoButton.disabled = historyState.index < 0 || historyState.index >= historyState.entries.length - 1;
+  }
+
+  function resetHistory() {
+    clearTimeout(historyState.timer);
+    historyState.timer = null;
+    historyState.entries = [historySnapshot()];
+    historyState.index = 0;
+    historyState.restoring = false;
+    updateHistoryUI();
+  }
+
+  function commitHistoryCheckpoint() {
+    clearTimeout(historyState.timer);
+    historyState.timer = null;
+    if (historyState.restoring) return;
+
+    const snapshot = historySnapshot();
+    const current = historyState.index >= 0 ? historyState.entries[historyState.index] : null;
+    if (snapshot === current) {
+      updateHistoryUI();
+      return;
+    }
+
+    if (historyState.index < historyState.entries.length - 1) {
+      historyState.entries = historyState.entries.slice(0, historyState.index + 1);
+    }
+
+    historyState.entries.push(snapshot);
+    if (historyState.entries.length > historyState.limit) {
+      historyState.entries.shift();
+    }
+    historyState.index = historyState.entries.length - 1;
+    updateHistoryUI();
+  }
+
+  function scheduleHistoryCheckpoint() {
+    if (historyState.restoring) return;
+    clearTimeout(historyState.timer);
+    historyState.timer = setTimeout(commitHistoryCheckpoint, 500);
+  }
+
+  function flushHistoryCheckpoint() {
+    if (!historyState.timer) return;
+    clearTimeout(historyState.timer);
+    historyState.timer = null;
+    commitHistoryCheckpoint();
+  }
+
+  function restoreHistoryAt(index, message) {
+    if (index < 0 || index >= historyState.entries.length) return;
+    clearTimeout(historyState.timer);
+    historyState.timer = null;
+    clearTimeout(saveTimer);
+
+    historyState.restoring = true;
+    try {
+      project = normalizeProject(JSON.parse(historyState.entries[index]));
+      historyState.index = index;
+      resetEditorSelection();
+      $("projectName").value = project.name || "Untitled Flow";
+      render();
+      saveProject(false);
+    } finally {
+      historyState.restoring = false;
+    }
+
+    updateHistoryUI();
+    if (message) showToast(message);
+  }
+
+  function undoProjectChange() {
+    flushHistoryCheckpoint();
+    if (historyState.index <= 0) {
+      updateHistoryUI();
+      return;
+    }
+    restoreHistoryAt(historyState.index - 1, "Annullato");
+  }
+
+  function redoProjectChange() {
+    flushHistoryCheckpoint();
+    if (historyState.index < 0 || historyState.index >= historyState.entries.length - 1) {
+      updateHistoryUI();
+      return;
+    }
+    restoreHistoryAt(historyState.index + 1, "Ripristinato");
+  }
 
   function setAutosaveState(state, label) {
     const indicator = $("editorAutosaveIndicator");
@@ -1407,16 +1512,12 @@
 
       const header = document.createElement("div");
       header.className = "graph-group-header";
-
-      const dragHandle = document.createElement("span");
-      dragHandle.className = "graph-group-drag";
-      dragHandle.textContent = "⠿";
-      dragHandle.title = "Trascina l'intero gruppo";
+      header.title = "Clicca la fascia superiore per rinominare";
 
       const title = document.createElement("input");
       title.className = "graph-group-title";
       title.value = group.title || "Gruppo";
-      title.title = "Clicca per rinominare il gruppo";
+      title.title = "Rinomina gruppo";
       title.setAttribute("aria-label", "Nome gruppo");
       title.addEventListener("pointerdown", (event) => {
         event.stopPropagation();
@@ -1437,7 +1538,7 @@
       remove.type = "button";
       remove.className = "graph-group-remove";
       remove.textContent = "×";
-      remove.title = "Rimuovi gruppo";
+      remove.title = "Disgruppa";
       remove.addEventListener("pointerdown", (event) => event.stopPropagation());
       remove.addEventListener("click", (event) => {
         event.preventDefault();
@@ -1449,12 +1550,29 @@
         if (event.button !== 0 || event.target.closest("input") || event.target.closest("button")) return;
         event.preventDefault();
         event.stopPropagation();
-        if (selectedGroupId !== group.id) selectGroup(group.id);
-        startGroupDrag(event, group.id);
+        if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
+        requestAnimationFrame(() => {
+          title.focus();
+          title.select();
+        });
       });
 
-      header.append(dragHandle, title, remove);
-      frame.appendChild(header);
+      const dragZones = ["top", "right", "bottom", "left"].map((side) => {
+        const zone = document.createElement("span");
+        zone.className = "graph-group-drag-zone " + side;
+        zone.title = "Trascina l'intero gruppo";
+        zone.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (selectedGroupId !== group.id) applyGroupSelection(group.id, false);
+          startGroupDrag(event, group.id);
+        });
+        return zone;
+      });
+
+      header.append(title, remove);
+      frame.append(header, ...dragZones);
       groupLayer.appendChild(frame);
     });
 
@@ -1665,6 +1783,7 @@
     document.body.classList.remove("home-mode");
 
     $("projectName").value = project.name || "Untitled Flow";
+    resetHistory();
     requestAnimationFrame(() => {
       render();
       renderEdges();
@@ -2317,6 +2436,7 @@
   function markDirty() {
     $("saveStatus").textContent = "Salvataggio automatico…";
     setAutosaveState("saving", "Salvataggio…");
+    scheduleHistoryCheckpoint();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveProject, 350);
   }
@@ -6218,6 +6338,7 @@
     renderEdges();
     renderMinimap();
     renderInspector();
+    updateHistoryUI();
     setWorldTransform();
   }
 
@@ -6825,6 +6946,7 @@
         saveProject(false);
         render();
         fitView();
+        commitHistoryCheckpoint();
         showToast("Flow importato");
       } catch (error) {
         showToast("JSON non valido");
@@ -6977,6 +7099,8 @@
   });
 
   $("createGroup").addEventListener("click", toggleGrouping);
+  $("undoAction").addEventListener("click", undoProjectChange);
+  $("redoAction").addEventListener("click", redoProjectChange);
   $("fitView").addEventListener("click", fitView);
   $("zoomIn").addEventListener("click", () => setZoom(view.scale + 0.1));
   $("zoomOut").addEventListener("click", () => setZoom(view.scale - 0.1));
@@ -7058,6 +7182,7 @@
     saveProject(false);
     render();
     fitView();
+    commitHistoryCheckpoint();
     showToast("Inventory Demo caricata");
   });
 
@@ -7286,6 +7411,19 @@
       renderEdges();
       renderInspector();
       renderMinimap();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !typing) {
+      event.preventDefault();
+      if (event.shiftKey) redoProjectChange();
+      else undoProjectChange();
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y" && !typing) {
+      event.preventDefault();
+      redoProjectChange();
       return;
     }
 
