@@ -2918,30 +2918,36 @@
       };
 
       const addMemberFromAction = (action) => {
-        if (action === "variable") node.rows.push(variableRow("newVariable", "int", "private"));
+        const pushOpenMember = (member) => {
+          member.uiExpanded = true;
+          node.rows.push(member);
+          return member;
+        };
+
+        if (action === "variable") pushOpenMember(variableRow("newVariable", "int", "private"));
         if (action === "arrayVariable") {
           const variable = variableRow("newArray", "int", "private");
           variable.collectionKind = "array";
-          node.rows.push(variable);
+          pushOpenMember(variable);
         }
         if (action === "listVariable") {
           const variable = variableRow("newList", "int", "private");
           variable.collectionKind = "list";
-          node.rows.push(variable);
+          pushOpenMember(variable);
         }
         if (action === "dictionaryVariable") {
           const variable = variableRow("newDictionary", "int", "private");
           variable.collectionKind = "dictionary";
           variable.serialized = false;
-          node.rows.push(variable);
+          pushOpenMember(variable);
         }
-        if (action === "method") node.rows.push(methodRow("NewMethod", "void", "custom"));
-        if (action === "lifecycle") node.rows.push(methodRow("Start", "void", "lifecycle"));
+        if (action === "method") pushOpenMember(methodRow("NewMethod", "void", "custom"));
+        if (action === "lifecycle") pushOpenMember(methodRow("Start", "void", "lifecycle"));
         if (action === "coroutine") {
           const method = methodRow("NewCoroutine", "IEnumerator", "coroutine");
-          node.rows.push(method);
+          pushOpenMember(method);
         }
-        if (action === "event") node.rows.push(eventRow("OnEvent", "void"));
+        if (action === "event") pushOpenMember(eventRow("OnEvent", "void"));
         if (action === "dataInput") node.rows.push(row("input" + (node.rows.filter((item) => item.kind === "input").length + 1), "int", "input"));
         if (action === "dataOutput") node.rows.push(row("output" + (node.rows.filter((item) => item.kind === "output").length + 1), "int", "output"));
         if (action === "flowInput") node.rows.push(row("Enter", "", "flowIn"));
@@ -2951,14 +2957,14 @@
           if (componentType === "Transform" && node.rows.some((item) => item.kind === "component" && item.componentType === "Transform")) {
             showToast("Il GameObject ha già Transform.");
           } else {
-            node.rows.push(componentRow(componentType, componentCategoryFor(componentType), "unity"));
+            pushOpenMember(componentRow(componentType, componentCategoryFor(componentType), "unity"));
           }
         }
         if (action.startsWith("script:")) {
           const classId = action.slice("script:".length);
           const scriptClass = nodeById(classId);
           if (scriptClass) {
-            node.rows.push(componentRow(scriptClass.title, "scripts", "script", {
+            pushOpenMember(componentRow(scriptClass.title, "scripts", "script", {
               componentClassId: scriptClass.id,
               locked: false
             }));
@@ -2969,7 +2975,7 @@
           const variable = variableRow(className.charAt(0).toLowerCase() + className.slice(1), className, "private");
           variable.referenceMode = "inspector";
           variable.serialized = true;
-          node.rows.push(variable);
+          pushOpenMember(variable);
         }
         rerenderNode();
       };
