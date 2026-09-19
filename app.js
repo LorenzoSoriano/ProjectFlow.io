@@ -33,6 +33,24 @@
 
   const uid = (prefix) => prefix + "_" + Math.random().toString(36).slice(2, 9);
 
+  function snapScale(value) {
+    if (value > 0.97 && value < 1.03) return 1;
+    return Math.round(value * 1000) / 1000;
+  }
+
+  function portKey(nodeId, rowId, side) {
+    return nodeId + "|" + rowId + "|" + side;
+  }
+
+  function buildConnectedPortSet() {
+    const connected = new Set();
+    project.connections.forEach((edge) => {
+      connected.add(portKey(edge.from.nodeId, edge.from.rowId, "out"));
+      connected.add(portKey(edge.to.nodeId, edge.to.rowId, "in"));
+    });
+    return connected;
+  }
+
   function row(label, value, kind) {
     return { id: uid("row"), label: label || "value", value: value || "", kind: kind || "variable" };
   }
@@ -143,6 +161,17 @@
     const base = raw && typeof raw === "object" ? raw : sampleProject();
     if (!Array.isArray(base.nodes)) base.nodes = [];
     if (!Array.isArray(base.connections)) base.connections = [];
+    base.connections.forEach((edge) => {
+      if (!edge.id) edge.id = uid("edge");
+      if (!Array.isArray(edge.points)) edge.points = [];
+      edge.points = edge.points.filter((point) =>
+        point && typeof point.x === "number" && typeof point.y === "number"
+      ).map((point) => ({
+        id: point.id || uid("junction"),
+        x: point.x,
+        y: point.y
+      }));
+    });
     base.nodes.forEach((node) => {
       if (!node.id) node.id = uid("node");
       if (!TYPE_META[node.type]) node.type = "object";
@@ -180,7 +209,7 @@
         return saved;
       }
     } catch (error) {}
-    return { x: 70, y: 60, scale: 0.86 };
+    return { x: 70, y: 60, scale: 1 };
   }
 
   let project = loadProject();
@@ -189,6 +218,7 @@
   let selectedEdgeId = null;
   let pendingPort = null;
   let dragState = null;
+  let junctionDrag = null;
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
@@ -205,8 +235,14 @@
   }
 
   function setWorldTransform() {
-    world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.scale + ")";
-    $("zoomReadout").textContent = Math.round(view.scale * 100) + "%";
+    const scale = snapScale(view.scale);
+    const tx = Math.round(view.x);
+    const ty = Math.round(view.y);
+    view.scale = scale;
+    view.x = tx;
+    view.y = ty;
+    world.style.transform = "translate3d(" + tx + "px," + ty + "px,0) scale(" + scale + ")";
+    $("zoomReadout").textContent = Math.round(scale * 100) + "%";
     localStorage.setItem(VIEW_KEY, JSON.stringify(view));
     renderMinimap();
   }
@@ -236,13 +272,16 @@
     return TYPE_META[type] || TYPE_META.object;
   }
 
-  function makePort(nodeId, rowId, side) {
+  function makePort(nodeId, rowId, side, connectedPorts) {
     const port = document.createElement("button");
     port.className = "port " + side;
     port.type = "button";
     port.dataset.node = nodeId;
     port.dataset.row = rowId;
     port.dataset.side = side;
+    if (connectedPorts && connectedPorts.has(portKey(nodeId, rowId, side))) {
+      port.classList.add("connected");
+    }
     port.setAttribute("aria-label", (side === "in" ? "Input" : "Output") + " " + rowId);
     if (pendingPort && pendingPort.nodeId === nodeId && pendingPort.rowId === rowId && pendingPort.side === side) {
       port.classList.add("pending");
@@ -255,7 +294,7 @@
     return port;
   }
 
-  function createNodeElement(node) {
+  function createNodeElement(node, connectedPorts) {
     const meta = typeMeta(node.type);
     const element = document.createElement("article");
     element.className = "flow-node type-" + node.type;
@@ -267,7 +306,7 @@
 
     const header = document.createElement("div");
     header.className = "node-header";
-    header.appendChild(makePort(node.id, "__node__", "in"));
+    header.appendChild(makePort(node.id, "__node__", "in", connectedPorts));
 
     const typeDot = document.createElement("span");
     typeDot.className = "node-type-dot";
@@ -289,7 +328,7 @@
     more.addEventListener("pointerdown", (event) => event.stopPropagation());
     more.addEventListener("click", () => selectNode(node.id));
 
-    header.append(typeDot, heading, more, makePort(node.id, "__node__", "out"));
+    header.append(typeDot, heading, more, makePort(node.id, "__node__", "out", connectedPorts));
 
     header.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.target.closest(".port") || event.target.closest("button")) return;
@@ -326,7 +365,12 @@
       rowValue.textContent = item.value;
       copy.append(rowTitle, rowValue);
 
-      rowElement.append(makePort(node.id, item.id, "in"), kind, copy, makePort(node.id, item.id, "out"));
+      rowElement.append(
+        makePort(node.id, item.id, "in", connectedPorts),
+        kind,
+        copy,
+        makePort(node.id, item.id, "out", connectedPorts)
+      );
       body.appendChild(rowElement);
     });
 
@@ -357,7 +401,8 @@
 
   function renderNodes() {
     nodeLayer.innerHTML = "";
-    project.nodes.forEach((node) => nodeLayer.appendChild(createNodeElement(node)));
+    const connectedPorts = buildConnectedPortSet();
+    project.nodes.forEach((node) => nodeLayer.appendChild(createNodeElement(node, connectedPorts)));
   }
 
   function localCenter(element, ancestor) {
@@ -382,11 +427,124 @@
     return { x: node.x + local.x, y: node.y + local.y };
   }
 
-  function pathFor(a, b) {
-    const delta = Math.max(65, Math.min(220, Math.abs(b.x - a.x) * 0.5));
-    const directionA = a.x <= b.x ? 1 : -1;
-    const directionB = a.x <= b.x ? -1 : 1;
-    return "M " + a.x + " " + a.y + " C " + (a.x + delta * directionA) + " " + a.y + ", " + (b.x + delta * directionB) + " " + b.y + ", " + b.x + " " + b.y;
+  function curveCommand(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const curve = Math.max(55, Math.min(180, Math.abs(dx) * 0.45 + Math.abs(dy) * 0.08));
+    const direction = dx >= 0 ? 1 : -1;
+    return " C " +
+      (a.x + curve * direction) + " " + a.y + ", " +
+      (b.x - curve * direction) + " " + b.y + ", " +
+      b.x + " " + b.y;
+  }
+
+  function pathForRoute(points) {
+    if (!points || points.length < 2) return "";
+    let d = "M " + points[0].x + " " + points[0].y;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      d += curveCommand(points[i], points[i + 1]);
+    }
+    return d;
+  }
+
+  function screenToWorld(clientX, clientY) {
+    const rect = viewport.getBoundingClientRect();
+    return {
+      x: (clientX - rect.left - view.x) / view.scale,
+      y: (clientY - rect.top - view.y) / view.scale
+    };
+  }
+
+  function distanceToSegmentSquared(point, a, b) {
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const wx = point.x - a.x;
+    const wy = point.y - a.y;
+    const lengthSquared = vx * vx + vy * vy;
+    if (!lengthSquared) {
+      const dx = point.x - a.x;
+      const dy = point.y - a.y;
+      return dx * dx + dy * dy;
+    }
+    const t = Math.max(0, Math.min(1, (wx * vx + wy * vy) / lengthSquared));
+    const px = a.x + t * vx;
+    const py = a.y + t * vy;
+    const dx = point.x - px;
+    const dy = point.y - py;
+    return dx * dx + dy * dy;
+  }
+
+  function addJunction(edge, event, startPoint, endPoint) {
+    const point = screenToWorld(event.clientX, event.clientY);
+    if (!Array.isArray(edge.points)) edge.points = [];
+
+    const route = [startPoint].concat(edge.points, [endPoint]);
+    let bestSegment = 0;
+    let bestDistance = Infinity;
+
+    for (let i = 0; i < route.length - 1; i += 1) {
+      const distance = distanceToSegmentSquared(point, route[i], route[i + 1]);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestSegment = i;
+      }
+    }
+
+    edge.points.splice(bestSegment, 0, {
+      id: uid("junction"),
+      x: Math.round(point.x),
+      y: Math.round(point.y)
+    });
+
+    selectedEdgeId = edge.id;
+    selectedNodeId = null;
+    renderNodes();
+    renderEdges();
+    renderInspector();
+    renderMinimap();
+    markDirty();
+    showToast("Punto di snodo creato");
+  }
+
+  function startJunctionDrag(event, edgeId, pointId) {
+    event.preventDefault();
+    event.stopPropagation();
+    junctionDrag = { edgeId: edgeId, pointId: pointId };
+    selectedEdgeId = edgeId;
+    selectedNodeId = null;
+    window.addEventListener("pointermove", moveJunction);
+    window.addEventListener("pointerup", endJunctionDrag, { once: true });
+  }
+
+  function moveJunction(event) {
+    if (!junctionDrag) return;
+    const edge = project.connections.find((item) => item.id === junctionDrag.edgeId);
+    if (!edge || !Array.isArray(edge.points)) return;
+    const point = edge.points.find((item) => item.id === junctionDrag.pointId);
+    if (!point) return;
+
+    const worldPoint = screenToWorld(event.clientX, event.clientY);
+    point.x = Math.round(worldPoint.x);
+    point.y = Math.round(worldPoint.y);
+    renderEdges();
+  }
+
+  function endJunctionDrag() {
+    window.removeEventListener("pointermove", moveJunction);
+    if (junctionDrag) {
+      junctionDrag = null;
+      markDirty();
+      renderMinimap();
+    }
+  }
+
+  function removeJunction(edgeId, pointId) {
+    const edge = project.connections.find((item) => item.id === edgeId);
+    if (!edge || !Array.isArray(edge.points)) return;
+    edge.points = edge.points.filter((point) => point.id !== pointId);
+    renderEdges();
+    markDirty();
+    showToast("Punto di snodo rimosso");
   }
 
   function renderEdges() {
@@ -397,29 +555,51 @@
       const a = getPortWorldPosition(edge.from);
       const b = getPortWorldPosition(edge.to);
       if (!a || !b) return;
+      if (!Array.isArray(edge.points)) edge.points = [];
+
+      const route = [a].concat(edge.points, [b]);
+      const routePath = pathForRoute(route);
+      const sourceNode = nodeById(edge.from.nodeId);
+      const edgeColor = sourceNode ? typeMeta(sourceNode.type).color : "#7c6cff";
 
       const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      glow.setAttribute("d", pathFor(a, b));
+      glow.setAttribute("d", routePath);
       glow.setAttribute("class", "edge-glow");
       edgeLayer.appendChild(glow);
 
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", pathFor(a, b));
+      path.setAttribute("d", routePath);
       path.setAttribute("class", "edge" + (selectedEdgeId === edge.id ? " selected" : ""));
-      const sourceNode = nodeById(edge.from.nodeId);
-      if (sourceNode) path.style.stroke = typeMeta(sourceNode.type).color;
-      path.style.opacity = selectedEdgeId === edge.id ? "1" : ".66";
-      path.addEventListener("pointerdown", (event) => {
-        event.stopPropagation();
-        selectedEdgeId = edge.id;
-        selectedNodeId = null;
-        render();
-      });
-      path.addEventListener("dblclick", (event) => {
-        event.stopPropagation();
-        removeEdge(edge.id);
-      });
+      path.style.stroke = edgeColor;
+      path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
       edgeLayer.appendChild(path);
+
+      const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      hitPath.setAttribute("d", routePath);
+      hitPath.setAttribute("class", "edge-hit");
+      hitPath.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        addJunction(edge, event, a, b);
+      });
+      edgeLayer.appendChild(hitPath);
+
+      edge.points.forEach((point) => {
+        const junction = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        junction.setAttribute("cx", point.x);
+        junction.setAttribute("cy", point.y);
+        junction.setAttribute("r", selectedEdgeId === edge.id ? "6" : "5");
+        junction.setAttribute("class", "edge-junction" + (selectedEdgeId === edge.id ? " selected" : ""));
+        junction.style.setProperty("--junction-color", edgeColor);
+        junction.addEventListener("pointerdown", (event) => startJunctionDrag(event, edge.id, point.id));
+        junction.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          removeJunction(edge.id, point.id);
+        });
+        edgeLayer.appendChild(junction);
+      });
     });
   }
 
@@ -641,7 +821,8 @@
       project.connections.push({
         id: uid("edge"),
         from: { nodeId: from.nodeId, rowId: from.rowId, side: "out" },
-        to: { nodeId: to.nodeId, rowId: to.rowId, side: "in" }
+        to: { nodeId: to.nodeId, rowId: to.rowId, side: "in" },
+        points: []
       });
       showToast("Collegamento creato");
       markDirty();
@@ -804,14 +985,14 @@
     const width = Math.max(400, maxX - minX);
     const height = Math.max(300, maxY - minY);
     const scale = Math.max(0.35, Math.min(1.05, Math.min((rect.width - 150) / width, (rect.height - 150) / height)));
-    view.scale = scale;
-    view.x = rect.width / 2 - ((minX + maxX) / 2) * scale;
-    view.y = rect.height / 2 - ((minY + maxY) / 2) * scale;
+    view.scale = snapScale(scale);
+    view.x = Math.round(rect.width / 2 - ((minX + maxX) / 2) * view.scale);
+    view.y = Math.round(rect.height / 2 - ((minY + maxY) / 2) * view.scale);
     setWorldTransform();
   }
 
   function setZoom(nextScale, clientX, clientY) {
-    const newScale = Math.max(0.3, Math.min(1.65, nextScale));
+    const newScale = snapScale(Math.max(0.3, Math.min(1.65, nextScale)));
     const rect = viewport.getBoundingClientRect();
     const x = typeof clientX === "number" ? clientX - rect.left : rect.width / 2;
     const y = typeof clientY === "number" ? clientY - rect.top : rect.height / 2;
