@@ -497,6 +497,7 @@
 
   function collectionTypeLabel(kind, valueType, keyType, length) {
     const base = normalizedType(valueType);
+    if (base === "void") return "void";
     const mode = kind || "single";
     if (mode === "array") {
       const size = Number(length) > 0 ? Number(length) : "";
@@ -507,31 +508,38 @@
     return base;
   }
 
+  function collectionTypeKey(kind, valueType, keyType) {
+    const base = normalizedType(valueType);
+    if (base === "void") return "void";
+    const mode = kind || "single";
+    if (mode === "array") return base + "[]";
+    if (mode === "list") return "List<" + base + ">";
+    if (mode === "dictionary") return "Dictionary<" + normalizedType(keyType || "string") + ", " + base + ">";
+    return base;
+  }
+
   function variableTypeLabel(item) {
-    return collectionTypeLabel(
-      item.collectionKind,
-      item.dataType,
-      item.dictionaryKeyType,
-      item.arrayLength
-    );
+    return collectionTypeLabel(item.collectionKind, item.dataType, item.dictionaryKeyType, item.arrayLength);
+  }
+
+  function variableTypeKey(item) {
+    return collectionTypeKey(item.collectionKind, item.dataType, item.dictionaryKeyType);
   }
 
   function methodReturnTypeLabel(item) {
-    return collectionTypeLabel(
-      item.returnCollectionKind,
-      item.returnType,
-      item.returnDictionaryKeyType,
-      item.returnArrayLength
-    );
+    return collectionTypeLabel(item.returnCollectionKind, item.returnType, item.returnDictionaryKeyType, item.returnArrayLength);
+  }
+
+  function methodReturnTypeKey(item) {
+    return collectionTypeKey(item.returnCollectionKind, item.returnType, item.returnDictionaryKeyType);
   }
 
   function nodeReturnTypeLabel(node) {
-    return collectionTypeLabel(
-      node.returnCollectionKind,
-      node.returnType,
-      node.returnDictionaryKeyType,
-      node.returnArrayLength
-    );
+    return collectionTypeLabel(node.returnCollectionKind, node.returnType, node.returnDictionaryKeyType, node.returnArrayLength);
+  }
+
+  function nodeReturnTypeKey(node) {
+    return collectionTypeKey(node.returnCollectionKind, node.returnType, node.returnDictionaryKeyType);
   }
 
   function collectionWarning(item) {
@@ -592,7 +600,7 @@
 
   function memberInputType(item) {
     if (!item) return "any";
-    if (item.kind === "variable" || item.kind === "property") return variableTypeLabel(item);
+    if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
     if (item.kind === "function") return firstParameterType(item.parameters);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "input") return normalizedType(item.value);
@@ -602,8 +610,8 @@
 
   function memberOutputType(item) {
     if (!item) return "any";
-    if (item.kind === "variable" || item.kind === "property") return variableTypeLabel(item);
-    if (item.kind === "function") return methodReturnTypeLabel(item);
+    if (item.kind === "variable" || item.kind === "property") return variableTypeKey(item);
+    if (item.kind === "function") return methodReturnTypeKey(item);
     if (item.kind === "unityEvent") return normalizedType(item.payloadType);
     if (item.kind === "output") return normalizedType(item.value);
     if (item.kind === "condition") return normalizedType(item.value || "bool");
@@ -917,12 +925,54 @@
           }),
           compactSelect(node.returnType, ["void"].concat(availableDataTypes()), (value) => {
             node.returnType = value;
+            if (value === "void") node.returnCollectionKind = "single";
             rerenderNode();
           }),
           inlineInput(node.parameters, "parametri", (value) => {
             node.parameters = value;
           }, "inline-params-input")
         );
+
+        if (node.returnType !== "void") {
+          const returnCollection = document.createElement("div");
+          returnCollection.className = "inline-collection-row function-return-collection";
+          returnCollection.appendChild(compactSelect(node.returnCollectionKind, [
+            ["single", "Single"],
+            ["array", "Array"],
+            ["list", "List"],
+            ["dictionary", "Dictionary"]
+          ], (value) => {
+            node.returnCollectionKind = value;
+            rerenderNode();
+          }, "inline-collection-select"));
+
+          if (node.returnCollectionKind === "array") {
+            const length = document.createElement("input");
+            length.type = "number";
+            length.min = "0";
+            length.className = "inline-size-input";
+            length.value = node.returnArrayLength || "";
+            length.placeholder = "Length";
+            length.addEventListener("pointerdown", (event) => event.stopPropagation());
+            length.addEventListener("input", () => {
+              node.returnArrayLength = Math.max(0, Number(length.value) || 0);
+              markDirty();
+            });
+            returnCollection.appendChild(length);
+          } else if (node.returnCollectionKind === "dictionary") {
+            returnCollection.appendChild(compactSelect(node.returnDictionaryKeyType, availableDataTypes(), (value) => {
+              node.returnDictionaryKeyType = value;
+              rerenderNode();
+            }, "inline-key-type-select"));
+          }
+
+          const preview = document.createElement("span");
+          preview.className = "collection-preview";
+          preview.textContent = "→ " + nodeReturnTypeLabel(node);
+          returnCollection.appendChild(preview);
+          functionMeta.appendChild(returnCollection);
+        }
+
         body.appendChild(functionMeta);
       }
 
@@ -1029,7 +1079,7 @@
         if (item.kind === "variable" || item.kind === "property") {
           const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
             item.access = value;
-            if (value === "public") item.serialized = true;
+            if (value === "public" && item.collectionKind !== "dictionary") item.serialized = true;
             rerenderNode();
           }, "inline-access-select");
 
@@ -1046,6 +1096,63 @@
           }, "inline-name-input");
 
           topLine.append(access, type, name);
+
+          const collectionLine = document.createElement("div");
+          collectionLine.className = "inline-collection-row";
+
+          const collection = compactSelect(item.collectionKind, [
+            ["single", "Single"],
+            ["array", "Array"],
+            ["list", "List"],
+            ["dictionary", "Dictionary"]
+          ], (value) => {
+            item.collectionKind = value;
+            if (value === "dictionary") item.serialized = false;
+            rerenderNode();
+          }, "inline-collection-select");
+          collectionLine.appendChild(collection);
+
+          if (item.collectionKind === "array") {
+            const length = document.createElement("input");
+            length.type = "number";
+            length.min = "0";
+            length.className = "inline-size-input";
+            length.value = item.arrayLength || "";
+            length.placeholder = "Length";
+            length.title = "Lunghezza prevista dell'array";
+            length.addEventListener("pointerdown", (event) => event.stopPropagation());
+            length.addEventListener("input", () => {
+              item.arrayLength = Math.max(0, Number(length.value) || 0);
+              markDirty();
+            });
+            collectionLine.appendChild(length);
+          } else if (item.collectionKind === "list") {
+            const count = document.createElement("input");
+            count.type = "number";
+            count.min = "0";
+            count.className = "inline-size-input";
+            count.value = item.listInitialCount || "";
+            count.placeholder = "Initial";
+            count.title = "Numero iniziale previsto di elementi";
+            count.addEventListener("pointerdown", (event) => event.stopPropagation());
+            count.addEventListener("input", () => {
+              item.listInitialCount = Math.max(0, Number(count.value) || 0);
+              markDirty();
+            });
+            collectionLine.appendChild(count);
+          } else if (item.collectionKind === "dictionary") {
+            const keyType = compactSelect(item.dictionaryKeyType, availableDataTypes(), (value) => {
+              item.dictionaryKeyType = value;
+              rerenderNode();
+            }, "inline-key-type-select");
+            keyType.title = "Tipo della chiave";
+            collectionLine.appendChild(keyType);
+          }
+
+          const collectionPreview = document.createElement("span");
+          collectionPreview.className = "collection-preview";
+          collectionPreview.textContent = variableTypeLabel(item);
+          collectionLine.appendChild(collectionPreview);
 
           const second = document.createElement("div");
           second.className = "inline-member-bottom";
@@ -1067,18 +1174,24 @@
 
           const serialized = document.createElement("button");
           serialized.type = "button";
-          serialized.className = "inline-flag" + (item.serialized ? " active" : "");
+          serialized.className = "inline-flag" + (item.serialized ? " active" : "") + (item.collectionKind === "dictionary" ? " disabled" : "");
           serialized.textContent = "S";
-          serialized.title = "SerializeField / Inspector";
+          serialized.title = item.collectionKind === "dictionary"
+            ? "Unity non serializza Dictionary direttamente"
+            : "SerializeField / Inspector";
           serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
           serialized.addEventListener("click", (event) => {
             event.stopPropagation();
+            if (item.collectionKind === "dictionary") {
+              showToast("Unity non serializza Dictionary direttamente: usa gestione custom.");
+              return;
+            }
             item.serialized = !item.serialized;
             rerenderNode();
           });
 
           second.append(reference, defaultValue, serialized);
-          editor.append(topLine, second);
+          editor.append(topLine, collectionLine, second);
         } else if (item.kind === "function") {
           const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
             item.access = value;
@@ -1087,6 +1200,7 @@
 
           const returnType = compactSelect(item.returnType, ["void"].concat(availableDataTypes()), (value) => {
             item.returnType = value;
+            if (value === "void") item.returnCollectionKind = "single";
             rerenderNode();
           }, "inline-type-select");
 
@@ -1095,6 +1209,47 @@
           }, "inline-name-input");
 
           topLine.append(access, returnType, name);
+
+          if (item.returnType !== "void") {
+            const returnCollection = document.createElement("div");
+            returnCollection.className = "inline-collection-row method-return-collection";
+
+            returnCollection.appendChild(compactSelect(item.returnCollectionKind, [
+              ["single", "Single"],
+              ["array", "Array"],
+              ["list", "List"],
+              ["dictionary", "Dictionary"]
+            ], (value) => {
+              item.returnCollectionKind = value;
+              rerenderNode();
+            }, "inline-collection-select"));
+
+            if (item.returnCollectionKind === "array") {
+              const length = document.createElement("input");
+              length.type = "number";
+              length.min = "0";
+              length.className = "inline-size-input";
+              length.value = item.returnArrayLength || "";
+              length.placeholder = "Length";
+              length.addEventListener("pointerdown", (event) => event.stopPropagation());
+              length.addEventListener("input", () => {
+                item.returnArrayLength = Math.max(0, Number(length.value) || 0);
+                markDirty();
+              });
+              returnCollection.appendChild(length);
+            } else if (item.returnCollectionKind === "dictionary") {
+              returnCollection.appendChild(compactSelect(item.returnDictionaryKeyType, availableDataTypes(), (value) => {
+                item.returnDictionaryKeyType = value;
+                rerenderNode();
+              }, "inline-key-type-select"));
+            }
+
+            const preview = document.createElement("span");
+            preview.className = "collection-preview";
+            preview.textContent = "→ " + methodReturnTypeLabel(item);
+            returnCollection.appendChild(preview);
+            editor.appendChild(returnCollection);
+          }
 
           const second = document.createElement("div");
           second.className = "inline-member-bottom";
@@ -1111,6 +1266,7 @@
               const preset = UNITY_LIFECYCLE[0];
               item.label = preset.name;
               item.returnType = preset.returnType;
+              item.returnCollectionKind = "single";
               item.parameters = preset.parameters;
             }
             rerenderNode();
@@ -1172,6 +1328,22 @@
 
       const addMemberFromAction = (action) => {
         if (action === "variable") node.rows.push(variableRow("newVariable", "int", "private"));
+        if (action === "arrayVariable") {
+          const variable = variableRow("newArray", "int", "private");
+          variable.collectionKind = "array";
+          node.rows.push(variable);
+        }
+        if (action === "listVariable") {
+          const variable = variableRow("newList", "int", "private");
+          variable.collectionKind = "list";
+          node.rows.push(variable);
+        }
+        if (action === "dictionaryVariable") {
+          const variable = variableRow("newDictionary", "int", "private");
+          variable.collectionKind = "dictionary";
+          variable.serialized = false;
+          node.rows.push(variable);
+        }
         if (action === "method") node.rows.push(methodRow("NewMethod", "void", "custom"));
         if (action === "lifecycle") node.rows.push(methodRow("Start", "void", "lifecycle"));
         if (action === "coroutine") {
@@ -1335,7 +1507,12 @@
         appendSection(
           "VARIABLES",
           node.rows.filter((item) => item.kind === "variable" || item.kind === "property"),
-          [{ label: "Variable", value: "variable" }].concat(classReferences)
+          [
+            { label: "Single variable", value: "variable" },
+            { label: "Array variable", value: "arrayVariable" },
+            { label: "List variable", value: "listVariable" },
+            { label: "Dictionary variable", value: "dictionaryVariable" }
+          ].concat(classReferences)
         );
         appendSection(
           "METHODS",
