@@ -1352,6 +1352,15 @@
     if (!port) return null;
 
     const rect = port.getBoundingClientRect();
+    if (!rect.width && !rect.height) return null;
+
+    const scrollList = port.closest(".section-member-list.scrollable");
+    if (scrollList) {
+      const listRect = scrollList.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      if (centerY < listRect.top || centerY > listRect.bottom) return null;
+    }
+
     const viewportRect = viewport.getBoundingClientRect();
     return {
       x: (rect.left + rect.width / 2 - viewportRect.left - view.x) / view.scale,
