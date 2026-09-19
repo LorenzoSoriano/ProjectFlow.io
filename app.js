@@ -1399,7 +1399,6 @@
       if (typeof surface._resetTypePicker === "function") surface._resetTypePicker();
     };
 
-    closeSurface($("dataMenu"));
     closeSurface($("accountMenu"));
     closeSurface($("newBlockPalette"));
     closeSurface($("sharePanel"));
@@ -8280,19 +8279,8 @@
     cancelConnection();
   });
 
-  $("dataMenuButton").addEventListener("click", (event) => {
-    event.stopPropagation();
-    const menu = $("dataMenu");
-    const willOpen = !menu.classList.contains("open");
-    closeInterfaceSurfaces(willOpen ? menu : null);
-    menu.classList.toggle("open", willOpen);
-    menu.setAttribute("aria-hidden", willOpen ? "false" : "true");
-    if (willOpen) keepSurfaceInViewport(menu, 12);
-  });
-
   document.addEventListener("click", (event) => {
     if (!event.target.closest("#newBlockPalette") && !event.target.closest("#addObjectTop")) closeNewBlockPalette();
-    if (!event.target.closest(".toolbar-menu")) $("dataMenu").classList.remove("open");
     if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
       closeAccountMenu();
     }
@@ -8313,12 +8301,12 @@
   });
 
   $("exportProject").addEventListener("click", () => {
-    $("dataMenu").classList.remove("open");
+    closeAccountMenu();
     exportProject();
   });
 
   $("importProject").addEventListener("click", () => {
-    $("dataMenu").classList.remove("open");
+    closeAccountMenu();
     $("importFile").click();
   });
 
@@ -8328,7 +8316,7 @@
   });
 
   $("resetProject").addEventListener("click", () => {
-    $("dataMenu").classList.remove("open");
+    closeAccountMenu();
     if (!confirm("Caricare l'Inventory Demo? Il progetto corrente verrà sostituito.")) return;
     project = sampleProject();
     $("projectName").value = project.name;
