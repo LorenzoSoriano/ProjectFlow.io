@@ -2684,6 +2684,10 @@
       return;
     }
 
+    nodeLayer.querySelectorAll(".remote-sketch-preview-canvas").forEach((canvas) => {
+      canvas.dataset.remoteSketchActive = "false";
+    });
+
     const now = Date.now();
     const active = Array.from(cloudState.remotePresence.values())
       .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry.updatedAt || 0) < 45000);
@@ -2762,6 +2766,55 @@
         });
       }
 
+      if (preview && preview.kind === "sketch" && preview.nodeId && preview.stroke &&
+          Array.isArray(preview.stroke.points) && preview.stroke.points.length > 1 &&
+          now - Number(preview.updatedAt || entry.updatedAt || 0) < 5000) {
+        const nodeElement = nodeLayer.querySelector('[data-node-id="' + preview.nodeId + '"]');
+        const paper = nodeElement && nodeElement.querySelector(".node-sketch-paper");
+        if (paper) {
+          const key = "remote-sketch:" + entry.uid + ":" + preview.nodeId;
+          let overlay = paper.querySelector('[data-remote-sketch-key="' + key + '"]');
+          if (!overlay) {
+            overlay = document.createElement("canvas");
+            overlay.className = "remote-sketch-preview-canvas";
+            overlay.dataset.remoteSketchKey = key;
+            paper.appendChild(overlay);
+          }
+
+          const ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+          const width = Math.max(1, Math.round(paper.clientWidth * ratio));
+          const height = Math.max(1, Math.round(paper.clientHeight * ratio));
+          if (overlay.width !== width || overlay.height !== height) {
+            overlay.width = width;
+            overlay.height = height;
+          }
+
+          const ctx = overlay.getContext("2d");
+          if (ctx) {
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            const stroke = preview.stroke;
+            ctx.save();
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.lineWidth = Math.max(1, (Number(stroke.size) || 3) * ratio);
+            ctx.strokeStyle = stroke.mode === "erase"
+              ? "rgba(199,96,102,.72)"
+              : (stroke.color || "#52677c");
+            if (stroke.mode === "erase") ctx.setLineDash([6 * ratio, 4 * ratio]);
+            ctx.beginPath();
+            stroke.points.forEach((point, index) => {
+              const x = point.x * overlay.width;
+              const y = point.y * overlay.height;
+              if (index === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.restore();
+          }
+          overlay.dataset.remoteSketchActive = "true";
+        }
+      }
+
       if (toolbar) {
         const avatar = document.createElement("span");
         avatar.className = "collab-presence-avatar";
@@ -2776,6 +2829,9 @@
         if (!activeKeys.has(element.dataset.presenceKey)) element.remove();
       });
     }
+    nodeLayer.querySelectorAll(".remote-sketch-preview-canvas").forEach((canvas) => {
+      if (canvas.dataset.remoteSketchActive !== "true") canvas.remove();
+    });
     if (toolbar) toolbar.hidden = active.length === 0;
   }
 
@@ -2848,6 +2904,50 @@
       cloudState.presenceActivity = "Nel progetto";
       queuePresenceWrite(true, true);
     }, 900);
+  }
+
+  function compactSketchPreviewPoints(points, limit) {
+    const source = Array.isArray(points) ? points : [];
+    const maxPoints = Math.max(20, Number(limit) || 180);
+    if (source.length <= maxPoints) return source.map((point) => ({ x: point.x, y: point.y }));
+    const result = [];
+    const step = (source.length - 1) / (maxPoints - 1);
+    for (let index = 0; index < maxPoints; index += 1) {
+      const point = source[Math.min(source.length - 1, Math.round(index * step))];
+      result.push({ x: point.x, y: point.y });
+    }
+    return result;
+  }
+
+  function broadcastSketchPreview(node, stroke) {
+    if (!cloudState.sharedProjectId || !cloudState.user || !node || !stroke) return;
+    cloudState.presencePreview = {
+      kind: "sketch",
+      nodeId: node.id,
+      stroke: {
+        id: stroke.id,
+        color: stroke.color || "#52677c",
+        size: Number(stroke.size) || 3,
+        mode: stroke.mode === "erase" ? "erase" : "draw",
+        points: compactSketchPreviewPoints(stroke.points, 180)
+      },
+      updatedAt: Date.now()
+    };
+    cloudState.presenceActivity = (stroke.mode === "erase" ? "Cancella" : "Disegna") + " nello Sketch";
+    queuePresenceWrite(false, true);
+  }
+
+  function finishSketchPreview() {
+    if (!cloudState.sharedProjectId || !cloudState.user) return;
+    clearTimeout(cloudState.presencePreviewClearTimer);
+    clearTimeout(saveTimer);
+    saveProject(false);
+    cloudState.presencePreviewClearTimer = setTimeout(() => {
+      cloudState.presencePreviewClearTimer = null;
+      cloudState.presencePreview = null;
+      cloudState.presenceActivity = "Nel progetto";
+      queuePresenceWrite(true, true);
+    }, 700);
   }
 
   function broadcastActivity(text) {
@@ -4632,6 +4732,7 @@
         if (dx * dx + dy * dy < 0.000008) return;
         draft.points.push(point);
         drawSketchNodeSegment(canvas, draft, previous, point);
+        broadcastSketchPreview(node, draft);
       });
 
       const finishStroke = (event) => {
@@ -4644,7 +4745,7 @@
         if (draft.points.length > 1) {
           node.sketchStrokes.push(draft);
           markDirty();
-          broadcastActivity("Aggiorna Sketch " + (node.title || ""));
+          finishSketchPreview();
         }
         draft = null;
         pointerId = null;
@@ -8101,9 +8202,7 @@
       { type: "enumSwitch", category: "GAME FLOW", label: "Switch Enum", description: "Un'uscita flow per ogni valore", icon: "⇆" },
 
       { type: "variable", category: "DATI", label: "Variabile", description: "Dato o stato condiviso", icon: "x" },
-      { type: "ui", category: "INTERFACCIA & NOTE", label: "Interfaccia", description: "Text, button, HUD, menu…", icon: "▣" },
-      { type: "note", category: "INTERFACCIA & NOTE", label: "Nota", description: "Regola, idea o TODO", icon: "≡" },
-      { type: "sketch", category: "INTERFACCIA & NOTE", label: "Sketch", description: "Riquadro da disegno per appunti visuali", icon: "✎" }
+      { type: "ui", category: "INTERFACCIA", label: "Interfaccia", description: "Text, button, HUD, menu…", icon: "▣" }
     ];
 
     UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
@@ -8449,6 +8548,7 @@
   });
   $("copyShareLink").addEventListener("click", copyCurrentShareLink);
 
+  $("noteTool").addEventListener("click", () => addNode("note"));
   $("sketchTool").addEventListener("click", () => addNode("sketch"));
 
   $("undoAction").addEventListener("click", undoProjectChange);
