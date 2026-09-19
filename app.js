@@ -1443,14 +1443,19 @@
   }
 
   function loadPanelWidths() {
-    let widths = { library: 245, inspector: 305 };
+    let widths = { library: 285, inspector: 350 };
     try {
       const saved = JSON.parse(localStorage.getItem(PANELS_KEY) || "null");
       if (saved && typeof saved.library === "number") widths.library = saved.library;
       if (saved && typeof saved.inspector === "number") widths.inspector = saved.inspector;
     } catch (error) {}
-    widths.library = Math.max(180, Math.min(420, widths.library));
-    widths.inspector = Math.max(240, Math.min(520, widths.inspector));
+
+    // Migrate the old compact defaults to the roomier v1.7 layout.
+    if (widths.library === 245) widths.library = 285;
+    if (widths.inspector === 305) widths.inspector = 350;
+
+    widths.library = Math.max(240, Math.min(480, widths.library));
+    widths.inspector = Math.max(300, Math.min(620, widths.inspector));
     document.documentElement.style.setProperty("--library-width", widths.library + "px");
     document.documentElement.style.setProperty("--inspector-width", widths.inspector + "px");
     return widths;
