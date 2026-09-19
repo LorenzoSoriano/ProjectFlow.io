@@ -5994,3 +5994,224 @@ body,
   cursor:crosshair;
   touch-action:none;
 }
+
+
+/* v2.6 — smoother canvas + resizable Sketch workspace */
+.world{
+  will-change:transform;
+}
+.type-sketch{
+  min-width:360px;
+  max-width:1400px;
+  overflow:visible;
+  border-color:#34495c;
+  box-shadow:0 12px 30px rgba(0,0,0,.24);
+}
+.type-sketch.selected{
+  border-color:#678aa6;
+  box-shadow:0 0 0 1px rgba(111,154,187,.22),0 16px 36px rgba(0,0,0,.28);
+}
+.type-sketch .node-header{
+  background:linear-gradient(180deg,#18232e,#131c25);
+  border-bottom-color:#344657;
+}
+.type-sketch .node-body{
+  overflow:visible;
+  background:#111820;
+}
+.node-sketch-tools{
+  min-height:46px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:7px 9px;
+  border-bottom:1px solid #2d3b49;
+  background:linear-gradient(180deg,#151f29,#111922);
+}
+.node-sketch-mode-group{
+  display:flex;
+  align-items:center;
+  gap:2px;
+  padding:2px;
+  border:1px solid #334251;
+  border-radius:8px;
+  background:#0d141c;
+}
+.node-sketch-mode-button{
+  height:29px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:0 9px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:#788b9e;
+  cursor:pointer;
+  font-size:9px;
+  font-weight:800;
+}
+.node-sketch-mode-button:hover{
+  color:#c2d0dc;
+  background:#17232e;
+}
+.node-sketch-mode-button.active{
+  background:#263b4b;
+  color:#d6e5ef;
+  box-shadow:inset 0 0 0 1px rgba(129,175,205,.2);
+}
+.node-sketch-color-wrap{
+  height:31px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:0 7px 0 5px;
+  border:1px solid #334251;
+  border-radius:7px;
+  background:#0e151d;
+  color:#728496;
+  font-size:8px;
+  font-weight:800;
+  cursor:pointer;
+}
+.node-sketch-color-wrap input[type="color"]{
+  width:24px;
+  height:23px;
+  padding:1px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  cursor:pointer;
+}
+.node-sketch-size-wrap{
+  min-width:128px;
+  height:31px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:0 7px;
+  border:1px solid #334251;
+  border-radius:7px;
+  background:#0e151d;
+}
+.node-sketch-size{
+  width:82px;
+  accent-color:#769ab5;
+}
+.node-sketch-size-value{
+  min-width:31px;
+  color:#8194a5;
+  font:8px/1 "SFMono-Regular",Consolas,monospace;
+  text-align:right;
+}
+.node-sketch-tool-spacer{
+  min-width:4px;
+  flex:1;
+}
+.node-sketch-action{
+  height:30px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:0 8px;
+  border:1px solid #344453;
+  border-radius:7px;
+  background:#111a23;
+  color:#8294a5;
+  cursor:pointer;
+  font-size:8px;
+  font-weight:800;
+}
+.node-sketch-action:hover{
+  border-color:#50677a;
+  background:#18242f;
+  color:#d1dce5;
+}
+.node-sketch-action.danger:hover{
+  border-color:rgba(212,111,116,.48);
+  background:rgba(212,111,116,.08);
+  color:#e29a9e;
+}
+.node-sketch-paper{
+  position:relative;
+  min-height:220px;
+  max-height:1000px;
+  height:320px;
+  margin:10px 10px 6px;
+  overflow:hidden;
+  border:1px solid #bdb9ae;
+  border-radius:8px;
+  background:
+    linear-gradient(rgba(89,96,103,.08) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(89,96,103,.08) 1px,transparent 1px),
+    #f5f3eb;
+  background-size:22px 22px;
+  box-shadow:
+    inset 0 1px 5px rgba(0,0,0,.08),
+    0 1px 0 rgba(255,255,255,.04);
+}
+.node-sketch-canvas{
+  display:block;
+  width:100%;
+  height:100%;
+  cursor:crosshair;
+  touch-action:none;
+}
+.node-sketch-canvas.erase-mode{
+  cursor:cell;
+}
+.node-sketch-resize{
+  position:absolute;
+  right:4px;
+  bottom:4px;
+  z-index:5;
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(66,82,95,.42);
+  border-radius:7px;
+  background:rgba(245,243,235,.82);
+  color:#5d6b75;
+  cursor:nwse-resize;
+  font-size:14px;
+  opacity:.62;
+  backdrop-filter:blur(3px);
+  transition:opacity .12s ease,transform .12s ease,background .12s ease;
+}
+.node-sketch-resize:hover,
+.type-sketch.sketch-resizing .node-sketch-resize{
+  opacity:1;
+  transform:scale(1.04);
+  background:#fff;
+}
+.type-sketch.sketch-resizing{
+  user-select:none;
+}
+.type-sketch.sketch-resizing .node-sketch-paper{
+  box-shadow:inset 0 0 0 2px rgba(92,135,164,.16),inset 0 1px 5px rgba(0,0,0,.08);
+}
+.node-sketch-footer{
+  min-height:25px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:0 11px 7px;
+  color:#5e7182;
+  font-size:8px;
+}
+.node-sketch-dimensions{
+  color:#728698;
+  font:8px/1 "SFMono-Regular",Consolas,monospace;
+  white-space:nowrap;
+}
+@media(max-width:700px){
+  .node-sketch-tools{
+    flex-wrap:wrap;
+  }
+  .node-sketch-tool-spacer{
+    display:none;
+  }
+}
