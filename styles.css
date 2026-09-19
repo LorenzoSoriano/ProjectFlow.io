@@ -1222,3 +1222,170 @@ body.resizing-panel *{
   margin-top:4px;
   border-top:1px solid #202a3b;
 }
+
+
+/* Method descriptions and node backbone v0.9 */
+.method-description-inline{
+  width:100%;
+  min-height:58px;
+  margin-top:2px;
+  padding:8px 9px;
+  border:1px solid #243047;
+  border-radius:7px;
+  outline:0;
+  resize:vertical;
+  background:#080d16;
+  color:#aab6c9;
+  font:10px/1.45 Inter,ui-sans-serif,system-ui,sans-serif;
+}
+.method-description-inline::placeholder{
+  color:#556177;
+}
+.method-description-inline:focus{
+  border-color:#5e55b7;
+  box-shadow:0 0 0 2px rgba(124,108,255,.07);
+}
+.standalone-method-description{
+  width:calc(100% - 18px);
+  margin:0 9px 8px;
+}
+.member-function .inline-member-editor{
+  gap:5px;
+}
+.node-backbone{
+  position:absolute;
+  left:calc(100% + 12px);
+  top:10px;
+  width:190px;
+  z-index:14;
+  pointer-events:auto;
+}
+.node-backbone::before{
+  content:"";
+  position:absolute;
+  left:7px;
+  top:18px;
+  bottom:9px;
+  width:2px;
+  border-radius:2px;
+  background:linear-gradient(180deg,rgba(124,108,255,.75),rgba(66,212,223,.18));
+  box-shadow:0 0 10px rgba(124,108,255,.12);
+}
+.node-backbone.collapsed{
+  width:34px;
+}
+.node-backbone.collapsed::before{
+  bottom:17px;
+}
+.backbone-toggle{
+  position:relative;
+  z-index:2;
+  min-height:30px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:4px 7px 4px 0;
+  border:0;
+  background:transparent;
+  color:#76849b;
+  cursor:pointer;
+}
+.backbone-main-dot{
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  border:3px solid #0b101b;
+  border-radius:50%;
+  background:#8376ff;
+  box-shadow:0 0 0 1px rgba(155,140,255,.35),0 0 9px rgba(124,108,255,.25);
+}
+.backbone-title{
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:1px;
+}
+.backbone-list{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  margin-top:3px;
+  padding-left:20px;
+}
+.backbone-relation{
+  position:relative;
+  width:100%;
+  min-height:39px;
+  display:grid;
+  grid-template-columns:10px minmax(0,1fr);
+  align-items:center;
+  gap:7px;
+  padding:6px 7px;
+  border:1px solid #222d41;
+  border-radius:8px;
+  background:rgba(10,15,26,.94);
+  box-shadow:0 8px 20px rgba(0,0,0,.18);
+  color:#9ba8bc;
+  text-align:left;
+  cursor:pointer;
+}
+.backbone-relation::before{
+  content:"";
+  position:absolute;
+  left:-13px;
+  top:50%;
+  width:13px;
+  height:1px;
+  background:#35415a;
+}
+.backbone-relation:hover{
+  border-color:#4a4f85;
+  background:#101827;
+}
+.backbone-relation.internal{
+  border-left:2px solid rgba(85,214,158,.55);
+}
+.backbone-relation.external{
+  border-left:2px solid rgba(124,108,255,.6);
+}
+.backbone-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--relation-color,#7c6cff);
+  box-shadow:0 0 7px color-mix(in srgb,var(--relation-color,#7c6cff) 50%,transparent);
+}
+.backbone-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.backbone-copy strong{
+  overflow:hidden;
+  color:#b9c4d5;
+  font-size:9px;
+  font-weight:800;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.backbone-copy small{
+  overflow:hidden;
+  color:#617088;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.3px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.backbone-more{
+  padding:4px 6px;
+  color:#5d6a80;
+  font-size:8px;
+  text-align:center;
+}
+@media(max-width:1050px){
+  .node-backbone{
+    width:160px;
+  }
+}
