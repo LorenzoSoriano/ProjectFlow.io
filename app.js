@@ -985,6 +985,18 @@
     if (node.type === "component") {
       return componentCategoryLabel(node.componentCategory) + " · Unity Component";
     }
+    if (node.type === "enum") {
+      return (node.enumFlags ? "[Flags] · " : "") + node.enumUnderlyingType + " · " + node.enumValues.length + " values";
+    }
+    if (node.type === "event") {
+      return "FLOW EVENT · " + String(node.eventKind || "custom").toUpperCase();
+    }
+    if (node.type === "action") {
+      return "FLOW ACTION · " + String(node.actionKind || "custom").toUpperCase();
+    }
+    if (node.type === "state") {
+      return "STATE · " + String(node.stateKind || "normal").toUpperCase();
+    }
     return typeMeta(node.type).label;
   }
 
@@ -4022,6 +4034,52 @@
           methodLogic: ""
         }
       },
+      enum: {
+        title: "GameState",
+        description: "Tipo enumerato per stati, modalità e scelte di gameplay.",
+        rows: [],
+        pseudo: "",
+        extra: {
+          enumVisibility: "public",
+          enumUnderlyingType: "int",
+          enumFlags: false,
+          enumValues: [
+            enumValue("None", 0),
+            enumValue("Idle", 1),
+            enumValue("Active", 2)
+          ]
+        }
+      },
+      event: {
+        title: "Gameplay Event",
+        description: "Punto di ingresso del flusso: evento Unity, input o evento custom.",
+        rows: [
+          row("Next", "", "flowOut"),
+          row("payload", "value", "output")
+        ],
+        pseudo: "",
+        extra: { eventKind: "custom" }
+      },
+      action: {
+        title: "Gameplay Action",
+        description: "Azione eseguita nel flow: chiama un metodo, cambia un dato o attiva un sistema.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Next", "", "flowOut")
+        ],
+        pseudo: "",
+        extra: { actionKind: "custom" }
+      },
+      state: {
+        title: "Gameplay State",
+        description: "Stato di gameplay con entrata, permanenza e uscita.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Transition", "", "flowOut")
+        ],
+        pseudo: "",
+        extra: { stateKind: "normal" }
+      },
       variable: {
         title: "Variable",
         description: "Dato, configurazione o riferimento condiviso.",
@@ -4031,7 +4089,14 @@
       condition: {
         title: "Condition",
         description: "Confronto o scelta nel flow.",
-        rows: [row("A", "input", "input"), row("B", "input", "input"), row("result", "bool", "output")],
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("A", "value", "input"),
+          row("B", "value", "input"),
+          row("True", "", "flowOut"),
+          row("False", "", "flowOut"),
+          row("result", "bool", "output")
+        ],
         pseudo: "A == B"
       },
       ui: {
