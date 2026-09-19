@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1020" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260919-2052" />
+  <link rel="stylesheet" href="styles.css?v=20260919-2119" />
 </head>
 <body>
   <div class="app-shell">
@@ -15,7 +15,7 @@
         <button class="icon-button mobile-only" id="toggleLibrary" aria-label="Apri libreria">☰</button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v0.3</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v0.4</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -189,12 +189,19 @@
               <textarea id="nodeDescription" rows="3" placeholder="Che responsabilità ha questo blocco?"></textarea>
             </label>
 
+            <div id="nodeTypeSettings" class="node-type-settings"></div>
+
             <div class="inspector-section-head">
               <div>
-                <span class="field-label static">CONTENUTO</span>
-                <small>Variabili, funzioni, proprietà o testo libero.</small>
+                <span class="field-label static" id="contentSectionLabel">CONTENUTO</span>
+                <small id="contentSectionHint">Variabili, funzioni, proprietà o testo libero.</small>
               </div>
-              <button class="mini-button" id="addRow">＋ Riga</button>
+            </div>
+            <div class="member-actions" id="memberActions">
+              <button class="mini-button member-action" id="addVariable">＋ Variabile</button>
+              <button class="mini-button member-action" id="addMethod">＋ Metodo</button>
+              <button class="mini-button member-action" id="addEvent">＋ UnityEvent</button>
+              <button class="mini-button member-action" id="addRow">＋ Riga</button>
             </div>
             <div class="row-editor-list" id="rowEditorList"></div>
 
@@ -214,6 +221,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </div>
 
-  <script src="app.js?v=20260919-2052"></script>
+  <script src="app.js?v=20260919-2119"></script>
 </body>
 </html>
