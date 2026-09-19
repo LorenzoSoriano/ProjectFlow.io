@@ -135,8 +135,9 @@
   const uid = (prefix) => prefix + "_" + Math.random().toString(36).slice(2, 9);
 
   function snapScale(value) {
-    if (value > 0.97 && value < 1.03) return 1;
-    return Math.round(value * 1000) / 1000;
+    const snapped = Math.round(Number(value || 1) * 20) / 20;
+    if (snapped > 0.97 && snapped < 1.03) return 1;
+    return Math.max(0.3, Math.min(1.65, snapped));
   }
 
   function portKey(nodeId, rowId, side) {
@@ -528,6 +529,7 @@
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
+  let zoomSharpTimer = null;
   let connectMode = false;
 
   $("projectName").value = project.name;
@@ -594,6 +596,20 @@
     });
   }
 
+  function refreshZoomSharpness() {
+    world.classList.add("is-transforming");
+    clearTimeout(zoomSharpTimer);
+    zoomSharpTimer = setTimeout(() => {
+      world.classList.remove("is-transforming");
+      void world.offsetWidth;
+      nodeLayer.classList.add("raster-refresh");
+      requestAnimationFrame(() => {
+        nodeLayer.classList.remove("raster-refresh");
+        renderEdges();
+      });
+    }, 90);
+  }
+
   function setWorldTransform() {
     const scale = snapScale(view.scale);
     const tx = Math.round(view.x);
@@ -605,6 +621,7 @@
     $("zoomReadout").textContent = Math.round(scale * 100) + "%";
     localStorage.setItem(VIEW_KEY, JSON.stringify(view));
     renderMinimap();
+    refreshZoomSharpness();
   }
 
   function markDirty() {
@@ -2936,13 +2953,27 @@
     showToast(count === 1 ? "Blocco eliminato" : count + " blocchi eliminati");
   }
 
-  function defaultNode(type, x, y) {
+  function defaultNode(type, x, y, presetComponent) {
+    const componentType = presetComponent || "Animator";
     const templates = {
       object: {
-        title: "New Object",
-        description: "Entità o componente del sistema.",
-        rows: [variableRow("id", "int", "public"), variableRow("state", "bool", "private")],
+        title: "New GameObject",
+        description: "GameObject Unity: contenitore di componenti, script e dati concettuali.",
+        rows: [
+          componentRow("Transform", "core", "unity", { locked: true })
+        ],
         pseudo: ""
+      },
+      component: {
+        title: componentType,
+        description: "Componente Unity standalone per descriverne proprietà e relazioni.",
+        rows: componentPresetRows(componentType),
+        pseudo: "",
+        extra: {
+          componentType: componentType,
+          componentCategory: componentCategoryFor(componentType),
+          componentSource: "unity"
+        }
       },
       class: {
         title: "NewClass",
@@ -2969,6 +3000,9 @@
           methodAccess: "public",
           methodKind: "custom",
           returnType: "void",
+          returnCollectionKind: "single",
+          returnArrayLength: 0,
+          returnDictionaryKeyType: "string",
           parameters: ""
         }
       },
@@ -3022,17 +3056,17 @@
     };
   }
 
-  function addNode(type) {
+  function addNode(type, presetComponent) {
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
-    const node = defaultNode(type, center.x - NODE_WIDTH / 2 + offset, center.y - 100 + offset);
+    const node = defaultNode(type, center.x - NODE_WIDTH / 2 + offset, center.y - 100 + offset, presetComponent);
     project.nodes.push(node);
     selectedNodeIds = new Set([node.id]);
     syncPrimarySelection();
     selectedEdgeId = null;
     render();
     markDirty();
-    showToast(TYPE_META[type].label + " aggiunto");
+    showToast((TYPE_META[type] || TYPE_META.object).label + " aggiunto");
     setTimeout(() => {
       const element = nodeLayer.querySelector('[data-node-id="' + node.id + '"] .node-title-inline');
       if (element) {
@@ -3220,7 +3254,7 @@
   $("cancelConnection").addEventListener("click", cancelConnection);
 
   document.querySelectorAll(".block-template").forEach((button) => {
-    button.addEventListener("click", () => addNode(button.dataset.template));
+    button.addEventListener("click", () => addNode(button.dataset.template, button.dataset.component || ""));
   });
 
   $("addObjectTop").addEventListener("click", () => addNode("object"));
