@@ -4704,6 +4704,20 @@
   }
 
   function memberCompactSignature(item) {
+    if (currentSchemaId() === "classic") {
+      if (item.kind === "function") {
+        ensureFunctionSignature(item, item.access);
+        const args = item.methodParameters.map((parameter) =>
+          parameterTypeKey(parameter) + " " + (parameter.name || "value")
+        ).join(", ");
+        return (item.label || "Function") + "(" + args + ")" +
+          (item.returnType && item.returnType !== "void" ? " → " + methodReturnTypeKey(item) : "");
+      }
+      if (item.kind === "variable" || item.kind === "property") {
+        const value = item.defaultValue ? " = " + item.defaultValue : "";
+        return variableTypeKey(item) + " " + (item.label || "value") + value;
+      }
+    }
     if (item.kind === "function") return csharpMethodSignature(item);
     if (item.kind === "variable" || item.kind === "property") return csharpVariableSignature(item);
     if (item.kind === "unityEvent") return csharpEventSignature(item);
@@ -10018,7 +10032,15 @@
       class: ["CLASS / UNITY", "Base type, visibilità e accesso"],
       struct: ["STRUCTURE", "Semantica C# della struct"],
       jobStruct: ["UNITY JOB", "Interfaccia Job, scheduling e Burst"],
-      function: ["FUNCTION SIGNATURE", "Owner, accesso, tipo e return"]
+      function: currentSchemaId() === "classic"
+        ? ["FUNCTION", "Parametri, risultato e comportamento del sub-flow"]
+        : ["FUNCTION SIGNATURE", "Owner, accesso, tipo e return"],
+      event: currentSchemaId() === "classic"
+        ? ["FLOW CHART ENTRY", "Configura come inizia questo ramo del diagramma"]
+        : ["EVENT", "Impostazioni dell'evento"],
+      action: currentSchemaId() === "classic"
+        ? ["FLOW CHART PROCESS", "Configura il tipo di operazione del processo"]
+        : ["ACTION", "Impostazioni dell'azione"]
     };
     const contextInfo = contextTitles[node.type] || ["SETTINGS", "Impostazioni specifiche del blocco"];
     $("inspectorContextTitle").textContent = contextInfo[0];
