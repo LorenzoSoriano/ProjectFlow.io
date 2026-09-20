@@ -7252,12 +7252,14 @@ body,
 
 
 /* v2.23 — bottom-center animated AI dock */
-.ai-builder-dock{
+.canvas-panel > .ai-builder-dock{
   position:absolute;
   left:50%;
   bottom:0;
   z-index:72;
   width:min(520px,calc(100% - 24px));
+  contain:layout style;
+  isolation:isolate;
   display:flex;
   flex-direction:column;
   align-items:stretch;
