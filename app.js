@@ -7816,27 +7816,47 @@
       const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
       hitPath.setAttribute("d", routePath);
       hitPath.setAttribute("class", "edge-hit");
+      let edgeClickTimer = null;
+
       hitPath.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+      });
+
+      hitPath.addEventListener("click", (event) => {
         if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
-        selectedEdgeId = edge.id;
-        selectedTypeRelationId = null;
-        selectedJunctionIds.clear();
-        selectedNodeIds.clear();
-        selectedNodeId = null;
-        selectedGroupId = null;
+        if (edgeClickTimer) clearTimeout(edgeClickTimer);
 
-        renderNodes();
-        renderEdges();
-        renderInspector();
-        renderMinimap();
-        showToast("Connessione isolata");
+        // Delay single-click focus just enough to let a possible dblclick win.
+        // Rendering the edge layer immediately would replace this SVG path and
+        // prevent the browser from dispatching the double-click event.
+        edgeClickTimer = setTimeout(() => {
+          edgeClickTimer = null;
+          selectedEdgeId = edge.id;
+          selectedTypeRelationId = null;
+          selectedJunctionIds.clear();
+          selectedNodeIds.clear();
+          selectedNodeId = null;
+          selectedGroupId = null;
+
+          renderNodes();
+          renderEdges();
+          renderInspector();
+          renderMinimap();
+          showToast("Connessione isolata");
+        }, 220);
       });
+
       hitPath.addEventListener("dblclick", (event) => {
         if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
+        if (edgeClickTimer) {
+          clearTimeout(edgeClickTimer);
+          edgeClickTimer = null;
+        }
         addJunction(edge, event, a, b);
       });
       edgeLayer.appendChild(hitPath);
