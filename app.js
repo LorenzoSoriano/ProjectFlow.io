@@ -25,7 +25,7 @@
     if (type === "note") return 390;
     if (type === "sketch") {
       return node && typeof node.sketchWidth === "number"
-        ? Math.max(360, Math.min(1400, node.sketchWidth))
+        ? Math.max(360, Math.min(2400, node.sketchWidth))
         : 520;
     }
     return 430;
@@ -840,8 +840,10 @@
     }
 
     if (node.type === "sketch") {
-      const fallbackSketchWidth = Math.max(360, Math.min(1400, Number(node.sketchWidth) || 520));
-      const fallbackSketchHeight = Math.max(220, Math.min(1000, Number(node.sketchHeight) || 320));
+      const fallbackSketchWidth = Math.max(360, Math.min(2400, Number(node.sketchWidth) || 520));
+      const fallbackSketchHeight = Math.max(220, Math.min(1600, Number(node.sketchHeight) || 320));
+      const fallbackStrokeWidth = Math.max(1, fallbackSketchWidth - 22);
+      const fallbackStrokeHeight = Math.max(1, fallbackSketchHeight - 2);
       if (!Array.isArray(node.sketchStrokes)) node.sketchStrokes = [];
       node.sketchStrokes = node.sketchStrokes
         .filter((stroke) => stroke && Array.isArray(stroke.points) && stroke.points.length > 1)
@@ -853,8 +855,8 @@
           // Every stroke keeps the local paper size it was drawn on.
           // Resizing the Sketch can therefore reveal/crop space without
           // scaling artwork that already exists.
-          spaceWidth: Math.max(1, Number(stroke.spaceWidth) || fallbackSketchWidth),
-          spaceHeight: Math.max(1, Number(stroke.spaceHeight) || fallbackSketchHeight),
+          spaceWidth: Math.max(1, Number(stroke.spaceWidth) || fallbackStrokeWidth),
+          spaceHeight: Math.max(1, Number(stroke.spaceHeight) || fallbackStrokeHeight),
           points: stroke.points
             .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
             .map((point) => ({
@@ -5176,8 +5178,8 @@
           if (moveEvent.pointerId !== pointer) return;
           const dx = (moveEvent.clientX - startX) / Math.max(.01, view.scale);
           const dy = (moveEvent.clientY - startY) / Math.max(.01, view.scale);
-          node.sketchWidth = Math.max(360, Math.min(1400, Math.round(startWidth + dx)));
-          node.sketchHeight = Math.max(220, Math.min(1000, Math.round(startHeight + dy)));
+          node.sketchWidth = Math.max(360, Math.min(2400, Math.round(startWidth + dx)));
+          node.sketchHeight = Math.max(220, Math.min(1600, Math.round(startHeight + dy)));
           element.style.width = node.sketchWidth + "px";
           canvasWrap.style.height = node.sketchHeight + "px";
           updateDimensions();
