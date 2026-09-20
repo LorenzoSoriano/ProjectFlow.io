@@ -3997,12 +3997,18 @@
 
     const email = normalizeShareEmail(cloudState.user.email);
     if (email) {
-      await cloudState.api.setDoc(inviteDocumentRef(email, projectId), {
-        projectId: projectId,
-        email: email,
-        joinedBy: "code",
-        createdAt: Date.now()
-      }, { merge: true });
+      try {
+        await cloudState.api.setDoc(inviteDocumentRef(email, projectId), {
+          projectId: projectId,
+          email: email,
+          joinedBy: "code",
+          createdAt: Date.now()
+        }, { merge: true });
+      } catch (inviteError) {
+        // Membership is the source of truth for code-based access. A secondary
+        // invite index must never prevent the user from opening the project.
+        console.warn("ProjectFlow: indice invito non aggiornato dopo join.", inviteError);
+      }
     }
 
     return true;
@@ -4049,52 +4055,103 @@
     showToast(message || "Accesso al progetto condiviso revocato");
   }
 
+  function setProjectJoinStatus(message, state) {
+    const status = $("projectJoinStatus");
+    if (!status) return;
+    const text = String(message || "").trim();
+    status.textContent = text;
+    status.hidden = !text;
+    status.dataset.state = state || "info";
+  }
+
   async function joinSharedProjectByCode(codeValue) {
-    if (!cloudState.user) {
-      showToast("Accedi con Google per usare un codice");
-      return false;
-    }
+    const input = $("shareJoinCodeInput");
+    const button = $("shareJoinCodeButton");
     const code = normalizeShareCode(codeValue);
-    if (!code) {
-      showToast("Inserisci un codice valido");
+
+    if (!code || code.length < 6) {
+      setProjectJoinStatus("Inserisci un codice di accesso valido.", "error");
+      if (input) input.focus();
       return false;
     }
 
+    if (!cloudState.user) {
+      setProjectJoinStatus("Accedi con Google prima di collegarti al progetto.", "error");
+      showToast("Accedi con Google per usare un codice");
+      return false;
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.dataset.defaultLabel = button.dataset.defaultLabel || button.textContent;
+      button.textContent = "Collegamento…";
+    }
+    if (input) input.disabled = true;
+    setProjectJoinStatus("Verifica del codice e collegamento al progetto…", "loading");
+
     try {
+      const ready = await initCloud(true);
+      if (!ready || !cloudState.user || !cloudState.api || !cloudState.db) {
+        throw new Error("Firebase non inizializzato");
+      }
+
       const codeRef = shareCodeDocumentRef(code);
+      if (!codeRef) throw new Error("Riferimento codice non disponibile");
+
       const codeSnapshot = await cloudState.api.getDoc(codeRef);
       if (!codeSnapshot.exists()) {
+        setProjectJoinStatus("Codice non trovato. Fai rigenerare o ricopiare il codice dal proprietario.", "error");
         showToast("Codice non trovato");
         return false;
       }
+
       const codeData = codeSnapshot.data() || {};
       if (codeData.active === false || !codeData.projectId) {
+        setProjectJoinStatus("Questo codice non è più attivo.", "error");
         showToast("Codice non più attivo");
         return false;
       }
 
       await claimSharedProjectAccess(codeData.projectId, code);
-      const snapshot = await cloudState.api.getDoc(sharedProjectRef(codeData.projectId));
+
+      const projectRef = sharedProjectRef(codeData.projectId);
+      const snapshot = await cloudState.api.getDoc(projectRef);
       if (!snapshot.exists()) {
+        setProjectJoinStatus("Il progetto condiviso associato al codice non esiste più.", "error");
         showToast("Progetto condiviso non trovato");
         return false;
       }
 
       const remote = sharedRecordFromSnapshot(snapshot);
-      if (!remote) return false;
+      if (!remote) throw new Error("Dati progetto condiviso non validi");
+
       mergeSharedRecord(remote);
       persistProjectLibrary();
       renderProjectLibrary();
+      setProjectJoinStatus("Collegamento riuscito. Apertura progetto…", "success");
+
+      if (input) input.value = "";
       await activateProject(remote.id, true);
       showToast("Collegato al progetto");
       return true;
     } catch (error) {
       console.warn("ProjectFlow: accesso con codice non riuscito.", error);
-      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
-      showToast(denied
-        ? "Codice non valido oppure Firestore Rules non aggiornate"
-        : "Accesso con codice non riuscito");
+      const denied = error && (
+        error.code === "permission-denied" ||
+        String(error.message || "").toLowerCase().includes("permission")
+      );
+      const message = denied
+        ? "Accesso negato da Firebase. Il codice può essere valido, ma le regole di condivisione non consentono ancora il collegamento."
+        : "Collegamento non riuscito. Controlla il codice e riprova.";
+      setProjectJoinStatus(message, "error");
+      showToast(denied ? "Accesso Firebase negato" : "Accesso con codice non riuscito");
       return false;
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = button.dataset.defaultLabel || "Collegati";
+      }
+      if (input) input.disabled = false;
     }
   }
 
@@ -13765,6 +13822,7 @@
   $("shareJoinCodeInput").addEventListener("input", (event) => {
     const raw = normalizeShareCode(event.target.value).slice(0, 10);
     event.target.value = formatShareCode(raw);
+    setProjectJoinStatus("", "info");
   });
 
   $("noteTool").addEventListener("click", () => addNode("note"));
