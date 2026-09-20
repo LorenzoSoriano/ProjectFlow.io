@@ -10,6 +10,7 @@
   const CLOUD_OPT_IN_KEY = "projectflow.cloud-opt-in.v1";
   const FIREBASE_SDK_VERSION = "12.19.0";
   const MINIMAP_SIZE_KEY = "projectflow.minimap-size.v1";
+  const FORCE_CONNECTIONS_KEY = "projectflow.force-connections.v1";
   const NODE_WIDTH = 440;
 
   function nodeWidthFor(nodeOrType) {
@@ -1463,6 +1464,7 @@
   let dragState = null;
   let groupDrag = null;
   let junctionDrag = null;
+  let forceConnectionsVisible = localStorage.getItem(FORCE_CONNECTIONS_KEY) === "1";
   let marqueeState = null;
   let minimapProjection = null;
   let minimapDrag = false;
@@ -7716,8 +7718,29 @@
     showToast("Punto di curva rimosso");
   }
 
+  function updateConnectionVisibilityControl() {
+    const button = $("forceConnectionsView");
+    if (!button) return;
+    button.classList.toggle("active", forceConnectionsVisible);
+    button.setAttribute("aria-pressed", forceConnectionsVisible ? "true" : "false");
+    button.title = forceConnectionsVisible
+      ? "Connessioni forzate · clicca per tornare alla vista normale"
+      : "Forza la visione di tutte le connessioni";
+  }
+
+  function toggleForcedConnections() {
+    forceConnectionsVisible = !forceConnectionsVisible;
+    localStorage.setItem(FORCE_CONNECTIONS_KEY, forceConnectionsVisible ? "1" : "0");
+    updateConnectionVisibilityControl();
+    renderEdges();
+    showToast(forceConnectionsVisible
+      ? "Tutte le connessioni sono visibili"
+      : "Vista connessioni normale");
+  }
+
   function renderEdges() {
     edgeLayer.innerHTML = "";
+    edgeLayer.classList.toggle("force-connections", forceConnectionsVisible);
     project.connections = project.connections.filter((edge) => nodeById(edge.from.nodeId) && nodeById(edge.to.nodeId));
     syncLinkedJunctionPoints();
 
@@ -7820,11 +7843,13 @@
 
     junctionOverlays.forEach((junction) => edgeLayer.appendChild(junction));
 
-    if (selectedNodeIds.size) {
+    if (forceConnectionsVisible || selectedNodeIds.size) {
       const groupedTypeRelations = new Map();
 
       buildTypeRelations().forEach((relation) => {
-        if (!selectedNodeIds.has(relation.sourceNodeId) && !selectedNodeIds.has(relation.targetNodeId)) return;
+        if (!forceConnectionsVisible &&
+            !selectedNodeIds.has(relation.sourceNodeId) &&
+            !selectedNodeIds.has(relation.targetNodeId)) return;
 
         const key = relation.sourceNodeId + "|" + relation.targetNodeId;
         if (!groupedTypeRelations.has(key)) {
@@ -9812,6 +9837,7 @@
   });
 
   $("createGroup").addEventListener("click", toggleGrouping);
+  $("forceConnectionsView").addEventListener("click", toggleForcedConnections);
   $("shareProjectButton").addEventListener("click", openSharePanel);
   $("shareLoginButton").addEventListener("click", startGoogleLogin);
   $("closeSharePanel").addEventListener("click", () => closeInterfaceSurfaces());
@@ -10277,6 +10303,7 @@
   });
 
   setInspectorVisible(false);
+  updateConnectionVisibilityControl();
   renderProjectLibrary();
   updateAccountUI();
   if (sharedProjectIdFromLocation()) initCloud(true);
