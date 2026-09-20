@@ -8068,3 +8068,43 @@ body,
 @media (max-width:900px){
   .graph-breadcrumb{max-width:260px}
 }
+
+
+/* v2.43 — Flow Chart core */
+.edge-layer.flowchart-schema .edge.flow-edge{
+  stroke-dasharray:none;
+  stroke-width:2.7;
+}
+.edge-layer.flowchart-schema .edge-glow.flow-edge{
+  opacity:.28;
+}
+.flow-arrowhead-shape{
+  fill:#a99fff;
+  stroke:#0b101b;
+  stroke-width:.6;
+  vector-effect:non-scaling-stroke;
+}
+.type-flowStart .node-type-dot,
+.type-flowProcess .node-type-dot{
+  color:#74c792;
+}
+.type-flowEnd .node-type-dot{
+  color:#ca8871;
+}
+.type-flowIO .node-type-dot{
+  color:#6bc2cf;
+}
+.type-flowStart,
+.type-flowEnd{
+  border-radius:18px;
+}
+.type-flowStart .node-header,
+.type-flowEnd .node-header{
+  border-radius:18px 18px 0 0;
+}
+.type-flowProcess{
+  border-color:#304936;
+}
+.type-flowIO{
+  border-color:#2d4650;
+}
