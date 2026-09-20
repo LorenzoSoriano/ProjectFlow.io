@@ -1780,6 +1780,57 @@
     base.nodes.forEach((node) => {
       if (!node.id) node.id = uid("node");
 
+      // v2.43 migration: Flow Chart gets dedicated core nodes instead of
+      // reusing engine Event / Action nodes.
+      if (base.schema === "classic" && node.type === "event") {
+        const oldRows = Array.isArray(node.rows) ? node.rows : [];
+        const oldFlowOut = oldRows.find((item) => item && item.kind === "flowOut");
+        const oldDataOut = oldRows.find((item) => item && item.kind === "output");
+        const inputLike = node.eventKind === "input" || /^input\b/i.test(String(node.title || ""));
+
+        if (inputLike) {
+          node.type = "flowIO";
+          node.title = /^gameplay event$/i.test(String(node.title || "")) ? "Input" : (node.title || "Input");
+          node.description = "Legge un valore in ingresso mantenendo la sequenza del flow chart.";
+          node.flowIoMode = "input";
+          node.flowChartDataType = oldDataOut && oldDataOut.value && oldDataOut.value !== "value" ? oldDataOut.value : "any";
+          node.flowIoFlowOutId = oldFlowOut && oldFlowOut.id ? oldFlowOut.id : "";
+          node.flowIoDataOutId = oldDataOut && oldDataOut.id ? oldDataOut.id : "";
+          syncFlowIONode(node);
+        } else {
+          node.type = "flowStart";
+          node.title = "Start";
+          node.description = "Punto iniziale del flow chart.";
+          node.flowStartOutId = oldFlowOut && oldFlowOut.id ? oldFlowOut.id : "";
+          syncFlowStartNode(node);
+        }
+
+        const validRows = new Set(node.rows.map((item) => item.id));
+        base.connections = base.connections.filter((edge) =>
+          (edge.from.nodeId !== node.id || validRows.has(edge.from.rowId)) &&
+          (edge.to.nodeId !== node.id || validRows.has(edge.to.rowId))
+        );
+      }
+
+      if (base.schema === "classic" && node.type === "action") {
+        node.type = "flowProcess";
+        if (/^(gameplay action|process)$/i.test(String(node.title || ""))) node.title = "Process";
+        node.description = node.description || "Operazione generica del flow chart.";
+        node.nestedGraph = node.nestedGraph || { version: 1, name: "Process Body", nodes: [], connections: [], groups: [] };
+        syncFlowProcessNode(node);
+      }
+
+      if (base.schema === "classic" && node.type === "returnFlow" &&
+          (!node.returnFlowType || node.returnFlowType === "void") &&
+          /^(end|end\s*\/\s*return)$/i.test(String(node.title || ""))) {
+        const oldFlowIn = Array.isArray(node.rows) ? node.rows.find((item) => item && item.kind === "flowIn") : null;
+        node.type = "flowEnd";
+        node.title = "End";
+        node.description = "Termina il ramo corrente del flow chart.";
+        node.flowEndInId = oldFlowIn && oldFlowIn.id ? oldFlowIn.id : (node.returnFlowInId || "");
+        syncFlowEndNode(node);
+      }
+
       // v2.17 migration: old enum-only Switch becomes a generic Switch.
       if (node.type === "enumSwitch") {
         const oldInput = Array.isArray(node.rows) ? node.rows.find((item) => item && item.kind === "input") : null;
@@ -9059,7 +9110,7 @@
       path.dataset.edgeId = edge.id;
       path.style.stroke = edgeColor;
       path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
-      if (isFlowEdge) path.setAttribute("marker-end", "url(#flow-arrowhead)");
+      if (isFlowEdge && currentSchemaId() === "classic") path.setAttribute("marker-end", "url(#flow-arrowhead)");
       edgeLayer.appendChild(path);
 
       const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -10221,6 +10272,11 @@
     $("inspectorTypeChip").style.borderColor = typeMeta(node.type).color;
     $("inspectorTypeChip").style.color = typeMeta(node.type).color;
     $("inspectorSubtitle").textContent = nodeSubtitle(node);
+    Array.from($("nodeType").options).forEach((option) => {
+      const allowed = schemaAllowsNodeType(option.value) || option.value === node.type;
+      option.hidden = !allowed;
+      option.disabled = !allowed;
+    });
     $("nodeType").value = node.type;
     $("nodeTitle").value = node.title;
     $("nodeDescription").value = node.description;
@@ -11840,9 +11896,13 @@
       "nodes: array of {key,type,title,description,pseudo,config,rows,column,row}. key must be unique.",
       "rows is optional and only adds/customizes data ports. Each row is {label,kind,dataType,defaultValue}. kind is one of input,output,variable,property.",
       "connections: array of {from:{node,port},to:{node,port},dataType}. node references a node key. port is the visible port label.",
-      "Use dataType='__flow__' for execution-flow connections. Otherwise use a concrete type such as bool,int,float,string,GameObject,Transform,Rigidbody or any.",
+      schema === "classic"
+        ? "Use dataType='__flow__' for execution-flow connections. For data use only engine-neutral types such as bool,int,float,double,string,Vector2,Vector3,Color or any."
+        : "Use dataType='__flow__' for execution-flow connections. Otherwise use a concrete supported engine or primitive type.",
       "Do not invent node types outside the catalog. Do not reference ports that do not exist or that you did not add in rows.",
-      "Keep graphs compact but complete. A behavior request should normally have an event/entry, state/data as needed, control flow, and actions.",
+      schema === "classic"
+        ? "Keep the flow chart compact and readable. Prefer Start, Process, Input/Output, Decision, loops, Function and End."
+        : "Keep graphs compact but complete. A behavior request should normally have an event/entry, state/data as needed, control flow, and actions.",
       "column and row are small non-negative integers for layout; flow should generally progress left-to-right.",
       "JSON only. No markdown and no commentary outside JSON."
     ].join("\n");
