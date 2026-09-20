@@ -8212,3 +8212,20 @@ body,
 .remote-node-preview{
   opacity:.48;
 }
+
+
+/* v2.45 — collaboration roster */
+.collab-presence-avatar{
+  transition:opacity .16s ease,filter .16s ease,transform .16s ease;
+}
+.collab-presence-avatar.online{
+  opacity:1;
+  filter:none;
+}
+.collab-presence-avatar.offline{
+  opacity:.34;
+  filter:grayscale(1);
+}
+.collab-presence-avatar.offline:hover{
+  opacity:.58;
+}
