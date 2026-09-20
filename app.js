@@ -67,6 +67,7 @@
     action: { label: "Azione", icon: "▶", color: "#70b77c" },
     state: { label: "Stato", icon: "S", color: "#5f93ba" },
     variable: { label: "Variabile", icon: "x", color: "#c9ad58" },
+    constant: { label: "Valore", icon: "•", color: "#d1a85a" },
     condition: { label: "Condizione", icon: "?", color: "#c88455" },
     ui: { label: "Interfaccia", icon: "▣", color: "#b57bab" },
     note: { label: "Nota", icon: "≡", color: "#98a6c2" },
@@ -474,6 +475,22 @@
     node.rows = [enter, selector].concat(outputs, [defaultRow]);
   }
 
+  function syncConstantNode(node) {
+    if (!node || node.type !== "constant") return;
+    if (typeof node.constantType !== "string" || !node.constantType) node.constantType = "int";
+    if (typeof node.constantValue !== "string") node.constantValue = "0";
+    if (typeof node.constantOutputRowId !== "string" || !node.constantOutputRowId) {
+      node.constantOutputRowId = uid("constant_out");
+    }
+    node.rows = [{
+      id: node.constantOutputRowId,
+      label: "Value",
+      value: node.constantType,
+      kind: "output"
+    }];
+    node.pseudo = node.constantValue;
+  }
+
   function syncAdapterNode(node) {
     if (!node || node.type !== "adapter") return;
     if (typeof node.adapterInputType !== "string" || !node.adapterInputType) node.adapterInputType = "int";
@@ -810,6 +827,9 @@
       }
     }
 
+    if (node.type === "constant") {
+      syncConstantNode(node);
+    }
     if (node.type === "adapter") {
       syncAdapterNode(node);
     }
@@ -4074,6 +4094,9 @@
     if (node.type === "doWhileLoop") return "CONTROL FLOW · DO WHILE";
     if (node.type === "forLoop") return "CONTROL FLOW · FOR";
     if (node.type === "foreachLoop") return "CONTROL FLOW · FOREACH " + (node.foreachItemType || "any");
+    if (node.type === "constant") {
+      return "VALUE · " + (node.constantType || "int");
+    }
     if (node.type === "adapter") {
       return (node.adapterInputType || "int") + " → " + (node.adapterOutputType || "float");
     }
@@ -5362,6 +5385,69 @@
           });
           body.appendChild(caseEditor);
         }
+      }
+
+      if (node.type === "constant") {
+        syncConstantNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline math-meta-inline";
+
+        const valueControl = (() => {
+          const enumType = enumByName(node.constantType);
+          if (node.constantType === "bool") {
+            if (!["true", "false"].includes(String(node.constantValue).toLowerCase())) node.constantValue = "false";
+            return compactSelect(String(node.constantValue).toLowerCase(), [
+              ["false", "false"],
+              ["true", "true"]
+            ], (value) => {
+              node.constantValue = value;
+              syncConstantNode(node);
+              rerenderNode();
+            }, "node-meta-select");
+          }
+          if (enumType && !enumType.enumFlags) {
+            const options = enumType.enumValues.map((entry) => [entry.name, entry.name]);
+            if (options.length && !options.some((entry) => entry[0] === node.constantValue)) {
+              node.constantValue = options[0][0];
+            }
+            return compactSelect(node.constantValue, options, (value) => {
+              node.constantValue = value;
+              syncConstantNode(node);
+              rerenderNode();
+            }, "node-meta-select");
+          }
+          const placeholders = {
+            int: "0",
+            float: "0.0",
+            double: "0.0",
+            string: "text",
+            Vector2: "(0, 0)",
+            Vector3: "(0, 0, 0)",
+            Color: "(1, 1, 1, 1)"
+          };
+          return inlineInput(
+            node.constantValue,
+            placeholders[node.constantType] || "value",
+            (value) => {
+              node.constantValue = value;
+              syncConstantNode(node);
+            },
+            "inline-default-input"
+          );
+        })();
+
+        meta.append(
+          typePicker(node.constantType, (value) => {
+            node.constantType = value;
+            if (value === "bool") node.constantValue = "false";
+            else if (["int", "float", "double"].includes(value)) node.constantValue = "0";
+            else if (value === "string") node.constantValue = "";
+            syncConstantNode(node);
+            rerenderNode();
+          }, "inline-type-picker"),
+          valueControl
+        );
+        body.appendChild(meta);
       }
 
       if (node.type === "adapter") {
@@ -9390,6 +9476,17 @@
         pseudo: "foreach (Item item in Collection)",
         extra: { foreachItemType: "any" }
       },
+      constant: {
+        title: "Value",
+        description: "Valore letterale tipato: numero, bool, string, vector, enum o riferimento nullo.",
+        rows: [],
+        pseudo: "0",
+        extra: {
+          constantType: "int",
+          constantValue: "0",
+          constantOutputRowId: uid("constant_out")
+        }
+      },
       adapter: {
         title: "Adapter",
         description: "Converte esplicitamente un tipo dati in un altro, come nei graph editor.",
@@ -9561,6 +9658,7 @@
       { type: "whileLoop", category: "FLOW", label: "While", description: "Ripete finché la condizione è vera", icon: "↻" },
       { type: "doWhileLoop", category: "FLOW", label: "Do While", description: "Esegue una volta, poi controlla la condizione", icon: "⟳" },
 
+      { type: "constant", category: "DATI", label: "Valore", description: "Costante tipata: bool, numero, string, vector, enum…", icon: "•" },
       { type: "variable", category: "DATI", label: "Variabile", description: "Dato, configurazione o riferimento condiviso", icon: "x" },
       { type: "adapter", category: "DATI", label: "Converti tipo", description: "Conversione esplicita tra tipi compatibili", icon: "↔" },
 
@@ -9935,6 +10033,7 @@
       { type: "component", purpose: "Unity component reference", config: "componentType", ports: "OUT component reference" },
       { type: "event", purpose: "flow entry point", ports: "OUT Next:flow, OUT payload:any; may add extra output rows" },
       { type: "action", purpose: "perform a gameplay action", ports: "IN Enter:flow, OUT Next:flow; may add extra input/output rows" },
+      { type: "constant", purpose: "typed literal / constant value", config: "constantType, constantValue", ports: "OUT Value:data" },
       { type: "variable", purpose: "state/data value", ports: "IN+OUT value:data; rows can define named variables" },
       { type: "ifElse", purpose: "branch by bool", ports: "IN Enter:flow, IN Condition:bool, OUT True:flow, OUT False:flow" },
       { type: "whileLoop", purpose: "while loop", ports: "IN Enter:flow, IN Condition:bool, OUT Loop:flow, OUT Done:flow" },
@@ -10193,6 +10292,10 @@
       node[key] = config[key];
     };
 
+    if (node.type === "constant") {
+      assignString("constantType");
+      assignString("constantValue");
+    }
     if (node.type === "component") {
       assignString("componentType");
       if (node.componentType) {
