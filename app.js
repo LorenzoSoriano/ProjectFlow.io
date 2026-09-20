@@ -7462,7 +7462,7 @@
     return result;
   }
 
-  function selectJunction(event, edgeId, pointId) {
+  function selectJunction(event, edgeId, pointId, deferRender) {
     const key = junctionSelectionKey(edgeId, pointId);
     const additive = !!(event && (event.ctrlKey || event.metaKey || event.shiftKey));
 
@@ -7477,10 +7477,12 @@
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedGroupId = null;
-    renderNodes();
-    renderEdges();
-    renderInspector();
-    renderMinimap();
+    if (!deferRender) {
+      renderNodes();
+      renderEdges();
+      renderInspector();
+      renderMinimap();
+    }
   }
 
   function addJunction(edge, event, startPoint, endPoint) {
@@ -7528,7 +7530,7 @@
     const key = junctionSelectionKey(edgeId, pointId);
     const additive = event.ctrlKey || event.metaKey || event.shiftKey;
     if (!selectedJunctionIds.has(key) || additive) {
-      selectJunction(event, edgeId, pointId);
+      selectJunction(event, edgeId, pointId, true);
     }
     if (!selectedJunctionIds.has(key)) return;
 
