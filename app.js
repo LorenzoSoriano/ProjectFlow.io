@@ -167,30 +167,38 @@
   }
 
   function dataTypeCategories() {
+    const schema = currentSchemaId();
     const groups = [
       { id: "primitive", label: "PRIMITIVE", values: ["bool", "int", "float", "double", "string"] },
-      { id: "math", label: "MATH", values: ["Vector2", "Vector3", "Quaternion", "Color"] },
-      { id: "core", label: "UNITY CORE", values: ["GameObject", "Transform", "LayerMask"] },
-      { id: "physics", label: "PHYSICS", values: ["Rigidbody", "Rigidbody2D", "CharacterController", "Collider", "Collider2D", "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider", "BoxCollider2D", "CircleCollider2D", "CapsuleCollider2D"] },
-      { id: "animation", label: "ANIMATION", values: ["Animator", "Animation", "PlayableDirector", "AnimationClip", "RuntimeAnimatorController"] },
-      { id: "audio", label: "AUDIO", values: ["AudioSource", "AudioListener", "AudioReverbZone", "AudioClip"] },
-      { id: "rendering", label: "RENDERING", values: ["Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer", "Texture2D", "Material"] },
-      { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform", "GraphicRaycaster"] },
-      { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] },
-      { id: "navigation", label: "NAVIGATION", values: ["NavMeshAgent", "NavMeshObstacle", "OffMeshLink"] }
+      { id: "math", label: "MATH", values: ["Vector2", "Vector3", "Quaternion", "Color"] }
     ];
+
+    if (schema === "unity") {
+      groups.push(
+        { id: "core", label: "UNITY CORE", values: ["GameObject", "Transform", "LayerMask"] },
+        { id: "physics", label: "PHYSICS", values: ["Rigidbody", "Rigidbody2D", "CharacterController", "Collider", "Collider2D", "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider", "BoxCollider2D", "CircleCollider2D", "CapsuleCollider2D"] },
+        { id: "animation", label: "ANIMATION", values: ["Animator", "Animation", "PlayableDirector", "AnimationClip", "RuntimeAnimatorController"] },
+        { id: "audio", label: "AUDIO", values: ["AudioSource", "AudioListener", "AudioReverbZone", "AudioClip"] },
+        { id: "rendering", label: "RENDERING", values: ["Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer", "Texture2D", "Material"] },
+        { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform", "GraphicRaycaster"] },
+        { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] },
+        { id: "navigation", label: "NAVIGATION", values: ["NavMeshAgent", "NavMeshObstacle", "OffMeshLink"] }
+      );
+    }
 
     const enums = enumNodes().map((node) => node.title);
     if (enums.length) groups.push({ id: "enums", label: "ENUMS", values: enums });
 
-    const custom = publicClassNodes().map((node) => node.title);
-    if (custom.length) groups.push({ id: "classes", label: "CUSTOM CLASSES", values: custom });
+    if (schema === "unity") {
+      const custom = publicClassNodes().map((node) => node.title);
+      if (custom.length) groups.push({ id: "classes", label: "CUSTOM CLASSES", values: custom });
 
-    const structs = publicStructNodes().filter((node) => node.type === "struct").map((node) => node.title);
-    if (structs.length) groups.push({ id: "structs", label: "STRUCTS", values: structs });
+      const structs = publicStructNodes().filter((node) => node.type === "struct").map((node) => node.title);
+      if (structs.length) groups.push({ id: "structs", label: "STRUCTS", values: structs });
 
-    const jobs = publicStructNodes().filter((node) => node.type === "jobStruct").map((node) => node.title);
-    if (jobs.length) groups.push({ id: "jobs", label: "UNITY JOBS", values: jobs });
+      const jobs = publicStructNodes().filter((node) => node.type === "jobStruct").map((node) => node.title);
+      if (jobs.length) groups.push({ id: "jobs", label: "UNITY JOBS", values: jobs });
+    }
     return groups;
   }
 
@@ -825,11 +833,18 @@
   }
 
   function availableDataTypes() {
-    return DATA_TYPES
-      .concat(publicClassNodes().map((node) => node.title))
-      .concat(publicStructNodes().map((node) => node.title))
-      .concat(enumNodes().map((node) => node.title))
-      .filter((value, index, array) => array.indexOf(value) === index);
+    const schema = currentSchemaId();
+    const neutralTypes = ["bool", "int", "float", "double", "string", "Vector2", "Vector3", "Quaternion", "Color"];
+    const baseTypes = schema === "unity" ? DATA_TYPES : neutralTypes;
+    let values = baseTypes.concat(enumNodes().map((node) => node.title));
+
+    if (schema === "unity") {
+      values = values
+        .concat(publicClassNodes().map((node) => node.title))
+        .concat(publicStructNodes().map((node) => node.title));
+    }
+
+    return values.filter((value, index, array) => array.indexOf(value) === index);
   }
 
   function normalizeMember(item) {
@@ -1431,8 +1446,8 @@
       description: "Schema orientato a scene, nodi, segnali e script Godot."
     },
     classic: {
-      label: "Flow Chart classico",
-      description: "Flow chart generico e indipendente da uno specifico game engine."
+      label: "Flow Chart",
+      description: "Diagramma logico generico: controllo di flusso, funzioni, dati, confronti e matematica senza dipendenze da un game engine."
     }
   };
 
@@ -1442,6 +1457,11 @@
 
   function projectSchemaMeta(schema) {
     return PROJECT_SCHEMAS[normalizeProjectSchema(schema)];
+  }
+
+  function currentSchemaId() {
+    const documentProject = (typeof rootProject !== "undefined" && rootProject) || (typeof project !== "undefined" && project) || null;
+    return normalizeProjectSchema(documentProject && documentProject.schema);
   }
 
   function blankProject(name, schema) {
@@ -9953,6 +9973,67 @@
     }
   }
 
+  function sameOutputConnectionRef(edge, ref) {
+    return !!edge && !!ref &&
+      edge.from.nodeId === ref.nodeId &&
+      edge.from.rowId === ref.rowId;
+  }
+
+  function existingFanoutJunction(fromRef) {
+    const siblings = project.connections.filter((edge) => sameOutputConnectionRef(edge, fromRef));
+
+    for (const ownerEdge of siblings) {
+      const explicit = (ownerEdge.points || []).find((point) => point && !point.junctionLink && point.fanoutJunction);
+      if (explicit) return { edge: ownerEdge, point: explicit };
+    }
+
+    for (const ownerEdge of siblings) {
+      for (const point of ownerEdge.points || []) {
+        if (!point || point.junctionLink) continue;
+        const referenced = project.connections.some((edge) =>
+          edge.id !== ownerEdge.id &&
+          (edge.points || []).some((candidate) =>
+            candidate && candidate.junctionLink &&
+            candidate.junctionLink.edgeId === ownerEdge.id &&
+            candidate.junctionLink.pointId === point.id &&
+            candidate.junctionAnchor === "from"
+          )
+        );
+        if (referenced) {
+          point.fanoutJunction = true;
+          return { edge: ownerEdge, point: point };
+        }
+      }
+    }
+    return null;
+  }
+
+  function ensureOutputFanoutJunction(fromRef) {
+    const existing = existingFanoutJunction(fromRef);
+    if (existing) return existing;
+
+    const ownerEdge = project.connections.find((edge) => sameOutputConnectionRef(edge, fromRef));
+    if (!ownerEdge) return null;
+
+    const start = getPortWorldPosition(fromRef);
+    const end = getPortWorldPosition(ownerEdge.to);
+    if (!start) return null;
+
+    const horizontalDistance = end ? Math.abs(end.x - start.x) : 260;
+    const lead = Math.max(70, Math.min(150, horizontalDistance * 0.28));
+    const direction = end && end.x < start.x ? -1 : 1;
+    const junction = {
+      id: uid("junction"),
+      x: Math.round((start.x + direction * lead) / 10) * 10,
+      y: Math.round(start.y / 10) * 10,
+      fanoutJunction: true
+    };
+
+    if (!Array.isArray(ownerEdge.points)) ownerEdge.points = [];
+    ownerEdge.points.unshift(junction);
+    return { edge: ownerEdge, point: junction };
+  }
+
   function createConnectionFromCheck(check) {
     if (!check || !check.ok) return false;
     const duplicate = project.connections.some((edge) =>
@@ -9963,6 +10044,12 @@
     );
 
     if (!duplicate) {
+      const hasSibling = project.connections.some((edge) => sameOutputConnectionRef(edge, check.from));
+      const fanout = hasSibling ? ensureOutputFanoutJunction(check.from) : null;
+      const points = fanout
+        ? [makeLinkedJunctionPoint(fanout.edge.id, fanout.point.id, fanout.point, "from")]
+        : [];
+
       project.connections.push({
         id: uid("edge"),
         from: {
@@ -9977,19 +10064,26 @@
           side: "in",
           kind: check.outputType === "__flow__" ? "flow" : "data"
         },
-        points: [],
+        points: points,
         dataType: check.outputType
       });
       markDirty();
+
+      if (fanout) {
+        selectedEdgeId = fanout.edge.id;
+        selectedJunctionIds = new Set([junctionSelectionKey(fanout.edge.id, fanout.point.id)]);
+      }
     }
 
     showToast(duplicate
       ? "Collegamento già esistente"
-      : (check.outputType === "__flow__"
-        ? "Flusso collegato"
-        : (check.outputType === "any"
-          ? "Collegamento creato"
-          : "Collegamento " + check.outputType + " creato")));
+      : (project.connections.filter((edge) => sameOutputConnectionRef(edge, check.from)).length > 1
+        ? (check.outputType === "__flow__" ? "Ramo FLOW creato" : "Ramo DATA creato")
+        : (check.outputType === "__flow__"
+          ? "Flusso collegato"
+          : (check.outputType === "any"
+            ? "Collegamento creato"
+            : "Collegamento " + check.outputType + " creato"))));
     return !duplicate;
   }
 
@@ -10638,29 +10732,26 @@
   }
 
   function blockPaletteItems() {
-    const items = [
-      { type: "object", category: "STRUTTURA", label: "GameObject", description: "Riferimento a un oggetto Unity e ai suoi componenti", icon: "◇" },
-      { type: "class", category: "STRUTTURA", label: "Classe", description: "Contenitore C# per stato, metodi ed eventi", icon: "C" },
-      { type: "struct", category: "STRUTTURA", label: "Struct", description: "Value type C# con campi e metodi", icon: "{}" },
-      { type: "jobStruct", category: "STRUTTURA", label: "Unity Job Struct", description: "IJob / IJobFor / IJobParallelFor / IJobEntity", icon: "J" },
-      { type: "function", category: "STRUTTURA", label: "Funzione", description: "Metodo con parametri, return e logica", icon: "ƒ" },
-      { type: "emptyGraph", category: "STRUTTURA", label: "Empty", description: "Nodo vuoto con un sotto-grafo annidato e porte configurabili", icon: "□" },
+    const schema = currentSchemaId();
+    const common = [
+      { type: "function", category: "STRUTTURA", label: "Funzione", description: "Funzione con parametri, return e sotto-grafo", icon: "ƒ" },
+      { type: "emptyGraph", category: "STRUTTURA", label: "Empty", description: "Sotto-grafo annidato con input e output configurabili", icon: "□" },
       { type: "enum", category: "STRUTTURA", label: "Enum", description: "Valori nominati per stati e modalità", icon: "E" },
 
-      { type: "event", category: "FLOW", label: "Evento", description: "Ingresso del flow: Start, Update, input, trigger…", icon: "⚡" },
-      { type: "action", category: "FLOW", label: "Azione", description: "Esegue un'operazione nel flow", icon: "▶" },
-      { type: "ifElse", category: "FLOW", label: "If / Else", description: "Dirama il flow usando un bool", icon: "if" },
-      { type: "switch", category: "FLOW", label: "Switch", description: "Dirama il flow usando un valore o enum", icon: "⇆" },
+      { type: "event", category: "FLOW", label: "Evento", description: "Punto di ingresso del flusso", icon: "⚡" },
+      { type: "action", category: "FLOW", label: "Azione", description: "Esegue un'operazione nel flusso", icon: "▶" },
+      { type: "ifElse", category: "FLOW", label: "If / Else", description: "Decisione booleana con due rami", icon: "if" },
+      { type: "switch", category: "FLOW", label: "Switch", description: "Dirama il flusso usando un valore", icon: "⇆" },
       { type: "forLoop", category: "FLOW", label: "For", description: "Ciclo indicizzato Start / End / Step", icon: "i" },
-      { type: "foreachLoop", category: "FLOW", label: "Foreach", description: "Itera gli elementi di una collezione", icon: "∀" },
-      { type: "whileLoop", category: "FLOW", label: "While", description: "Ripete finché la condizione è vera", icon: "↻" },
-      { type: "doWhileLoop", category: "FLOW", label: "Do While", description: "Esegue una volta, poi controlla la condizione", icon: "⟳" },
-      { type: "breakFlow", category: "FLOW", label: "Break", description: "Esce dal loop corrente", icon: "■" },
-      { type: "continueFlow", category: "FLOW", label: "Continue", description: "Passa alla prossima iterazione", icon: "↪" },
-      { type: "returnFlow", category: "FLOW", label: "Return", description: "Termina la funzione e restituisce un valore opzionale", icon: "↩" },
+      { type: "foreachLoop", category: "FLOW", label: "Foreach", description: "Itera una collezione", icon: "∀" },
+      { type: "whileLoop", category: "FLOW", label: "While", description: "Ripete finché una condizione è vera", icon: "↻" },
+      { type: "doWhileLoop", category: "FLOW", label: "Do While", description: "Esegue una volta e poi verifica la condizione", icon: "⟳" },
+      { type: "breakFlow", category: "FLOW", label: "Break", description: "Interrompe il ciclo corrente", icon: "■" },
+      { type: "continueFlow", category: "FLOW", label: "Continue", description: "Passa all'iterazione successiva", icon: "↪" },
+      { type: "returnFlow", category: "FLOW", label: "Return", description: "Termina il flusso o restituisce un valore", icon: "↩" },
 
-      { type: "constant", category: "DATI", label: "Valore", description: "Costante tipata: bool, numero, string, vector, enum…", icon: "•" },
-      { type: "variable", category: "DATI", label: "Variabile", description: "Dato, configurazione o riferimento condiviso", icon: "x" },
+      { type: "constant", category: "DATI", label: "Valore", description: "Costante tipata", icon: "•" },
+      { type: "variable", category: "DATI", label: "Variabile", description: "Dato o valore condiviso", icon: "x" },
       { type: "adapter", category: "DATI", label: "Converti tipo", description: "Conversione esplicita tra tipi compatibili", icon: "↔" },
 
       { type: "math", category: "OPERATORI", label: "Math", description: "Add, Subtract, Multiply, Divide, Clamp, Lerp…", icon: "±" },
@@ -10668,19 +10759,75 @@
       { type: "compare", category: "OPERATORI", label: "Compare", description: "==, !=, >, >=, <, <= → bool", icon: "≶" }
     ];
 
-    UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
-      componentCategory.components.forEach((componentName) => {
-        items.push({
-          type: "component",
-          component: componentName,
-          category: "UNITY COMPONENTS · " + componentCategory.label,
-          label: componentName,
-          description: "Componente Unity · " + componentCategory.label.toLowerCase(),
-          icon: componentName.charAt(0).toUpperCase()
+    if (schema === "classic") {
+      const allowed = new Set([
+        "function", "emptyGraph",
+        "event", "action", "ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop",
+        "breakFlow", "continueFlow", "returnFlow",
+        "constant", "variable", "adapter", "math", "logic", "compare"
+      ]);
+
+      return common
+        .filter((item) => allowed.has(item.type))
+        .map((item) => {
+          const next = Object.assign({}, item);
+          if (["function", "emptyGraph"].includes(next.type)) next.category = "SUB FLOW";
+          else if (["event", "action", "returnFlow"].includes(next.type)) next.category = "FLOW CHART";
+          else if (["ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop", "breakFlow", "continueFlow"].includes(next.type)) next.category = "CONTROL";
+          else if (["math", "logic", "compare"].includes(next.type)) next.category = "MATH & LOGIC";
+
+          if (next.type === "event") {
+            next.label = "Start / Input";
+            next.description = "Punto di ingresso del diagramma o di un flusso";
+            next.icon = "▶";
+          } else if (next.type === "action") {
+            next.label = "Process";
+            next.description = "Passaggio operativo del flow chart";
+            next.icon = "▭";
+          } else if (next.type === "returnFlow") {
+            next.label = "End / Return";
+            next.description = "Termina il ramo corrente o restituisce un risultato";
+          } else if (next.type === "ifElse") {
+            next.label = "Decision · If / Else";
+            next.description = "Nodo decisionale con ramo True e False";
+          } else if (next.type === "emptyGraph") {
+            next.label = "Sub Flow";
+            next.description = "Diagramma annidato riutilizzabile con input e output";
+          } else if (next.type === "math") {
+            next.label = "Math Operation";
+          } else if (next.type === "compare") {
+            next.label = "Comparison";
+          }
+          return next;
+        });
+    }
+
+    const items = common.slice();
+
+    if (schema === "unity") {
+      items.unshift(
+        { type: "object", category: "STRUTTURA", label: "GameObject", description: "Riferimento a un oggetto Unity e ai suoi componenti", icon: "◇" },
+        { type: "class", category: "STRUTTURA", label: "Classe", description: "Contenitore C# / MonoBehaviour per stato, metodi ed eventi", icon: "C" },
+        { type: "struct", category: "STRUTTURA", label: "Struct", description: "Value type C# con campi e metodi", icon: "{}" },
+        { type: "jobStruct", category: "STRUTTURA", label: "Unity Job Struct", description: "IJob / IJobFor / IJobParallelFor / IJobEntity", icon: "J" }
+      );
+
+      UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
+        componentCategory.components.forEach((componentName) => {
+          items.push({
+            type: "component",
+            component: componentName,
+            category: "UNITY COMPONENTS · " + componentCategory.label,
+            label: componentName,
+            description: "Componente Unity · " + componentCategory.label.toLowerCase(),
+            icon: componentName.charAt(0).toUpperCase()
+          });
         });
       });
-    });
+    }
 
+    // Unreal e Godot usano per ora il core engine-neutral. I blocchi specifici
+    // verranno aggiunti quando implementeremo le rispettive librerie.
     return items;
   }
 
