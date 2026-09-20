@@ -11,6 +11,9 @@
   const FIREBASE_SDK_VERSION = "12.19.0";
   const MINIMAP_SIZE_KEY = "projectflow.minimap-size.v1";
   const FORCE_CONNECTIONS_KEY = "projectflow.force-connections.v1";
+  const UI_LANGUAGE_KEY = "projectflow.ui-language.v1";
+  const UI_TEXT_SIZE_KEY = "projectflow.ui-text-size.v1";
+  const UI_THEME_KEY = "projectflow.ui-theme.v1";
   const NODE_WIDTH = 440;
   let rootProject = null;
   let project = null;
@@ -2263,6 +2266,8 @@
     };
 
     closeSurface($("accountMenu"));
+    closeSurface($("pageMenu"));
+    closeSurface($("optionsPanel"));
     closeSurface($("newBlockPalette"));
     closeSurface($("sharePanel"));
     if ($("aiBuilderPanel") && except !== $("aiBuilderPanel")) closeAiBuilderPanel();
@@ -2273,6 +2278,9 @@
 
     if ($("editorAuthButton") && except !== $("accountMenu")) {
       $("editorAuthButton").setAttribute("aria-expanded", "false");
+    }
+    if ($("pageMenuButton") && except !== $("pageMenu")) {
+      $("pageMenuButton").setAttribute("aria-expanded", "false");
     }
   }
 
@@ -2325,6 +2333,211 @@
     menu.setAttribute("aria-hidden", "true");
     if ($("editorAuthButton")) $("editorAuthButton").setAttribute("aria-expanded", "false");
     cloudState.accountAnchor = null;
+  }
+
+  function closePageMenu() {
+    const menu = $("pageMenu");
+    if (!menu) return;
+    menu.classList.remove("open");
+    menu.setAttribute("aria-hidden", "true");
+    if ($("pageMenuButton")) $("pageMenuButton").setAttribute("aria-expanded", "false");
+  }
+
+  function positionPageMenu(anchor) {
+    const menu = $("pageMenu");
+    if (!menu || !anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    menu.classList.add("open");
+    menu.setAttribute("aria-hidden", "false");
+
+    requestAnimationFrame(() => {
+      const menuRect = menu.getBoundingClientRect();
+      const left = Math.max(12, Math.min(window.innerWidth - menuRect.width - 12, rect.right - menuRect.width));
+      const topCandidate = rect.bottom + 8;
+      const top = topCandidate + menuRect.height <= window.innerHeight - 12
+        ? topCandidate
+        : Math.max(12, rect.top - menuRect.height - 8);
+      menu.style.left = Math.round(left) + "px";
+      menu.style.top = Math.round(top) + "px";
+    });
+  }
+
+  function togglePageMenu() {
+    const menu = $("pageMenu");
+    const anchor = $("pageMenuButton");
+    if (!menu || !anchor) return;
+    const willOpen = !menu.classList.contains("open");
+    closeInterfaceSurfaces(willOpen ? menu : null);
+    if (!willOpen) {
+      closePageMenu();
+      return;
+    }
+    anchor.setAttribute("aria-expanded", "true");
+    positionPageMenu(anchor);
+  }
+
+  function openOptionsPanel() {
+    const panel = $("optionsPanel");
+    if (!panel) return;
+    closeInterfaceSurfaces(panel);
+    panel.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    syncOptionsControls();
+  }
+
+  function closeOptionsPanel() {
+    const panel = $("optionsPanel");
+    if (!panel) return;
+    panel.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+  }
+
+  const UI_COPY = {
+    en: {
+      projects: "Projects",
+      share: "Share",
+      connections: "Connections",
+      newBlock: "＋ New block",
+      blockEyebrow: "ADD BLOCK",
+      blockTitle: "What do you want to create?",
+      blockSearch: "Search: class, Rigidbody, event…",
+      blockHint: "Enter opens the first result · Esc closes",
+      connectionActive: "Connection active: choose a destination connector",
+      cancel: "Cancel",
+      accountSection: "ACCOUNT",
+      signOut: "Sign out",
+      pageEyebrow: "PAGE",
+      pageTitle: "Page controls",
+      projectSection: "PROJECT",
+      sync: "Synchronize",
+      export: "Export JSON",
+      import: "Import JSON",
+      demo: "Load Inventory Demo",
+      preferences: "PREFERENCES",
+      options: "Options",
+      management: "PAGE MANAGEMENT",
+      deletePage: "Delete page",
+      optionsEyebrow: "PREFERENCES",
+      optionsTitle: "Options",
+      language: "Language",
+      languageHelp: "English is the default interface language.",
+      textSize: "Text size",
+      textSizeHelp: "Changes the readability of editor controls and panels.",
+      theme: "Interface tone",
+      themeHelp: "System follows the operating-system light or dark appearance.",
+      done: "Done"
+    },
+    it: {
+      projects: "Progetti",
+      share: "Condividi",
+      connections: "Connessioni",
+      newBlock: "＋ Nuovo blocco",
+      blockEyebrow: "AGGIUNGI BLOCCO",
+      blockTitle: "Cosa vuoi creare?",
+      blockSearch: "Cerca: classe, Rigidbody, evento…",
+      blockHint: "Invio apre il primo risultato · Esc chiude",
+      connectionActive: "Collegamento attivo: scegli un connettore di destinazione",
+      cancel: "Annulla",
+      accountSection: "ACCOUNT",
+      signOut: "Esci dall'account",
+      pageEyebrow: "PAGINA",
+      pageTitle: "Gestione pagina",
+      projectSection: "PROGETTO",
+      sync: "Sincronizza",
+      export: "Esporta JSON",
+      import: "Importa JSON",
+      demo: "Carica demo inventario",
+      preferences: "PREFERENZE",
+      options: "Opzioni",
+      management: "GESTIONE PAGINA",
+      deletePage: "Elimina pagina",
+      optionsEyebrow: "PREFERENZE",
+      optionsTitle: "Opzioni",
+      language: "Lingua",
+      languageHelp: "La lingua predefinita dell'interfaccia è l'inglese.",
+      textSize: "Grandezza testo",
+      textSizeHelp: "Modifica la leggibilità dei controlli e dei pannelli dell'editor.",
+      theme: "Tipo di interfaccia",
+      themeHelp: "Sistema segue automaticamente il tema chiaro o scuro del dispositivo.",
+      done: "Fatto"
+    }
+  };
+
+  function interfacePreference(key, fallback, allowed) {
+    const value = localStorage.getItem(key);
+    return allowed.includes(value) ? value : fallback;
+  }
+
+  function applyInterfaceLanguage(language) {
+    const lang = language === "it" ? "it" : "en";
+    const copy = UI_COPY[lang];
+    document.documentElement.lang = lang;
+
+    const setText = (selector, value) => {
+      const element = document.querySelector(selector);
+      if (element && typeof value === "string") element.textContent = value;
+    };
+
+    setText("#backToProjects span", copy.projects);
+    setText("#shareProjectButton span", copy.share);
+    setText("#forceConnectionsView span", copy.connections);
+    setText("#addObjectTop", copy.newBlock);
+    setText("#newBlockPalette .new-block-palette-head .eyebrow", copy.blockEyebrow);
+    setText("#newBlockPalette .new-block-palette-head strong", copy.blockTitle);
+    if ($("newBlockSearch")) $("newBlockSearch").placeholder = copy.blockSearch;
+    setText("#newBlockPalette .new-block-hint", copy.blockHint);
+    setText("#connectionBanner span:nth-child(2)", copy.connectionActive);
+    setText("#cancelConnection", copy.cancel);
+    setText("#accountSectionTitle", copy.accountSection);
+    setText("#accountLogout", copy.signOut);
+    setText("#pageMenuEyebrow", copy.pageEyebrow);
+    setText("#pageMenuTitle", copy.pageTitle);
+    setText("#pageProjectSectionTitle", copy.projectSection);
+    setText("#pageSyncLabel", copy.sync);
+    setText("#pageExportLabel", copy.export);
+    setText("#pageImportLabel", copy.import);
+    setText("#pageDemoLabel", copy.demo);
+    setText("#pagePreferencesSectionTitle", copy.preferences);
+    setText("#pageOptionsLabel", copy.options);
+    setText("#pageDangerSectionTitle", copy.management);
+    setText("#pageDeleteLabel", copy.deletePage);
+    setText("#optionsEyebrow", copy.optionsEyebrow);
+    setText("#optionsTitle", copy.optionsTitle);
+    setText("#optionLanguageLabel", copy.language);
+    setText("#optionLanguageHelp", copy.languageHelp);
+    setText("#optionTextSizeLabel", copy.textSize);
+    setText("#optionTextSizeHelp", copy.textSizeHelp);
+    setText("#optionThemeLabel", copy.theme);
+    setText("#optionThemeHelp", copy.themeHelp);
+    setText("#optionsDone", copy.done);
+  }
+
+  function resolvedInterfaceTheme(themePreference) {
+    if (themePreference === "light" || themePreference === "dark") return themePreference;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+
+  function syncOptionsControls() {
+    const language = interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]);
+    const textSize = interfacePreference(UI_TEXT_SIZE_KEY, "medium", ["small", "medium", "large"]);
+    const theme = interfacePreference(UI_THEME_KEY, "system", ["system", "dark", "light"]);
+    if ($("optionLanguage")) $("optionLanguage").value = language;
+    if ($("optionTextSize")) $("optionTextSize").value = textSize;
+    if ($("optionTheme")) $("optionTheme").value = theme;
+  }
+
+  function applyInterfacePreferences() {
+    const language = interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]);
+    const textSize = interfacePreference(UI_TEXT_SIZE_KEY, "medium", ["small", "medium", "large"]);
+    const theme = interfacePreference(UI_THEME_KEY, "system", ["system", "dark", "light"]);
+
+    document.documentElement.dataset.textSize = textSize;
+    document.documentElement.dataset.uiTheme = resolvedInterfaceTheme(theme);
+    document.documentElement.dataset.uiLanguage = language;
+    applyInterfaceLanguage(language);
+    syncOptionsControls();
   }
 
   $("projectName").value = project.name;
@@ -3242,8 +3455,12 @@
 
   async function deleteLibraryProject(id) {
     const record = projectRecordById(id);
-    if (!record) return;
-    if (!confirm('Eliminare lo schema "' + record.name + '"?')) return;
+    if (!record) return false;
+    const language = interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]);
+    const confirmed = confirm(language === "it"
+      ? 'Eliminare la pagina "' + record.name + '"?'
+      : 'Delete page "' + record.name + '"?');
+    if (!confirmed) return false;
 
     removeLocalProject(id);
     if (currentProjectId === id) {
@@ -3255,6 +3472,7 @@
 
     await cloudDeleteProject(id);
     renderProjectLibrary();
+    return true;
   }
 
   function makeProjectCard(record) {
@@ -3460,7 +3678,7 @@
     }
     if (menuSync) menuSync.textContent = user ? "Sincronizzazione Firebase attiva" : "Solo salvataggio locale";
     if (logout) logout.hidden = !user;
-    if (syncNow) syncNow.disabled = !user;
+    if (syncNow) syncNow.disabled = false;
   }
 
   async function initCloud(force) {
@@ -13511,6 +13729,9 @@
     if (!event.target.closest("#accountMenu") && !event.target.closest("#homeAuthButton") && !event.target.closest("#editorAuthButton")) {
       closeAccountMenu();
     }
+    if (!event.target.closest("#pageMenu") && !event.target.closest("#pageMenuButton")) {
+      closePageMenu();
+    }
 
     if (!event.target.closest(".section-add-wrap")) {
       document.querySelectorAll(".section-add-popup.open").forEach((openPopup) => {
@@ -13529,11 +13750,13 @@
 
   $("exportProject").addEventListener("click", () => {
     closeAccountMenu();
+    closePageMenu();
     exportProject();
   });
 
   $("importProject").addEventListener("click", () => {
     closeAccountMenu();
+    closePageMenu();
     $("importFile").click();
   });
 
@@ -13544,7 +13767,11 @@
 
   $("resetProject").addEventListener("click", () => {
     closeAccountMenu();
-    if (!confirm("Caricare l'Inventory Demo? Il progetto corrente verrà sostituito.")) return;
+    closePageMenu();
+    const language = interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]);
+    if (!confirm(language === "it"
+      ? "Caricare l'Inventory Demo? Il progetto corrente verrà sostituito."
+      : "Load the Inventory Demo? The current page will be replaced.")) return;
     setProjectDocument(sampleProject());
     $("projectName").value = rootProject.name;
     selectedNodeIds.clear();
@@ -13919,6 +14146,16 @@
     if (event.key === "Escape" && $("createProjectDialog").classList.contains("show")) {
       event.preventDefault();
       closeCreateProjectDialog();
+      return;
+    }
+    if (event.key === "Escape" && $("optionsPanel").classList.contains("open")) {
+      event.preventDefault();
+      closeOptionsPanel();
+      return;
+    }
+    if (event.key === "Escape" && $("pageMenu").classList.contains("open")) {
+      event.preventDefault();
+      closePageMenu();
     }
   });
 
@@ -13934,18 +14171,59 @@
     event.stopPropagation();
     handleAccountButton($("homeAuthButton"));
   });
+  $("pageMenuButton").addEventListener("click", (event) => {
+    event.stopPropagation();
+    togglePageMenu();
+  });
+  $("pageMenu").addEventListener("click", (event) => event.stopPropagation());
+  $("pageOptions").addEventListener("click", () => {
+    closePageMenu();
+    openOptionsPanel();
+  });
+  $("pageDelete").addEventListener("click", async () => {
+    closePageMenu();
+    if (!currentProjectId) return;
+    const deleted = await deleteLibraryProject(currentProjectId);
+    if (deleted) showProjectHome("projects");
+  });
+  $("closeOptionsPanel").addEventListener("click", closeOptionsPanel);
+  $("optionsDone").addEventListener("click", closeOptionsPanel);
+  $("optionsPanel").addEventListener("mousedown", (event) => {
+    if (event.target === $("optionsPanel")) closeOptionsPanel();
+  });
+  $("optionLanguage").addEventListener("change", (event) => {
+    localStorage.setItem(UI_LANGUAGE_KEY, event.target.value);
+    applyInterfacePreferences();
+  });
+  $("optionTextSize").addEventListener("change", (event) => {
+    localStorage.setItem(UI_TEXT_SIZE_KEY, event.target.value);
+    applyInterfacePreferences();
+  });
+  $("optionTheme").addEventListener("change", (event) => {
+    localStorage.setItem(UI_THEME_KEY, event.target.value);
+    applyInterfacePreferences();
+  });
   $("editorAuthButton").addEventListener("click", (event) => {
     event.stopPropagation();
     handleAccountButton($("editorAuthButton"));
   });
   $("accountLogout").addEventListener("click", logoutGoogleAuth);
   $("accountSyncNow").addEventListener("click", async () => {
-    if (!cloudState.user) return;
+    closePageMenu();
+    saveProject(false);
+    if (!cloudState.user) {
+      showToast(interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]) === "it"
+        ? "Pagina salvata localmente"
+        : "Page saved locally");
+      return;
+    }
     $("accountSyncNow").disabled = true;
     await mergeCloudLibrary();
     $("accountSyncNow").disabled = false;
     updateAccountUI();
-    showToast("Sincronizzazione completata");
+    showToast(interfacePreference(UI_LANGUAGE_KEY, "en", ["en", "it"]) === "it"
+      ? "Sincronizzazione completata"
+      : "Synchronization completed");
   });
   $("accountPrivacy").addEventListener("click", () => {
     closeAccountMenu();
@@ -13972,6 +14250,18 @@
     stopSharedProjectSession();
   });
 
+  if (window.matchMedia) {
+    const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+    const refreshSystemTheme = () => {
+      if (interfacePreference(UI_THEME_KEY, "system", ["system", "dark", "light"]) === "system") {
+        applyInterfacePreferences();
+      }
+    };
+    if (typeof systemThemeQuery.addEventListener === "function") systemThemeQuery.addEventListener("change", refreshSystemTheme);
+    else if (typeof systemThemeQuery.addListener === "function") systemThemeQuery.addListener(refreshSystemTheme);
+  }
+
+  applyInterfacePreferences();
   setInspectorVisible(false);
   updateConnectionVisibilityControl();
   renderProjectLibrary();
