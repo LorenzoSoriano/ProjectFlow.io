@@ -10288,9 +10288,12 @@
   }
 
   function aiApplyGeneratedPlan(plan) {
+    const snapshot = cloneProjectData(project);
     const center = viewportCenterWorld();
     const byKey = new Map();
     const created = [];
+
+    try {
 
     plan.nodes.forEach((spec, index) => {
       const column = Math.max(0, Math.min(8, Number.isFinite(Number(spec.column)) ? Number(spec.column) : index % 4));
@@ -10352,13 +10355,19 @@
     flushHistoryCheckpoint();
     broadcastActivity("AI genera " + group.title);
 
-    return {
-      nodes: created.length,
-      connections: connected,
-      skippedConnections: skipped.length,
-      message: plan.summary + " · " + created.length + " blocchi, " + connected + " connessioni" +
-        (skipped.length ? " · " + skipped.length + " connessioni scartate dal validator" : "")
-    };
+      return {
+        nodes: created.length,
+        connections: connected,
+        skippedConnections: skipped.length,
+        message: plan.summary + " · " + created.length + " blocchi, " + connected + " connessioni" +
+          (skipped.length ? " · " + skipped.length + " connessioni scartate dal validator" : "")
+      };
+    } catch (error) {
+      project = normalizeProject(snapshot);
+      resetEditorSelection();
+      render();
+      throw error;
+    }
   }
 
   function aiExecutePatternFallback(prompt) {
