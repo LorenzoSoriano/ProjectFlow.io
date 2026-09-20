@@ -2097,6 +2097,7 @@
     sharedProjectUnsubscribe: null,
     presenceUnsubscribe: null,
     nodePositionsUnsubscribe: null,
+    membersUnsubscribe: null,
     kickUnsubscribe: null,
     remoteNodePositions: new Map(),
     presenceHeartbeat: null,
@@ -4699,6 +4700,7 @@
     if (cloudState.sharedProjectUnsubscribe) cloudState.sharedProjectUnsubscribe();
     if (cloudState.presenceUnsubscribe) cloudState.presenceUnsubscribe();
     if (cloudState.nodePositionsUnsubscribe) cloudState.nodePositionsUnsubscribe();
+    if (cloudState.membersUnsubscribe) cloudState.membersUnsubscribe();
     if (cloudState.kickUnsubscribe) cloudState.kickUnsubscribe();
     clearInterval(cloudState.presenceHeartbeat);
     clearTimeout(cloudState.presenceWriteTimer);
@@ -4720,6 +4722,7 @@
     cloudState.sharedProjectUnsubscribe = null;
     cloudState.presenceUnsubscribe = null;
     cloudState.nodePositionsUnsubscribe = null;
+    cloudState.membersUnsubscribe = null;
     cloudState.kickUnsubscribe = null;
     cloudState.remoteNodePositions = new Map();
     cloudState.presenceHeartbeat = null;
@@ -4833,6 +4836,35 @@
       scheduleMinimapRender(0);
     }, (error) => {
       console.warn("ProjectFlow: cursori collaborativi non disponibili.", error);
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      if (denied && record.sharedRole === "editor") forceExitSharedProject("Accesso al progetto revocato");
+    });
+
+    const membersCollection = cloudState.api.collection(
+      cloudState.db,
+      "sharedProjects",
+      record.sharedProjectId,
+      "members"
+    );
+    cloudState.membersUnsubscribe = cloudState.api.onSnapshot(membersCollection, (snapshot) => {
+      const members = [];
+      snapshot.forEach((memberDoc) => {
+        const member = memberDoc.data() || {};
+        if (!member.uid || member.uid === record.ownerId) return;
+        members.push({
+          uid: member.uid,
+          email: normalizeShareEmail(member.email),
+          name: member.name || "",
+          joinedAt: Number(member.joinedAt) || 0,
+          role: member.role || "editor"
+        });
+      });
+      members.sort((a, b) => (a.name || a.email || a.uid).localeCompare(b.name || b.email || b.uid));
+      cloudState.sharedMeta = Object.assign({}, cloudState.sharedMeta || {}, { members: members });
+      renderSharePanel();
+      renderRemotePresence();
+    }, (error) => {
+      console.warn("ProjectFlow: roster collaboratori non disponibile.", error);
       const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
       if (denied && record.sharedRole === "editor") forceExitSharedProject("Accesso al progetto revocato");
     });
