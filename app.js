@@ -4369,6 +4369,27 @@
     }
   }
 
+  async function deleteSharedNodePositionRecords(nodeIds) {
+    if (!cloudState.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    const ids = Array.from(new Set((nodeIds || []).filter(Boolean)));
+    if (!ids.length) return;
+
+    ids.forEach((id) => cloudState.remoteNodePositions.delete(id));
+    try {
+      await Promise.all(ids.map((id) => cloudState.api.deleteDoc(
+        cloudState.api.doc(
+          cloudState.db,
+          "sharedProjects",
+          cloudState.sharedProjectId,
+          "nodePositions",
+          id
+        )
+      )));
+    } catch (error) {
+      console.warn("ProjectFlow: pulizia posizione nodo condiviso non riuscita.", error);
+    }
+  }
+
   function renderRemotePresence() {
     const toolbar = $("collabPresence");
     if (toolbar) {
@@ -6342,6 +6363,7 @@
       event.stopPropagation();
       if (node.boundaryLocked) return;
       project.nodes = project.nodes.filter((item) => item.id !== node.id);
+      deleteSharedNodePositionRecords([node.id]);
       project.connections = project.connections.filter((edge) => edge.from.nodeId !== node.id && edge.to.nodeId !== node.id);
       sanitizeProjectConnections();
       selectedNodeIds.delete(node.id);
@@ -11611,6 +11633,7 @@
     const ids = new Set(selectedNodeIds);
     const count = ids.size;
     project.nodes = project.nodes.filter((item) => !ids.has(item.id));
+    deleteSharedNodePositionRecords(Array.from(ids));
     project.connections = project.connections.filter((edge) =>
       !ids.has(edge.from.nodeId) && !ids.has(edge.to.nodeId)
     );
