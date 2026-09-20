@@ -8977,37 +8977,94 @@
     return !duplicate;
   }
 
+  function nodeSemanticPortRefs(node, side) {
+    if (!node || (side !== "in" && side !== "out")) return [];
+    ensureNodeMeta(node);
+    const refs = [];
+    const seen = new Set();
+
+    const add = (rowId, item, label) => {
+      if (!rowId || !item) return;
+      const key = rowId + "|" + side;
+      if (seen.has(key)) return;
+
+      const allowIn = ["variable", "property", "unityEvent", "flowIn", "condition", "input", "parameter"].includes(item.kind) &&
+        !(item.kind === "parameter" && item.mode === "out");
+      const allowOut = ["variable", "property", "unityEvent", "component", "flowOut", "condition", "output", "methodReturn", "parameter"].includes(item.kind) &&
+        !(item.kind === "parameter" && !["ref", "out"].includes(item.mode));
+
+      if ((side === "in" && !allowIn) || (side === "out" && !allowOut)) return;
+      seen.add(key);
+      refs.push({
+        ref: {
+          nodeId: node.id,
+          rowId: rowId,
+          side: side,
+          kind: (item.kind === "flowIn" || item.kind === "flowOut") ? "flow" : "data"
+        },
+        item: item,
+        label: String(label || item.label || item.name || "").trim()
+      });
+    };
+
+    (node.rows || []).forEach((item) => {
+      if (!item) return;
+      if (item.kind === "function") {
+        ensureFunctionSignature(item, item.access);
+        (item.methodParameters || []).forEach((parameter) => {
+          add(parameter.id, parameterProxy(parameter, item.access), parameter.name || parameter.label);
+        });
+        if (item.returnType && item.returnType !== "void") {
+          add(item.returnPortId, methodReturnProxy(item, item.access), item.returnName || "result");
+        }
+        return;
+      }
+      add(item.id, item, item.label);
+    });
+
+    if (node.type === "function") {
+      ensureFunctionSignature(node, node.methodAccess);
+      (node.methodParameters || []).forEach((parameter) => {
+        add(parameter.id, parameterProxy(parameter, node.methodAccess), parameter.name || parameter.label);
+      });
+      if (node.returnType && node.returnType !== "void") {
+        add(node.returnPortId, methodReturnProxy(node, node.methodAccess), node.returnName || "result");
+      }
+    }
+
+    return refs;
+  }
+
   function autoConnectSelectedNodeToPort(ref) {
     if (!ref || selectedNodeIds.size !== 1) return { handled: false };
     const selectedId = selectedNodeId || Array.from(selectedNodeIds)[0];
     if (!selectedId || selectedId === ref.nodeId) return { handled: false };
 
-    const selectedElement = nodeLayer.querySelector('[data-node-id="' + selectedId + '"]');
-    if (!selectedElement) return { handled: false };
+    const selectedNode = nodeById(selectedId);
+    if (!selectedNode) return { handled: false };
 
     const wantedSide = ref.side === "in" ? "out" : "in";
-    const portElements = Array.from(selectedElement.querySelectorAll('.port[data-side="' + wantedSide + '"]'));
     const targetItem = memberByRef(ref);
     const targetType = ref.side === "in" ? memberInputType(targetItem) : memberOutputType(targetItem);
+    const targetPos = getPortWorldPosition(ref);
     const candidates = [];
 
-    portElements.forEach((portElement, index) => {
-      const candidate = {
-        nodeId: selectedId,
-        rowId: portElement.dataset.row,
-        side: wantedSide,
-        kind: portElement.classList.contains("flow-port") ? "flow" : "data"
-      };
+    nodeSemanticPortRefs(selectedNode, wantedSide).forEach((entry, index) => {
+      const candidate = entry.ref;
       const check = connectionCheck(candidate, ref);
       if (!check.ok) return;
 
-      const candidateItem = memberByRef(candidate);
       const candidateType = wantedSide === "out"
-        ? memberOutputType(candidateItem)
-        : memberInputType(candidateItem);
+        ? memberOutputType(entry.item)
+        : memberInputType(entry.item);
       const exactType = normalizedType(candidateType) === normalizedType(targetType) &&
         !["any", "value"].includes(normalizedType(candidateType));
-      const connected = project.connections.some((edge) =>
+      const candidatePos = getPortWorldPosition(candidate);
+      const verticalDistance = targetPos && candidatePos
+        ? Math.abs(targetPos.y - candidatePos.y)
+        : index * 12;
+
+      const alreadyUsed = project.connections.some((edge) =>
         (wantedSide === "out" &&
           edge.from.nodeId === candidate.nodeId &&
           edge.from.rowId === candidate.rowId) ||
@@ -9015,32 +9072,29 @@
           edge.to.nodeId === candidate.nodeId &&
           edge.to.rowId === candidate.rowId)
       );
-      const flow = check.outputType === "__flow__";
-      const targetPos = getPortWorldPosition(ref);
-      const candidatePos = getPortWorldPosition(candidate);
-      const verticalDistance = targetPos && candidatePos
-        ? Math.abs(targetPos.y - candidatePos.y)
-        : index * 10;
+
+      const exactLabel = entry.label &&
+        String(entry.label).toLowerCase() === String(targetItem && (targetItem.label || targetItem.name) || "").toLowerCase();
 
       candidates.push({
         check: check,
         score:
-          (exactType ? 1000 : 0) +
-          (flow ? 300 : 0) +
-          (!connected ? 120 : 0) -
-          Math.min(100, verticalDistance / 4) -
+          (exactType ? 1200 : 0) +
+          (exactLabel ? 250 : 0) +
+          (check.outputType === "__flow__" ? 350 : 0) +
+          (!alreadyUsed ? 150 : 0) -
+          Math.min(120, verticalDistance / 4) -
           index * 0.01
       });
     });
 
     if (!candidates.length) {
-      showToast("Nessun connettore compatibile nel blocco selezionato.");
+      showToast("Nessuna porta compatibile nel nodo selezionato.");
       return { handled: true, connected: false };
     }
 
     candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
-    createConnectionFromCheck(best.check);
+    createConnectionFromCheck(candidates[0].check);
 
     pendingPort = null;
     pendingJunction = null;
