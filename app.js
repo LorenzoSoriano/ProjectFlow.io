@@ -464,6 +464,84 @@
     return enumNodes().find((node) => node.title === name) || null;
   }
 
+  function syncClassicEventNode(node) {
+    if (!node || node.type !== "event" || currentSchemaId() !== "classic") return;
+    if (typeof node.flowChartDataType !== "string" || !node.flowChartDataType) node.flowChartDataType = "any";
+
+    const existingFlow = node.rows.find((item) => item && item.kind === "flowOut");
+    const existingValue = node.rows.find((item) => item && item.kind === "output" &&
+      ["payload", "value", "input"].includes(String(item.label || "").toLowerCase()));
+
+    if (!node.classicEventFlowOutId) node.classicEventFlowOutId = existingFlow ? existingFlow.id : uid("classic_event_next");
+    if (!node.classicEventValueOutId) node.classicEventValueOutId = existingValue ? existingValue.id : uid("classic_event_value");
+
+    const reserved = new Set([node.classicEventFlowOutId, node.classicEventValueOutId]);
+    const customRows = node.rows.filter((item) => item && !reserved.has(item.id));
+
+    const rows = [{
+      id: node.classicEventFlowOutId,
+      label: "Next",
+      value: "",
+      kind: "flowOut"
+    }];
+
+    if (node.eventKind === "input") {
+      rows.push({
+        id: node.classicEventValueOutId,
+        label: "Value",
+        value: node.flowChartDataType,
+        kind: "output"
+      });
+    }
+
+    node.rows = rows.concat(customRows);
+  }
+
+  function syncClassicActionNode(node) {
+    if (!node || node.type !== "action" || currentSchemaId() !== "classic") return;
+    if (typeof node.flowChartDataType !== "string" || !node.flowChartDataType) node.flowChartDataType = "any";
+
+    const flowIn = node.rows.find((item) => item && item.kind === "flowIn");
+    const flowOut = node.rows.find((item) => item && item.kind === "flowOut");
+    if (!node.classicActionFlowInId) node.classicActionFlowInId = flowIn ? flowIn.id : uid("classic_action_in");
+    if (!node.classicActionFlowOutId) node.classicActionFlowOutId = flowOut ? flowOut.id : uid("classic_action_out");
+    if (!node.classicActionValueInId) node.classicActionValueInId = uid("classic_action_value_in");
+    if (!node.classicActionValueOutId) node.classicActionValueOutId = uid("classic_action_value_out");
+
+    const reserved = new Set([
+      node.classicActionFlowInId,
+      node.classicActionFlowOutId,
+      node.classicActionValueInId,
+      node.classicActionValueOutId
+    ]);
+    const customRows = node.rows.filter((item) => item && !reserved.has(item.id));
+
+    const rows = [
+      { id: node.classicActionFlowInId, label: "Enter", value: "", kind: "flowIn" },
+      { id: node.classicActionFlowOutId, label: "Next", value: "", kind: "flowOut" }
+    ];
+
+    if (["setVariable", "writeOutput", "callFunction"].includes(node.actionKind)) {
+      rows.push({
+        id: node.classicActionValueInId,
+        label: node.actionKind === "callFunction" ? "Argument" : "Value",
+        value: node.flowChartDataType,
+        kind: "input"
+      });
+    }
+
+    if (["readInput", "callFunction"].includes(node.actionKind)) {
+      rows.push({
+        id: node.classicActionValueOutId,
+        label: node.actionKind === "callFunction" ? "Result" : "Value",
+        value: node.flowChartDataType,
+        kind: "output"
+      });
+    }
+
+    node.rows = rows.concat(customRows);
+  }
+
   function syncSwitchNode(node) {
     if (!node || node.type !== "switch") return;
 
@@ -1052,6 +1130,9 @@
         node.actionKind = "process";
       }
     }
+
+    syncClassicEventNode(node);
+    syncClassicActionNode(node);
 
     if (node.type === "state") {
       if (typeof node.stateKind !== "string") node.stateKind = "normal";
@@ -4707,13 +4788,17 @@
       return (node.enumFlags ? "[Flags] · " : "") + node.enumUnderlyingType + " · " + node.enumValues.length + " values";
     }
     if (node.type === "switch") {
-      return "CONTROL FLOW · " + (node.switchValueType || "int");
+      return currentSchemaId() === "classic"
+        ? "FLOW CHART · MULTI DECISION · " + (node.switchValueType || "int")
+        : "CONTROL FLOW · " + (node.switchValueType || "int");
     }
-    if (node.type === "ifElse") return "CONTROL FLOW · IF / ELSE";
-    if (node.type === "whileLoop") return "CONTROL FLOW · WHILE";
-    if (node.type === "doWhileLoop") return "CONTROL FLOW · DO WHILE";
-    if (node.type === "forLoop") return "CONTROL FLOW · FOR";
-    if (node.type === "foreachLoop") return "CONTROL FLOW · FOREACH " + (node.foreachItemType || "any");
+    if (node.type === "ifElse") return currentSchemaId() === "classic" ? "FLOW CHART · DECISION" : "CONTROL FLOW · IF / ELSE";
+    if (node.type === "whileLoop") return currentSchemaId() === "classic" ? "FLOW CHART · WHILE LOOP" : "CONTROL FLOW · WHILE";
+    if (node.type === "doWhileLoop") return currentSchemaId() === "classic" ? "FLOW CHART · DO WHILE LOOP" : "CONTROL FLOW · DO WHILE";
+    if (node.type === "forLoop") return currentSchemaId() === "classic" ? "FLOW CHART · COUNTED LOOP" : "CONTROL FLOW · FOR";
+    if (node.type === "foreachLoop") return currentSchemaId() === "classic"
+      ? "FLOW CHART · FOR EACH · " + (node.foreachItemType || "any")
+      : "CONTROL FLOW · FOREACH " + (node.foreachItemType || "any");
     if (node.type === "returnFlow") {
       return "CONTROL FLOW · RETURN " + String(node.returnFlowType || "void").toUpperCase();
     }
@@ -6218,6 +6303,14 @@
           node.eventKind = value;
           rerenderNode();
         }, "node-meta-select"));
+
+        if (currentSchemaId() === "classic" && node.eventKind === "input") {
+          meta.appendChild(typePicker(node.flowChartDataType || "any", (value) => {
+            node.flowChartDataType = value;
+            syncClassicEventNode(node);
+            rerenderNode();
+          }, "inline-type-picker"));
+        }
         body.appendChild(meta);
       }
 
@@ -6228,6 +6321,14 @@
           node.actionKind = value;
           rerenderNode();
         }, "node-meta-select"));
+
+        if (currentSchemaId() === "classic" && ["callFunction", "setVariable", "readInput", "writeOutput"].includes(node.actionKind)) {
+          meta.appendChild(typePicker(node.flowChartDataType || "any", (value) => {
+            node.flowChartDataType = value;
+            syncClassicActionNode(node);
+            rerenderNode();
+          }, "inline-type-picker"));
+        }
         body.appendChild(meta);
       }
 
@@ -9149,10 +9250,19 @@
       grid.className = "settings-grid";
       grid.appendChild(inspectorField("ENTRY TYPE", selectControl(node.eventKind, eventKindOptionsForSchema(), (value) => {
         node.eventKind = value;
-        if (value === "start" && node.title === "Start") node.title = "Start";
+        syncClassicEventNode(node);
         renderNodes();
+        renderInspector();
         markDirty();
       })));
+      if (node.eventKind === "input") {
+        grid.appendChild(inspectorField("DATA TYPE", selectControl(node.flowChartDataType || "any", ["any"].concat(availableDataTypes()), (value) => {
+          node.flowChartDataType = value;
+          syncClassicEventNode(node);
+          renderNodes();
+          markDirty();
+        })));
+      }
       container.appendChild(grid);
     }
 
@@ -9166,9 +9276,19 @@
       grid.className = "settings-grid";
       grid.appendChild(inspectorField("PROCESS TYPE", selectControl(node.actionKind, actionKindOptionsForSchema(), (value) => {
         node.actionKind = value;
+        syncClassicActionNode(node);
         renderNodes();
+        renderInspector();
         markDirty();
       })));
+      if (["callFunction", "setVariable", "readInput", "writeOutput"].includes(node.actionKind)) {
+        grid.appendChild(inspectorField("DATA TYPE", selectControl(node.flowChartDataType || "any", ["any"].concat(availableDataTypes()), (value) => {
+          node.flowChartDataType = value;
+          syncClassicActionNode(node);
+          renderNodes();
+          markDirty();
+        })));
+      }
       container.appendChild(grid);
     }
 
@@ -10876,6 +10996,27 @@
       } else if (type === "returnFlow") {
         node.title = "End / Return";
         node.description = "Termina il ramo corrente o restituisce un risultato.";
+      } else if (type === "ifElse") {
+        node.title = "Decision";
+        node.description = "Valuta una condizione e separa il flusso nei rami True e False.";
+      } else if (type === "switch") {
+        node.title = "Multi Decision";
+        node.description = "Dirama il flusso in più percorsi in base a un valore.";
+      } else if (type === "forLoop") {
+        node.title = "Counted Loop";
+        node.description = "Ripete un blocco usando indice, limite e incremento.";
+      } else if (type === "foreachLoop") {
+        node.title = "For Each";
+        node.description = "Ripete il flusso per ogni elemento di una collezione.";
+      } else if (type === "whileLoop") {
+        node.title = "While Loop";
+        node.description = "Ripete il flusso finché la condizione è vera.";
+      } else if (type === "doWhileLoop") {
+        node.title = "Do While Loop";
+        node.description = "Esegue il flusso almeno una volta e poi verifica la condizione.";
+      } else if (type === "adapter") {
+        node.title = "Convert";
+        node.description = "Converte un valore da un tipo compatibile a un altro.";
       }
     }
 
