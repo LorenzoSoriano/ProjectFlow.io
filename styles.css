@@ -9262,3 +9262,62 @@ html[data-ui-theme="light"] .home-nav button.active{
     min-height:40px;
   }
 }
+
+
+/* v2.55 — public-site cloud state in the bottom-left corner */
+.home-cloud-corner{
+  position:fixed;
+  left:18px;
+  bottom:18px;
+  z-index:120;
+  min-height:32px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:7px 11px;
+  border:1px solid #353535;
+  border-radius:9px;
+  background:rgba(31,31,31,.92);
+  backdrop-filter:blur(10px);
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
+  color:#8d8d8d;
+  font-size:9.5px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.home-cloud-corner .sync-dot{
+  flex:0 0 auto;
+}
+.home-cloud-label{
+  color:#b3b3b3;
+  font-weight:900;
+}
+.home-cloud-state{
+  padding-left:7px;
+  border-left:1px solid #414141;
+  color:#878787;
+}
+.home-cloud-corner .sync-dot.cloud + .home-cloud-label{
+  color:#9fc5d8;
+}
+html[data-ui-theme="light"] .home-cloud-corner{
+  border-color:#d7dce4;
+  background:rgba(255,255,255,.94);
+  color:#626b76;
+  box-shadow:0 10px 28px rgba(35,43,56,.12);
+}
+html[data-ui-theme="light"] .home-cloud-label{
+  color:#313740;
+}
+html[data-ui-theme="light"] .home-cloud-state{
+  border-left-color:#d8dde4;
+  color:#67707b;
+}
+@media(max-width:760px){
+  .home-cloud-corner{
+    left:12px;
+    bottom:12px;
+    min-height:30px;
+    padding:6px 9px;
+  }
+}
