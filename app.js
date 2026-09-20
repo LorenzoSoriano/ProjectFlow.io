@@ -674,7 +674,30 @@
     }
 
     if (node.type === "switch") {
-      syncSwitchNode(node);
+      if (typeof node.switchValueType !== "string" || !node.switchValueType) {
+        const selector = node.rows.find((item) => item && item.kind === "input");
+        node.switchValueType = selector && selector.value ? selector.value : "int";
+      }
+      if (!Array.isArray(node.switchCases) || !node.switchCases.length) {
+        node.switchCases = node.rows
+          .filter((item) => item && item.kind === "flowOut" && String(item.label || "").toLowerCase() !== "default")
+          .map((item, index) => ({
+            id: item.id || uid("switch_case"),
+            value: String(item.label || index).replace(/^Case\s+/i, "")
+          }));
+        if (!node.switchCases.length) {
+          node.switchCases = [
+            { id: uid("switch_case"), value: "0" },
+            { id: uid("switch_case"), value: "1" }
+          ];
+        }
+      }
+      if (typeof node.switchDefaultRowId !== "string" || !node.switchDefaultRowId) {
+        const defaultRow = node.rows.find((item) =>
+          item && item.kind === "flowOut" && String(item.label || "").toLowerCase() === "default"
+        );
+        node.switchDefaultRowId = defaultRow ? defaultRow.id : uid("switch_default");
+      }
     }
 
     if (node.type === "adapter") {
