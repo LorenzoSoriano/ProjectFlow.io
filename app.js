@@ -7907,7 +7907,8 @@
           renderMinimap();
           showToast("Connessione isolata");
         });
-        edgeLayer.appendChild(hitPath);
+        const firstJunction = edgeLayer.querySelector(".edge-junction");
+        edgeLayer.insertBefore(hitPath, firstJunction || null);
       });
     }
   }
