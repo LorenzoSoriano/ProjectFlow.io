@@ -10025,92 +10025,86 @@
     }
   }
 
-  function aiPlannerResponseSchema() {
-    return {
-      type: "object",
-      properties: {
-        summary: { type: "string" },
-        groupTitle: { type: "string" },
-        nodes: {
-          type: "array",
-          maxItems: 28,
-          items: {
-            type: "object",
-            properties: {
-              key: { type: "string" },
-              type: { type: "string" },
-              title: { type: "string" },
-              description: { type: "string" },
-              pseudo: { type: "string" },
-              config: {
-                type: "object",
-                nullable: true,
-                properties: {
-                  componentType: { type: "string", nullable: true },
-                  eventKind: { type: "string", nullable: true },
-                  actionKind: { type: "string", nullable: true },
-                  stateKind: { type: "string", nullable: true },
-                  foreachItemType: { type: "string", nullable: true },
-                  mathOperation: { type: "string", nullable: true },
-                  mathDataType: { type: "string", nullable: true },
-                  logicOperation: { type: "string", nullable: true },
-                  compareOperation: { type: "string", nullable: true },
-                  compareDataType: { type: "string", nullable: true },
-                  adapterInputType: { type: "string", nullable: true },
-                  adapterOutputType: { type: "string", nullable: true }
-                }
-              },
-              rows: {
-                type: "array",
-                nullable: true,
-                maxItems: 12,
-                items: {
-                  type: "object",
-                  properties: {
-                    label: { type: "string" },
-                    kind: { type: "string" },
-                    dataType: { type: "string" },
-                    defaultValue: { type: "string", nullable: true }
-                  },
-                  required: ["label", "kind", "dataType"]
-                }
-              },
-              column: { type: "integer" },
-              row: { type: "integer" }
-            },
-            required: ["key", "type", "title", "description", "pseudo", "column", "row"]
-          }
-        },
-        connections: {
-          type: "array",
-          maxItems: 56,
-          items: {
-            type: "object",
-            properties: {
-              from: {
-                type: "object",
-                properties: {
-                  node: { type: "string" },
-                  port: { type: "string" }
-                },
-                required: ["node", "port"]
-              },
-              to: {
-                type: "object",
-                properties: {
-                  node: { type: "string" },
-                  port: { type: "string" }
-                },
-                required: ["node", "port"]
-              },
-              dataType: { type: "string" }
-            },
-            required: ["from", "to", "dataType"]
-          }
-        }
-      },
-      required: ["summary", "groupTitle", "nodes", "connections"]
+  function aiPlannerResponseSchema(Schema) {
+    if (!Schema) throw new Error("Firebase AI Schema helper non disponibile.");
+
+    const configProperties = {
+      componentType: Schema.string(),
+      eventKind: Schema.string(),
+      actionKind: Schema.string(),
+      stateKind: Schema.string(),
+      foreachItemType: Schema.string(),
+      mathOperation: Schema.string(),
+      mathDataType: Schema.string(),
+      logicOperation: Schema.string(),
+      compareOperation: Schema.string(),
+      compareDataType: Schema.string(),
+      adapterInputType: Schema.string(),
+      adapterOutputType: Schema.string()
     };
+
+    const configSchema = Schema.object({
+      properties: configProperties,
+      optionalProperties: Object.keys(configProperties)
+    });
+
+    const rowSchema = Schema.object({
+      properties: {
+        label: Schema.string(),
+        kind: Schema.string(),
+        dataType: Schema.string(),
+        defaultValue: Schema.string()
+      },
+      optionalProperties: ["defaultValue"]
+    });
+
+    const nodeSchema = Schema.object({
+      properties: {
+        key: Schema.string(),
+        type: Schema.string(),
+        title: Schema.string(),
+        description: Schema.string(),
+        pseudo: Schema.string(),
+        config: configSchema,
+        rows: Schema.array({
+          items: rowSchema,
+          maxItems: 12
+        }),
+        column: Schema.number(),
+        row: Schema.number()
+      },
+      optionalProperties: ["config", "rows"]
+    });
+
+    const endpointSchema = Schema.object({
+      properties: {
+        node: Schema.string(),
+        port: Schema.string()
+      }
+    });
+
+    const connectionSchema = Schema.object({
+      properties: {
+        from: endpointSchema,
+        to: endpointSchema,
+        dataType: Schema.string()
+      }
+    });
+
+    return Schema.object({
+      properties: {
+        summary: Schema.string(),
+        groupTitle: Schema.string(),
+        nodes: Schema.array({
+          items: nodeSchema,
+          maxItems: 28
+        }),
+        connections: Schema.array({
+          items: connectionSchema,
+          maxItems: 56
+        })
+      }
+    });
   }
 
   async function aiGetGeminiModel() {
@@ -10142,7 +10136,7 @@
           topP: 0.9,
           maxOutputTokens: 1800,
           responseMimeType: "application/json",
-          responseSchema: aiPlannerResponseSchema()
+          responseSchema: aiPlannerResponseSchema(aiApi.Schema)
         }
       });
 
