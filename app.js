@@ -71,6 +71,10 @@
     breakFlow: { label: "Break", icon: "■", color: "#b87a63" },
     continueFlow: { label: "Continue", icon: "↪", color: "#7e9fb7" },
     returnFlow: { label: "Return", icon: "↩", color: "#8a78b5" },
+    flowStart: { label: "Start", icon: "▶", color: "#66b985" },
+    flowEnd: { label: "End", icon: "■", color: "#b87a63" },
+    flowIO: { label: "Input / Output", icon: "⇄", color: "#55a9b7" },
+    flowProcess: { label: "Process", icon: "▭", color: "#70b77c" },
     adapter: { label: "Adapter", icon: "↔", color: "#55a9b7" },
     math: { label: "Math", icon: "±", color: "#6fb47b" },
     logic: { label: "Logic", icon: "∧", color: "#c88455" },
@@ -462,6 +466,75 @@
 
   function enumByName(name) {
     return enumNodes().find((node) => node.title === name) || null;
+  }
+
+  function pruneNodeRowConnections(node) {
+    if (!node || !Array.isArray(node.rows)) return;
+    const validRows = new Set(node.rows.map((item) => item && item.id).filter(Boolean));
+    project.connections = project.connections.filter((edge) => {
+      if (edge.from.nodeId === node.id && !validRows.has(edge.from.rowId)) return false;
+      if (edge.to.nodeId === node.id && !validRows.has(edge.to.rowId)) return false;
+      return true;
+    });
+  }
+
+  function syncFlowStartNode(node) {
+    if (!node || node.type !== "flowStart") return;
+    const existing = node.rows.find((item) => item && item.kind === "flowOut");
+    if (!node.flowStartOutId) node.flowStartOutId = existing ? existing.id : uid("flow_start_out");
+    node.rows = [{ id: node.flowStartOutId, label: "Next", value: "", kind: "flowOut" }];
+  }
+
+  function syncFlowEndNode(node) {
+    if (!node || node.type !== "flowEnd") return;
+    const existing = node.rows.find((item) => item && item.kind === "flowIn");
+    if (!node.flowEndInId) node.flowEndInId = existing ? existing.id : uid("flow_end_in");
+    node.rows = [{ id: node.flowEndInId, label: "Enter", value: "", kind: "flowIn" }];
+  }
+
+  function syncFlowIONode(node) {
+    if (!node || node.type !== "flowIO") return;
+    if (!["input", "output"].includes(node.flowIoMode)) node.flowIoMode = "input";
+    if (typeof node.flowChartDataType !== "string" || !node.flowChartDataType) node.flowChartDataType = "any";
+
+    const flowIn = node.rows.find((item) => item && item.kind === "flowIn");
+    const flowOut = node.rows.find((item) => item && item.kind === "flowOut");
+    const dataIn = node.rows.find((item) => item && item.kind === "input");
+    const dataOut = node.rows.find((item) => item && item.kind === "output");
+
+    if (!node.flowIoFlowInId) node.flowIoFlowInId = flowIn ? flowIn.id : uid("flow_io_in");
+    if (!node.flowIoFlowOutId) node.flowIoFlowOutId = flowOut ? flowOut.id : uid("flow_io_out");
+    if (!node.flowIoDataInId) node.flowIoDataInId = dataIn ? dataIn.id : uid("flow_io_data_in");
+    if (!node.flowIoDataOutId) node.flowIoDataOutId = dataOut ? dataOut.id : uid("flow_io_data_out");
+
+    node.rows = [
+      { id: node.flowIoFlowInId, label: "Enter", value: "", kind: "flowIn" },
+      { id: node.flowIoFlowOutId, label: "Next", value: "", kind: "flowOut" }
+    ];
+
+    if (node.flowIoMode === "input") {
+      node.rows.push({ id: node.flowIoDataOutId, label: "Value", value: node.flowChartDataType, kind: "output" });
+    } else {
+      node.rows.push({ id: node.flowIoDataInId, label: "Value", value: node.flowChartDataType, kind: "input" });
+    }
+  }
+
+  function syncFlowProcessNode(node) {
+    if (!node || node.type !== "flowProcess") return;
+    const flowIn = node.rows.find((item) => item && item.kind === "flowIn");
+    const flowOut = node.rows.find((item) => item && item.kind === "flowOut");
+    if (!node.flowProcessInId) node.flowProcessInId = flowIn ? flowIn.id : uid("flow_process_in");
+    if (!node.flowProcessOutId) node.flowProcessOutId = flowOut ? flowOut.id : uid("flow_process_out");
+
+    const dataRows = node.rows.filter((item) => item && (item.kind === "input" || item.kind === "output"));
+    node.rows = [
+      { id: node.flowProcessInId, label: "Enter", value: "", kind: "flowIn" },
+      { id: node.flowProcessOutId, label: "Next", value: "", kind: "flowOut" }
+    ].concat(dataRows);
+
+    if (!node.nestedGraph || typeof node.nestedGraph !== "object") {
+      node.nestedGraph = { version: 1, name: "Process Body", nodes: [], connections: [], groups: [] };
+    }
   }
 
   function syncClassicEventNode(node) {
@@ -1095,6 +1168,18 @@
     if (node.type === "returnFlow") {
       syncReturnFlowNode(node);
     }
+    if (node.type === "flowStart") {
+      syncFlowStartNode(node);
+    }
+    if (node.type === "flowEnd") {
+      syncFlowEndNode(node);
+    }
+    if (node.type === "flowIO") {
+      syncFlowIONode(node);
+    }
+    if (node.type === "flowProcess") {
+      syncFlowProcessNode(node);
+    }
     if (node.type === "constant") {
       syncConstantNode(node);
     }
@@ -1558,15 +1643,22 @@
     const schema = currentSchemaId();
     if (schema === "unity") return true;
 
-    const neutral = new Set([
+    if (schema === "classic") {
+      return new Set([
+        "flowStart", "flowEnd", "flowIO", "flowProcess",
+        "function", "emptyGraph",
+        "ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop",
+        "breakFlow", "continueFlow", "returnFlow",
+        "constant", "variable", "adapter", "math", "logic", "compare"
+      ]).has(type);
+    }
+
+    return new Set([
       "function", "emptyGraph", "enum",
       "event", "action", "ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop",
       "breakFlow", "continueFlow", "returnFlow",
       "constant", "variable", "adapter", "math", "logic", "compare"
-    ]);
-
-    if (schema === "classic") neutral.delete("enum");
-    return neutral.has(type);
+    ]).has(type);
   }
 
   function eventKindOptionsForSchema() {
@@ -4835,8 +4927,14 @@
       ? "FLOW CHART · FOR EACH · " + (node.foreachItemType || "any")
       : "CONTROL FLOW · FOREACH " + (node.foreachItemType || "any");
     if (node.type === "returnFlow") {
-      return "CONTROL FLOW · RETURN " + String(node.returnFlowType || "void").toUpperCase();
+      return currentSchemaId() === "classic"
+        ? "FUNCTION · RETURN " + String(node.returnFlowType || "void").toUpperCase()
+        : "CONTROL FLOW · RETURN " + String(node.returnFlowType || "void").toUpperCase();
     }
+    if (node.type === "flowStart") return "FLOW CHART · START";
+    if (node.type === "flowEnd") return "FLOW CHART · END";
+    if (node.type === "flowIO") return "FLOW CHART · " + (node.flowIoMode === "output" ? "OUTPUT" : "INPUT") + " · " + (node.flowChartDataType || "any");
+    if (node.type === "flowProcess") return "FLOW CHART · PROCESS";
     if (node.type === "breakFlow") return "CONTROL FLOW · BREAK";
     if (node.type === "continueFlow") return "CONTROL FLOW · CONTINUE";
     if (node.type === "constant") {
@@ -10869,6 +10967,52 @@
           returnValueRowId: uid("return_value")
         }
       },
+      flowStart: {
+        title: "Start",
+        description: "Punto iniziale del flow chart.",
+        rows: [row("Next", "", "flowOut")],
+        pseudo: "",
+        extra: { flowStartOutId: "" }
+      },
+      flowEnd: {
+        title: "End",
+        description: "Termina il ramo corrente del flow chart.",
+        rows: [row("Enter", "", "flowIn")],
+        pseudo: "",
+        extra: { flowEndInId: "" }
+      },
+      flowIO: {
+        title: "Input",
+        description: "Legge un valore in ingresso o invia un valore in uscita mantenendo la sequenza del flow chart.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Next", "", "flowOut"),
+          row("Value", "any", "output")
+        ],
+        pseudo: "",
+        extra: {
+          flowIoMode: "input",
+          flowChartDataType: "any",
+          flowIoFlowInId: "",
+          flowIoFlowOutId: "",
+          flowIoDataInId: "",
+          flowIoDataOutId: ""
+        }
+      },
+      flowProcess: {
+        title: "Process",
+        description: "Operazione generica del flow chart. Può esporre dati e contenere un body annidato.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Next", "", "flowOut")
+        ],
+        pseudo: "",
+        extra: {
+          flowProcessInId: "",
+          flowProcessOutId: "",
+          nestedGraph: { version: 1, name: "Process Body", nodes: [], connections: [], groups: [] }
+        }
+      },
       constant: {
         title: "Value",
         description: "Valore letterale tipato: numero, bool, string, vector, enum o riferimento nullo.",
@@ -11028,17 +11172,9 @@
       } else if (type === "emptyGraph") {
         node.title = "Sub Flow";
         node.description = "Sotto-diagramma con input e output configurabili.";
-      } else if (type === "event") {
-        node.title = "Start";
-        node.description = "Punto di ingresso del diagramma.";
-        node.eventKind = "start";
-      } else if (type === "action") {
-        node.title = "Process";
-        node.description = "Passaggio operativo del flow chart.";
-        node.actionKind = "process";
       } else if (type === "returnFlow") {
-        node.title = "End / Return";
-        node.description = "Termina il ramo corrente o restituisce un risultato.";
+        node.title = "Return";
+        node.description = "Restituisce un valore e termina la Function corrente.";
       } else if (type === "ifElse") {
         node.title = "Decision";
         node.description = "Valuta una condizione e separa il flusso nei rami True e False.";
@@ -11107,46 +11243,33 @@
     ];
 
     if (schema === "classic") {
-      const allowed = new Set([
-        "function", "emptyGraph",
-        "event", "action", "ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop",
-        "breakFlow", "continueFlow", "returnFlow",
-        "constant", "variable", "adapter", "math", "logic", "compare"
-      ]);
+      return [
+        { type: "flowStart", category: "FLOW CHART", label: "Start", description: "Punto iniziale del diagramma", icon: "▶" },
+        { type: "flowEnd", category: "FLOW CHART", label: "End", description: "Termina il ramo corrente", icon: "■" },
+        { type: "flowIO", category: "FLOW CHART", label: "Input / Output", description: "Legge o scrive un valore nel flusso", icon: "⇄" },
+        { type: "flowProcess", category: "FLOW CHART", label: "Process", description: "Operazione generica con dati, pseudocodice e body", icon: "▭" },
 
-      return common
-        .filter((item) => allowed.has(item.type))
-        .map((item) => {
-          const next = Object.assign({}, item);
-          if (["function", "emptyGraph"].includes(next.type)) next.category = "SUB FLOW";
-          else if (["event", "action", "returnFlow"].includes(next.type)) next.category = "FLOW CHART";
-          else if (["ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop", "breakFlow", "continueFlow"].includes(next.type)) next.category = "CONTROL";
-          else if (["math", "logic", "compare"].includes(next.type)) next.category = "MATH & LOGIC";
+        { type: "ifElse", category: "CONTROL", label: "Decision", description: "Condizione con ramo True e False", icon: "◇" },
+        { type: "switch", category: "CONTROL", label: "Multi Decision", description: "Decisione con più percorsi", icon: "⇆" },
+        { type: "forLoop", category: "CONTROL", label: "Counted Loop", description: "Ciclo con indice, limite e incremento", icon: "i" },
+        { type: "foreachLoop", category: "CONTROL", label: "For Each", description: "Ripete il flusso per ogni elemento", icon: "∀" },
+        { type: "whileLoop", category: "CONTROL", label: "While Loop", description: "Ripete finché la condizione è vera", icon: "↻" },
+        { type: "doWhileLoop", category: "CONTROL", label: "Do While Loop", description: "Esegue una volta e poi verifica la condizione", icon: "⟳" },
+        { type: "breakFlow", category: "CONTROL", label: "Break", description: "Interrompe il loop corrente", icon: "■" },
+        { type: "continueFlow", category: "CONTROL", label: "Continue", description: "Passa all'iterazione successiva", icon: "↪" },
 
-          if (next.type === "event") {
-            next.label = "Start / Input";
-            next.description = "Punto di ingresso del diagramma o di un flusso";
-            next.icon = "▶";
-          } else if (next.type === "action") {
-            next.label = "Process";
-            next.description = "Passaggio operativo del flow chart";
-            next.icon = "▭";
-          } else if (next.type === "returnFlow") {
-            next.label = "End / Return";
-            next.description = "Termina il ramo corrente o restituisce un risultato";
-          } else if (next.type === "ifElse") {
-            next.label = "Decision · If / Else";
-            next.description = "Nodo decisionale con ramo True e False";
-          } else if (next.type === "emptyGraph") {
-            next.label = "Sub Flow";
-            next.description = "Diagramma annidato riutilizzabile con input e output";
-          } else if (next.type === "math") {
-            next.label = "Math Operation";
-          } else if (next.type === "compare") {
-            next.label = "Comparison";
-          }
-          return next;
-        });
+        { type: "function", category: "SUB FLOW", label: "Function", description: "Funzione con parametri, return e body annidato", icon: "ƒ" },
+        { type: "emptyGraph", category: "SUB FLOW", label: "Sub Flow", description: "Diagramma annidato con input e output configurabili", icon: "□" },
+        { type: "returnFlow", category: "SUB FLOW", label: "Return", description: "Termina una Function e restituisce un valore opzionale", icon: "↩" },
+
+        { type: "constant", category: "DATA", label: "Value", description: "Valore costante tipato", icon: "•" },
+        { type: "variable", category: "DATA", label: "Variable", description: "Dato memorizzato o condiviso", icon: "x" },
+        { type: "adapter", category: "DATA", label: "Convert", description: "Converte un valore tra tipi compatibili", icon: "↔" },
+
+        { type: "math", category: "MATH & LOGIC", label: "Math", description: "Operazioni matematiche", icon: "±" },
+        { type: "compare", category: "MATH & LOGIC", label: "Compare", description: "Confronta due valori e produce bool", icon: "≶" },
+        { type: "logic", category: "MATH & LOGIC", label: "Logic", description: "AND, OR, XOR e NOT", icon: "∧" }
+      ];
     }
 
     const items = common.slice();
@@ -11524,6 +11647,10 @@
 
   function aiPlannerCatalog() {
     return [
+      { type: "flowStart", purpose: "Flow Chart start", ports: "OUT Next:flow" },
+      { type: "flowEnd", purpose: "Flow Chart terminal", ports: "IN Enter:flow" },
+      { type: "flowIO", purpose: "Flow Chart input/output", config: "flowIoMode(input|output), flowChartDataType", ports: "IN Enter:flow, OUT Next:flow, IN or OUT Value:data" },
+      { type: "flowProcess", purpose: "generic Flow Chart process", ports: "IN Enter:flow, OUT Next:flow, optional data input/output rows" },
       { type: "object", purpose: "GameObject / target reference", ports: "OUT GameObject:GameObject" },
       { type: "component", purpose: "Unity component reference", config: "componentType", ports: "OUT component reference" },
       { type: "struct", purpose: "C# value type with fields and methods", ports: "member ports" },
@@ -11611,6 +11738,8 @@
 
     const configProperties = {
       componentType: Schema.string(),
+      flowIoMode: Schema.string(),
+      flowChartDataType: Schema.string(),
       eventKind: Schema.string(),
       actionKind: Schema.string(),
       stateKind: Schema.string(),
@@ -11793,6 +11922,11 @@
       node[key] = config[key];
     };
 
+    if (node.type === "flowIO") {
+      assignString("flowIoMode", ["input", "output"]);
+      assignString("flowChartDataType");
+      syncFlowIONode(node);
+    }
     if (node.type === "constant") {
       assignString("constantType");
       assignString("constantValue");
@@ -12784,20 +12918,31 @@
     }
 
     if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
-    const shortcuts = {
-      o: "object",
-      c: "class",
-      f: "function",
-      v: "variable",
-      d: "condition",
-      u: "ui",
-      n: "note",
-      e: "event",
-      a: "action",
-      s: "state",
-      m: "enum",
-      x: "emptyGraph"
-    };
+    const shortcuts = currentSchemaId() === "classic"
+      ? {
+          s: "flowStart",
+          p: "flowProcess",
+          i: "flowIO",
+          z: "flowEnd",
+          f: "function",
+          v: "variable",
+          n: "note",
+          x: "emptyGraph"
+        }
+      : {
+          o: "object",
+          c: "class",
+          f: "function",
+          v: "variable",
+          d: "condition",
+          u: "ui",
+          n: "note",
+          e: "event",
+          a: "action",
+          s: "state",
+          m: "enum",
+          x: "emptyGraph"
+        };
     const type = shortcuts[event.key.toLowerCase()];
     if (type) addNode(type);
   });
