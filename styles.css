@@ -9147,3 +9147,118 @@ html[data-ui-theme="light"] .home-nav button.active{
     padding-right:0;
   }
 }
+
+
+/* v2.54 — roomier public-site header */
+.home-topbar{
+  min-height:88px;
+  padding:0 42px;
+  gap:28px;
+}
+.home-brand{
+  display:flex;
+  align-items:center;
+  gap:11px;
+  flex:0 0 auto;
+  padding:8px 0;
+}
+.home-brand .brand-mark{
+  width:38px;
+  height:38px;
+  font-size:13px;
+  border-radius:10px;
+}
+.home-brand .brand-copy{
+  gap:1px;
+}
+.home-brand .brand-copy strong{
+  font-size:17px;
+}
+.home-brand .build-badge{
+  margin-left:4px;
+}
+.home-nav{
+  gap:10px;
+  margin-left:auto;
+  margin-right:18px;
+}
+.home-nav button{
+  min-height:40px;
+  padding:0 14px;
+  border-radius:9px;
+  font-size:11.5px;
+}
+.home-nav button.active::before{
+  margin-right:7px;
+}
+.home-account{
+  gap:15px;
+  flex:0 0 auto;
+}
+.home-account .sync-state{
+  gap:8px;
+  font-size:10px;
+  line-height:1.35;
+}
+.home-account .google-login-button{
+  min-height:42px;
+  padding:0 15px;
+  gap:9px;
+  border-radius:10px;
+  font-size:11px;
+}
+.home-account .google-g{
+  width:22px;
+  height:22px;
+}
+.site-pages{
+  scroll-margin-top:88px;
+}
+
+html[data-ui-theme="light"] .home-topbar{
+  background:rgba(255,255,255,.96);
+  border-color:#d9dde3;
+}
+html[data-ui-theme="light"] .home-nav button{
+  color:#5f6772;
+}
+html[data-ui-theme="light"] .home-nav button:hover{
+  border-color:#d7dce4;
+  background:#f2f4f7;
+  color:#252a31;
+}
+html[data-ui-theme="light"] .home-nav button.active{
+  border-color:#cbd7de;
+  background:#eef4f7;
+  color:#26323a;
+}
+
+@media(max-width:1040px){
+  .home-topbar{
+    padding:0 28px;
+    gap:18px;
+  }
+  .home-nav{
+    gap:5px;
+    margin-right:8px;
+  }
+  .home-nav button{
+    padding:0 10px;
+  }
+  .home-account{
+    gap:10px;
+  }
+}
+@media(max-width:760px){
+  .home-topbar{
+    min-height:76px;
+    padding:0 18px;
+  }
+  .home-brand .brand-mark{
+    width:35px;
+    height:35px;
+  }
+  .home-account .google-login-button{
+    min-height:40px;
+  }
+}
