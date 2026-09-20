@@ -4370,8 +4370,19 @@
     if (!oldName || !newName || oldName === newName) return;
 
     project.nodes.forEach((target) => {
-      if (target.type === "enumSwitch" && target.switchEnumType === oldName) {
-        target.switchEnumType = newName;
+      if (target.type === "switch" && target.switchValueType === oldName) {
+        target.switchValueType = newName;
+        syncSwitchNode(target);
+      }
+      if (target.type === "adapter") {
+        if (target.adapterInputType === oldName) target.adapterInputType = newName;
+        if (target.adapterOutputType === oldName) target.adapterOutputType = newName;
+        syncAdapterNode(target);
+      }
+      if (target.type === "foreachLoop" && target.foreachItemType === oldName) {
+        target.foreachItemType = newName;
+        const itemRow = target.rows.find((item) => item && item.id === "foreach_item");
+        if (itemRow) itemRow.value = newName;
       }
 
       if (target.type === "function") {
@@ -8058,7 +8069,8 @@
     renderTypeSettings(node);
 
     const classLike = node.type === "class" || node.type === "object";
-    const directStructured = ["function", "enum", "event", "action", "state", "condition", "enumSwitch"].includes(node.type);
+    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"];
+    const directStructured = ["function", "enum", "adapter"].concat(flowStructured).includes(node.type);
     $("addVariable").style.display = classLike ? "" : "none";
     $("addMethod").style.display = classLike ? "" : "none";
     $("addEvent").style.display = node.type === "class" ? "" : "none";
@@ -8069,8 +8081,10 @@
       ? "Variabili, metodi e UnityEvent sono separati e collegabili."
       : node.type === "function"
         ? "La firma è strutturata in Parameters, Description, Return e Logic."
-        : ["event", "action", "state", "condition", "enumSwitch"].includes(node.type)
+        : flowStructured.includes(node.type)
           ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
+          : node.type === "adapter"
+            ? "Adapter converte esplicitamente il tipo dell'ingresso nel tipo dell'uscita."
           : node.type === "enum"
             ? "I valori dell'Enum si modificano direttamente nel blocco."
             : "Contenuto libero del blocco.";
