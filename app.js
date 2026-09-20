@@ -4670,9 +4670,13 @@
     cloudState.presenceUnsubscribe = cloudState.api.onSnapshot(presenceCollection, (snapshot) => {
       const next = new Map();
       const receivedAt = Date.now();
+      const changedIds = new Set(snapshot.docChanges().map((change) => change.doc.id));
       snapshot.forEach((docSnapshot) => {
         const value = docSnapshot.data() || {};
-        value._receivedAt = receivedAt;
+        const previous = cloudState.remotePresence.get(value.uid || docSnapshot.id);
+        value._receivedAt = changedIds.has(docSnapshot.id)
+          ? receivedAt
+          : (previous && previous._receivedAt ? previous._receivedAt : receivedAt);
         if (value.uid) next.set(value.uid, value);
       });
       cloudState.remotePresence = next;
@@ -4703,7 +4707,7 @@
         };
         if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
         cloudState.remoteNodePositions.set(position.id, position);
-        if (position.updatedBy !== cloudState.user.uid) applyRemoteNodePositions([position]);
+        applyRemoteNodePositions([position]);
       });
     }, (error) => {
       console.warn("ProjectFlow: posizioni realtime non disponibili.", error);
