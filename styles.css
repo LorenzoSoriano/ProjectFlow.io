@@ -7074,3 +7074,18 @@ body,
 .edge-layer.force-connections .auto-type-glow{
   opacity:.12;
 }
+
+
+/* v2.21 — single-connection focus */
+.auto-type-hit{
+  fill:none;
+  stroke:transparent;
+  stroke-width:16;
+  vector-effect:non-scaling-stroke;
+  pointer-events:stroke;
+  cursor:pointer;
+}
+.auto-type-edge.selected{
+  stroke-width:2.8;
+  opacity:1!important;
+}
