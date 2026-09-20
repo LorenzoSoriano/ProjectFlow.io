@@ -4141,7 +4141,7 @@
         String(error.message || "").toLowerCase().includes("permission")
       );
       const message = denied
-        ? "Accesso negato da Firebase. Il codice può essere valido, ma le regole di condivisione non consentono ancora il collegamento."
+        ? "Accesso Firebase negato durante il collegamento. Le regole Firestore pubblicate non corrispondono ancora al nuovo accesso tramite codice."
         : "Collegamento non riuscito. Controlla il codice e riprova.";
       setProjectJoinStatus(message, "error");
       showToast(denied ? "Accesso Firebase negato" : "Accesso con codice non riuscito");
