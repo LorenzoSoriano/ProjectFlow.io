@@ -764,6 +764,43 @@
     return (presets[componentType] || []).map((item) => item);
   }
 
+  function applyStandaloneComponentType(node, nextType) {
+    if (!node || node.type !== "component" || !nextType) return;
+    const previousRows = Array.isArray(node.rows) ? node.rows.slice() : [];
+    const output = previousRows.find((item) => item && item.kind === "output") || row(nextType, nextType, "output");
+    output.label = nextType;
+    output.value = nextType;
+
+    const previousByLabel = new Map(
+      previousRows
+        .filter((item) => item && (item.kind === "variable" || item.kind === "property"))
+        .map((item) => [String(item.label || "").toLowerCase(), item])
+    );
+
+    const presetRows = componentPresetRows(nextType).map((preset) => {
+      const existing = previousByLabel.get(String(preset.label || "").toLowerCase());
+      if (!existing) return preset;
+      existing.kind = preset.kind;
+      existing.dataType = preset.dataType;
+      existing.value = preset.value;
+      existing.access = preset.access;
+      return existing;
+    });
+
+    const keptIds = new Set([output.id].concat(presetRows.map((item) => item.id)));
+    project.connections = project.connections.filter((edge) =>
+      !(edge.from.nodeId === node.id && !keptIds.has(edge.from.rowId)) &&
+      !(edge.to.nodeId === node.id && !keptIds.has(edge.to.rowId))
+    );
+
+    node.componentType = nextType;
+    node.componentCategory = componentCategoryFor(nextType);
+    node.componentSource = "unity";
+    node.title = nextType;
+    node.rows = [output].concat(presetRows);
+    ensureNodeMeta(node);
+  }
+
   function publicClassNodes() {
     return project.nodes.filter((node) => node.type === "class" && node.classVisibility === "public");
   }
@@ -7557,6 +7594,25 @@
         );
         const otherItems = node.rows.filter((item) => !["variable", "property", "function", "unityEvent", "component"].includes(item.kind));
         if (otherItems.length) appendSection("OTHER", otherItems, []);
+      } else if (node.type === "struct" || node.type === "jobStruct") {
+        appendSection(
+          node.type === "jobStruct" ? "JOB DATA" : "FIELDS",
+          node.rows.filter((item) => item.kind === "variable" || item.kind === "property"),
+          [
+            { label: "Field", value: "variable" },
+            { label: "Array field", value: "arrayVariable" },
+            { label: "List field", value: "listVariable" }
+          ]
+        );
+        appendSection(
+          node.type === "jobStruct" ? "EXECUTE / METHODS" : "METHODS",
+          node.rows.filter((item) => item.kind === "function"),
+          node.type === "jobStruct"
+            ? [{ label: "Helper method", value: "method" }]
+            : [{ label: "Method", value: "method" }]
+        );
+        const otherItems = node.rows.filter((item) => !["variable", "property", "function"].includes(item.kind));
+        if (otherItems.length) appendSection("OTHER", otherItems, []);
       } else {
         node.rows.forEach((item) => body.appendChild(makeRowElement(item)));
       }
@@ -8665,6 +8721,141 @@
     container.innerHTML = "";
     ensureNodeMeta(node);
 
+    if (node.type === "component") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "UNITY COMPONENT";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+
+      const componentOptions = [];
+      UNITY_COMPONENT_CATEGORIES.forEach((category) => {
+        category.components.forEach((componentType) => {
+          componentOptions.push([componentType, category.label + " · " + componentType]);
+        });
+      });
+
+      grid.appendChild(inspectorField("COMPONENT TYPE", selectControl(node.componentType, componentOptions, (value) => {
+        applyStandaloneComponentType(node, value);
+        $("nodeTitle").value = node.title;
+        render();
+        renderInspector();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("CATEGORY", textControl(componentCategoryLabel(node.componentCategory), "", () => {})));
+      const categoryInput = grid.lastChild && grid.lastChild.querySelector("input");
+      if (categoryInput) categoryInput.disabled = true;
+
+      grid.appendChild(inspectorField("SOURCE", selectControl(node.componentSource || "unity", [
+        ["unity", "Unity built-in"],
+        ["script", "Custom script"]
+      ], (value) => {
+        node.componentSource = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      container.appendChild(grid);
+
+      const hint = document.createElement("div");
+      hint.className = "unity-hint";
+      hint.textContent = "Le proprietà visibili nel blocco seguono il tipo di componente selezionato.";
+      container.appendChild(hint);
+    }
+
+    if (node.type === "struct") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "C# STRUCT";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      grid.appendChild(inspectorField("VISIBILITÀ", selectControl(node.structVisibility, [
+        ["public", "public"],
+        ["internal", "internal"]
+      ], (value) => {
+        node.structVisibility = value;
+        renderNodes();
+        markDirty();
+      })));
+      grid.appendChild(checkboxControl(node.structReadonly, "readonly struct", (checked) => {
+        node.structReadonly = checked;
+        renderNodes();
+        markDirty();
+      }));
+      grid.appendChild(checkboxControl(node.structSerializable, "[Serializable]", (checked) => {
+        node.structSerializable = checked;
+        renderNodes();
+        markDirty();
+      }));
+      container.appendChild(grid);
+
+      const hint = document.createElement("div");
+      hint.className = "unity-hint";
+      hint.textContent = "Struct è un value type: usa campi per dati compatti e metodi senza identità di riferimento.";
+      container.appendChild(hint);
+    }
+
+    if (node.type === "jobStruct") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "UNITY JOB";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      grid.appendChild(inspectorField("VISIBILITÀ", selectControl(node.structVisibility, [
+        ["public", "public"],
+        ["internal", "internal"]
+      ], (value) => {
+        node.structVisibility = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(inspectorField("JOB INTERFACE", selectControl(node.jobInterface, [
+        ["IJob", "IJob"],
+        ["IJobFor", "IJobFor"],
+        ["IJobParallelFor", "IJobParallelFor"],
+        ["IJobEntity", "IJobEntity"]
+      ], (value) => {
+        node.jobInterface = value;
+        if (value === "IJob" && node.jobScheduleMode === "ScheduleParallel") node.jobScheduleMode = "Schedule";
+        syncJobExecuteMethod(node);
+        render();
+        renderInspector();
+        markDirty();
+      })));
+
+      const scheduleOptions = node.jobInterface === "IJob"
+        ? [["Run", "Run"], ["Schedule", "Schedule"]]
+        : [["Run", "Run"], ["Schedule", "Schedule"], ["ScheduleParallel", "Schedule Parallel"]];
+      grid.appendChild(inspectorField("SCHEDULING", selectControl(node.jobScheduleMode, scheduleOptions, (value) => {
+        node.jobScheduleMode = value;
+        renderNodes();
+        markDirty();
+      })));
+
+      grid.appendChild(checkboxControl(node.jobBurst, "Burst compile", (checked) => {
+        node.jobBurst = checked;
+        renderNodes();
+        markDirty();
+      }));
+
+      container.appendChild(grid);
+
+      const hint = document.createElement("div");
+      hint.className = "unity-hint";
+      hint.textContent = node.jobInterface === "IJobEntity"
+        ? "IJobEntity richiede Unity Entities. I parametri di Execute dipendono dai componenti ECS usati."
+        : "Execute viene sincronizzato automaticamente con l'interfaccia Job selezionata.";
+      container.appendChild(hint);
+    }
+
     if (node.type === "class") {
       const title = document.createElement("div");
       title.className = "dynamic-section-title";
@@ -8867,7 +9058,7 @@
     head.append(badge, remove);
     wrapper.appendChild(head);
 
-    if (node.type !== "class") {
+    if (!["class", "struct", "jobStruct"].includes(node.type)) {
       const kindSelect = selectControl(item.kind, Object.keys(ROW_META).map((key) => [key, ROW_META[key].label]), (value) => {
         item.kind = value;
         normalizeMember(item);
@@ -9139,6 +9330,10 @@
 
     ensureNodeMeta(node);
     $("inspectorTitle").textContent = node.title;
+    $("inspectorTypeChip").textContent = typeMeta(node.type).label.toUpperCase();
+    $("inspectorTypeChip").style.borderColor = typeMeta(node.type).color;
+    $("inspectorTypeChip").style.color = typeMeta(node.type).color;
+    $("inspectorSubtitle").textContent = nodeSubtitle(node);
     $("nodeType").value = node.type;
     $("nodeTitle").value = node.title;
     $("nodeDescription").value = node.description;
@@ -9146,28 +9341,52 @@
 
     renderTypeSettings(node);
 
-    const classLike = node.type === "class" || node.type === "object";
-    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
-    const directStructured = ["function", "enum", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
-    $("addVariable").style.display = classLike ? "" : "none";
-    $("addMethod").style.display = classLike ? "" : "none";
-    $("addEvent").style.display = node.type === "class" ? "" : "none";
-    $("addRow").style.display = classLike || directStructured ? "none" : "";
+    const contextSection = $("inspectorContextSection");
+    const typeSettings = $("nodeTypeSettings");
+    const hasContextSettings = !!(typeSettings && typeSettings.children.length);
+    contextSection.style.display = hasContextSettings ? "" : "none";
 
-    $("contentSectionLabel").textContent = node.type === "class" ? "MEMBRI DELLA CLASSE" : "CONTENUTO";
-    $("contentSectionHint").textContent = node.type === "class"
-      ? "Variabili, metodi e UnityEvent sono separati e collegabili."
-      : node.type === "function"
-        ? "La firma è strutturata in Parameters, Description, Return e Logic."
-        : flowStructured.includes(node.type)
-          ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
-          : node.type === "adapter"
-            ? "Adapter converte esplicitamente il tipo dell'ingresso nel tipo dell'uscita."
-          : ["math", "logic", "compare"].includes(node.type)
-            ? "Nodi matematici e logici con porte DATA tipate."
-          : node.type === "enum"
-            ? "I valori dell'Enum si modificano direttamente nel blocco."
-            : "Contenuto libero del blocco.";
+    const structureLike = ["class", "struct", "jobStruct"].includes(node.type);
+    const objectLike = node.type === "object";
+    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
+    const directStructured = ["function", "enum", "constant", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
+
+    $("addVariable").style.display = (structureLike || objectLike) ? "" : "none";
+    $("addMethod").style.display = structureLike ? "" : "none";
+    $("addEvent").style.display = node.type === "class" ? "" : "none";
+    $("addRow").style.display = (structureLike || objectLike || directStructured || node.type === "component") ? "none" : "";
+
+    const labels = {
+      class: ["CLASS MEMBERS", "Variabili, metodi e UnityEvent della classe."],
+      struct: ["STRUCT MEMBERS", "Campi e metodi del value type."],
+      jobStruct: ["JOB DATA & EXECUTE", "Dati del job e metodo Execute sincronizzato con l'interfaccia."],
+      object: ["GAMEOBJECT DATA", "Componenti e dati appartenenti al GameObject."],
+      component: ["COMPONENT API", "Riferimento e proprietà principali del componente Unity."],
+      function: ["FUNCTION", "Firma e porte della funzione; la logica avanzata vive nel Function Body."],
+      enum: ["ENUM VALUES", "Valori nominati disponibili come tipo nel progetto."]
+    };
+    const labelInfo = labels[node.type] || [
+      flowStructured.includes(node.type) ? "FLOW / DATA PORTS" : "CONTENT",
+      flowStructured.includes(node.type)
+        ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
+        : "Porte e contenuto del blocco."
+    ];
+    $("contentSectionLabel").textContent = labelInfo[0];
+    $("contentSectionHint").textContent = labelInfo[1];
+
+    const pseudoVisible = ["class", "struct", "jobStruct", "object", "event", "action", "note"].includes(node.type);
+    $("inspectorPseudoSection").style.display = pseudoVisible ? "" : "none";
+
+    const contextTitles = {
+      component: ["UNITY COMPONENT", "Tipo, categoria e origine del componente"],
+      class: ["CLASS / UNITY", "Base type, visibilità e accesso"],
+      struct: ["STRUCTURE", "Semantica C# della struct"],
+      jobStruct: ["UNITY JOB", "Interfaccia Job, scheduling e Burst"],
+      function: ["FUNCTION SIGNATURE", "Owner, accesso, tipo e return"]
+    };
+    const contextInfo = contextTitles[node.type] || ["SETTINGS", "Impostazioni specifiche del blocco"];
+    $("inspectorContextTitle").textContent = contextInfo[0];
+    $("inspectorContextHint").textContent = contextInfo[1];
 
     const list = $("rowEditorList");
     list.innerHTML = "";
@@ -9186,6 +9405,10 @@
       appendGroup("METHODS", node.rows.filter((item) => item.kind === "function"));
       appendGroup("UNITY EVENTS", node.rows.filter((item) => item.kind === "unityEvent"));
       appendGroup("OTHER", node.rows.filter((item) => !["variable", "property", "function", "unityEvent"].includes(item.kind)));
+    } else if (node.type === "struct" || node.type === "jobStruct") {
+      appendGroup(node.type === "jobStruct" ? "JOB DATA" : "FIELDS", node.rows.filter((item) => item.kind === "variable" || item.kind === "property"));
+      appendGroup(node.type === "jobStruct" ? "EXECUTE / METHODS" : "METHODS", node.rows.filter((item) => item.kind === "function"));
+      appendGroup("OTHER", node.rows.filter((item) => !["variable", "property", "function"].includes(item.kind)));
     } else {
       node.rows.forEach((item) => list.appendChild(renderMemberEditor(node, item)));
     }
@@ -11196,7 +11419,11 @@
   $("addVariable").addEventListener("click", () => {
     const node = selectedNode();
     if (!node) return;
-    node.rows.push(variableRow("newVariable", "int", "private"));
+    node.rows.push(variableRow(
+      node.type === "struct" || node.type === "jobStruct" ? "newField" : "newVariable",
+      "int",
+      node.type === "struct" || node.type === "jobStruct" ? "public" : "private"
+    ));
     render();
     renderInspector();
     markDirty();
