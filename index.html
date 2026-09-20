@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260920-0315" />
+  <link rel="stylesheet" href="styles.css?v=20260920-0345" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.22</span>
+        <span class="build-badge" title="Build corrente">v2.23</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -395,7 +395,7 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.22</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.23</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -420,7 +420,6 @@
               <button class="canvas-tool active" id="selectTool" title="Seleziona">↖</button>
               <button class="canvas-tool" id="connectTool" title="Collega blocchi">⌁</button>
               <button class="canvas-tool connection-visibility-tool" id="forceConnectionsView" type="button" title="Forza la visione di tutte le connessioni" aria-pressed="false">◎ <span>Connessioni</span></button>
-              <button class="canvas-tool ai-builder-tool" id="aiBuilderButton" type="button" title="Apri AI Graph Builder" aria-expanded="false">✦ <span>AI</span></button>
               <button class="canvas-tool group-tool" id="createGroup" title="Raggruppa i blocchi selezionati (Ctrl/Cmd+G)">▭ <span id="groupActionLabel">Raggruppa</span></button>
               <span class="tool-separator"></span>
               <button class="canvas-tool history-tool" id="undoAction" type="button" title="Annulla (Ctrl/Cmd+Z)" disabled>↶</button>
@@ -483,39 +482,46 @@
           </div>
         </aside>
 
-        <aside class="side-work-panel ai-builder-panel" id="aiBuilderPanel" aria-hidden="true">
-          <div class="side-work-panel-head">
-            <div>
-              <span class="eyebrow">AI GRAPH BUILDER · LOCALE</span>
-              <strong>Costruisci dal linguaggio naturale</strong>
-            </div>
-            <button class="new-block-close" id="closeAiBuilder" type="button" aria-label="Chiudi">×</button>
-          </div>
-          <div class="ai-builder-status">
-            <span class="ai-builder-status-dot"></span>
-            Gratis · nessuna API key · modifica il graph locale
-          </div>
-          <div class="ai-builder-messages" id="aiBuilderMessages" aria-live="polite">
-            <div class="ai-message assistant">
-              <span class="ai-message-role">ProjectFlow AI</span>
-              <p>Descrivi una logica da creare. Per esempio: <strong>“Aggiungi un controllo Door open closed”</strong>.</p>
-            </div>
-          </div>
-          <div class="ai-builder-examples" aria-label="Esempi AI">
-            <button type="button" data-ai-example="Aggiungi un controllo Door open closed">Door open / closed</button>
-            <button type="button" data-ai-example="Crea un controllo Light on off">Light on / off</button>
-            <button type="button" data-ai-example="Quando il player interagisce apri il menu">Evento → azione</button>
-          </div>
-          <form class="ai-builder-compose" id="aiBuilderForm">
-            <textarea id="aiBuilderPrompt" rows="3" placeholder="Es. Aggiungi un controllo Door open closed" autocomplete="off"></textarea>
-            <div class="ai-builder-compose-foot">
-              <small>Le modifiche sono annullabili con Ctrl/Cmd+Z.</small>
-              <button id="aiBuilderSend" type="submit">Genera graph</button>
-            </div>
-          </form>
-        </aside>
-
         <div class="canvas-viewport" id="canvasViewport" tabindex="0">
+          <div class="ai-builder-dock" id="aiBuilderDock">
+            <button class="ai-builder-toggle" id="aiBuilderButton" type="button" title="Apri AI Graph Builder" aria-expanded="false">
+              <span class="ai-builder-toggle-icon">✦</span>
+              <span class="ai-builder-toggle-label">AI Builder</span>
+              <span class="ai-builder-toggle-chevron">⌃</span>
+            </button>
+            <aside class="ai-builder-panel" id="aiBuilderPanel" aria-hidden="true">
+              <div class="side-work-panel-head">
+                <div>
+                  <span class="eyebrow">AI GRAPH BUILDER · LOCALE</span>
+                  <strong>Costruisci dal linguaggio naturale</strong>
+                </div>
+                <button class="new-block-close" id="closeAiBuilder" type="button" aria-label="Chiudi">×</button>
+              </div>
+              <div class="ai-builder-status">
+                <span class="ai-builder-status-dot"></span>
+                Gratis · nessuna API key · modifica il graph locale
+              </div>
+              <div class="ai-builder-messages" id="aiBuilderMessages" aria-live="polite">
+                <div class="ai-message assistant">
+                  <span class="ai-message-role">ProjectFlow AI</span>
+                  <p>Descrivi una logica da creare. Per esempio: <strong>“Aggiungi un controllo Door open closed”</strong>.</p>
+                </div>
+              </div>
+              <div class="ai-builder-examples" aria-label="Esempi AI">
+                <button type="button" data-ai-example="Aggiungi un controllo Door open closed">Door open / closed</button>
+                <button type="button" data-ai-example="Crea un controllo Light on off">Light on / off</button>
+                <button type="button" data-ai-example="Quando il player interagisce apri il menu">Evento → azione</button>
+              </div>
+              <form class="ai-builder-compose" id="aiBuilderForm">
+                <textarea id="aiBuilderPrompt" rows="3" placeholder="Es. Aggiungi un controllo Door open closed" autocomplete="off"></textarea>
+                <div class="ai-builder-compose-foot">
+                  <small>Le modifiche sono annullabili con Ctrl/Cmd+Z.</small>
+                  <button id="aiBuilderSend" type="submit">Genera graph</button>
+                </div>
+              </form>
+            </aside>
+          </div>
+
           <div class="world" id="world">
             <div class="group-layer" id="groupLayer"></div>
             <svg class="edge-layer" id="edgeLayer" aria-hidden="true"></svg>
@@ -674,7 +680,7 @@
     </div>
   </div>
 
-  <script src="firebase-config.js?v=20260920-0315"></script>
-  <script src="app.js?v=20260920-0315"></script>
+  <script src="firebase-config.js?v=20260920-0345"></script>
+  <script src="app.js?v=20260920-0345"></script>
 </body>
 </html>
