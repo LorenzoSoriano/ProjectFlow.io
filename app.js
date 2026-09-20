@@ -1483,10 +1483,9 @@
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
-  const AI_LOCAL_MODEL_ID = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-  let aiLocalEngine = null;
-  let aiLocalEnginePromise = null;
-  let aiLocalModelModule = null;
+  const GEMINI_MODEL_ID = "gemini-3.8-flash";
+  let geminiModel = null;
+  let geminiModelPromise = null;
   let zoomSharpTimer = null;
   let interactionFrame = null;
   let interactionNeedsGroups = false;
@@ -1509,6 +1508,7 @@
     configured: !!(window.PROJECTFLOW_FIREBASE_CONFIG && window.PROJECTFLOW_FIREBASE_CONFIG.projectId),
     ready: false,
     loadingPromise: null,
+    app: null,
     user: null,
     auth: null,
     db: null,
@@ -2588,6 +2588,7 @@
         const provider = new authApi.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: "select_account" });
 
+        cloudState.app = firebaseApp;
         cloudState.auth = auth;
         cloudState.db = db;
         cloudState.provider = provider;
@@ -10119,7 +10120,7 @@
   function aiBuilderSetStatus(text, state) {
     const status = $("aiBuilderStatus");
     const copy = $("aiBuilderStatusText");
-    if (copy) copy.textContent = text || "AI locale";
+    if (copy) copy.textContent = text || "Gemini via Firebase";
     if (status) {
       status.classList.remove("loading", "ready", "error", "fallback");
       if (state) status.classList.add(state);
@@ -10207,43 +10208,137 @@
     }
   }
 
-  async function aiGetLocalEngine() {
-    if (aiLocalEngine) return aiLocalEngine;
-    if (aiLocalEnginePromise) return aiLocalEnginePromise;
-    if (!window.isSecureContext) throw new Error("Il modello locale richiede HTTPS o localhost.");
-    if (!navigator.gpu) throw new Error("WebGPU non è disponibile in questo browser/dispositivo.");
-
-    aiLocalEnginePromise = (async () => {
-      aiBuilderSetStatus("Caricamento runtime AI…", "loading");
-      if (!aiLocalModelModule) {
-        aiLocalModelModule = await import("https://esm.run/@mlc-ai/web-llm");
-      }
-      const webllm = aiLocalModelModule;
-      const engine = await webllm.CreateMLCEngine(AI_LOCAL_MODEL_ID, {
-        initProgressCallback: (report) => {
-          const progress = typeof report.progress === "number"
-            ? Math.max(0, Math.min(100, Math.round(report.progress * 100)))
-            : null;
-          const label = progress !== null
-            ? "Caricamento modello locale · " + progress + "%"
-            : (report.text || "Caricamento modello locale…");
-          aiBuilderSetStatus(label, "loading");
+  function aiPlannerResponseSchema() {
+    return {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        groupTitle: { type: "string" },
+        nodes: {
+          type: "array",
+          maxItems: 28,
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              type: { type: "string" },
+              title: { type: "string" },
+              description: { type: "string" },
+              pseudo: { type: "string" },
+              config: {
+                type: "object",
+                nullable: true,
+                properties: {
+                  componentType: { type: "string", nullable: true },
+                  eventKind: { type: "string", nullable: true },
+                  actionKind: { type: "string", nullable: true },
+                  stateKind: { type: "string", nullable: true },
+                  foreachItemType: { type: "string", nullable: true },
+                  mathOperation: { type: "string", nullable: true },
+                  mathDataType: { type: "string", nullable: true },
+                  logicOperation: { type: "string", nullable: true },
+                  compareOperation: { type: "string", nullable: true },
+                  compareDataType: { type: "string", nullable: true },
+                  adapterInputType: { type: "string", nullable: true },
+                  adapterOutputType: { type: "string", nullable: true }
+                }
+              },
+              rows: {
+                type: "array",
+                nullable: true,
+                maxItems: 12,
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string" },
+                    kind: { type: "string" },
+                    dataType: { type: "string" },
+                    defaultValue: { type: "string", nullable: true }
+                  },
+                  required: ["label", "kind", "dataType"]
+                }
+              },
+              column: { type: "integer" },
+              row: { type: "integer" }
+            },
+            required: ["key", "type", "title", "description", "pseudo", "column", "row"]
+          }
         },
-        logLevel: "WARN"
-      }, {
-        context_window_size: 4096
+        connections: {
+          type: "array",
+          maxItems: 56,
+          items: {
+            type: "object",
+            properties: {
+              from: {
+                type: "object",
+                properties: {
+                  node: { type: "string" },
+                  port: { type: "string" }
+                },
+                required: ["node", "port"]
+              },
+              to: {
+                type: "object",
+                properties: {
+                  node: { type: "string" },
+                  port: { type: "string" }
+                },
+                required: ["node", "port"]
+              },
+              dataType: { type: "string" }
+            },
+            required: ["from", "to", "dataType"]
+          }
+        }
+      },
+      required: ["summary", "groupTitle", "nodes", "connections"]
+    };
+  }
+
+  async function aiGetGeminiModel() {
+    if (geminiModel) return geminiModel;
+    if (geminiModelPromise) return geminiModelPromise;
+
+    geminiModelPromise = (async () => {
+      if (!cloudState.configured) {
+        throw new Error("Configurazione Firebase mancante.");
+      }
+
+      aiBuilderSetStatus("Connessione a Firebase AI Logic…", "loading");
+      const ready = await initCloud(true);
+      if (!ready || !cloudState.app) {
+        throw new Error("Firebase non è disponibile.");
+      }
+
+      const base = "https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/";
+      const aiApi = await import(base + "firebase-ai.js");
+      const ai = aiApi.getAI(cloudState.app, {
+        backend: new aiApi.GoogleAIBackend()
       });
-      aiLocalEngine = engine;
-      aiBuilderSetStatus("AI locale generativa pronta", "ready");
-      return engine;
+
+      geminiModel = aiApi.getGenerativeModel(ai, {
+        model: GEMINI_MODEL_ID,
+        systemInstruction: aiPlannerSystemPrompt(),
+        generationConfig: {
+          temperature: 0.25,
+          topP: 0.9,
+          maxOutputTokens: 1800,
+          responseMimeType: "application/json",
+          responseSchema: aiPlannerResponseSchema()
+        }
+      });
+
+      aiBuilderSetStatus("Gemini · " + GEMINI_MODEL_ID + " · pronto", "ready");
+      return geminiModel;
     })();
 
     try {
-      return await aiLocalEnginePromise;
+      return await geminiModelPromise;
     } catch (error) {
-      aiLocalEnginePromise = null;
-      aiLocalEngine = null;
-      aiBuilderSetStatus("AI locale non disponibile", "error");
+      geminiModelPromise = null;
+      geminiModel = null;
+      aiBuilderSetStatus("Gemini non disponibile", "error");
       throw error;
     }
   }
@@ -10469,51 +10564,22 @@
     }
   }
 
-  function aiExecutePatternFallback(prompt) {
-    const source = aiNormalizePrompt(prompt);
-    const lower = source.toLowerCase();
-    if (!source) return null;
-    const toggleIntent =
-      /\b(toggle|open|closed|aperto|chiuso|on\s*off|on\/off|accendi|spegni|attivo|inattivo)\b/.test(lower) ||
-      (/\b(door|porta|gate|cancello|light|luce|lampada)\b/.test(lower) &&
-       /\b(controllo|control|gestione|stato|state)\b/.test(lower));
-    if (toggleIntent) return aiBuildToggleGraph(source);
-    return aiBuildEventActionGraph(source);
-  }
-
   async function aiExecuteBuilderPrompt(prompt) {
     const source = aiNormalizePrompt(prompt);
     if (!source) return null;
 
+    const model = await aiGetGeminiModel();
+    aiBuilderSetStatus("Gemini · sto progettando il graph…", "loading");
+
     try {
-      const engine = await aiGetLocalEngine();
-      aiBuilderSetStatus("AI locale · sto progettando il graph…", "loading");
-      const reply = await engine.chat.completions.create({
-        messages: [
-          { role: "system", content: aiPlannerSystemPrompt() },
-          { role: "user", content: aiPlannerUserPrompt(source) }
-        ],
-        temperature: 0.25,
-        top_p: 0.9,
-        max_tokens: 1800,
-        response_format: { type: "json_object" }
-      });
-      const content = reply && reply.choices && reply.choices[0] && reply.choices[0].message
-        ? reply.choices[0].message.content
-        : "";
+      const result = await model.generateContent(aiPlannerUserPrompt(source));
+      const content = result && result.response ? result.response.text() : "";
       const plan = aiValidatePlan(aiExtractJson(content));
-      const result = aiApplyGeneratedPlan(plan);
-      aiBuilderSetStatus("AI locale generativa pronta", "ready");
-      return result;
+      const applied = aiApplyGeneratedPlan(plan);
+      aiBuilderSetStatus("Gemini · " + GEMINI_MODEL_ID + " · pronto", "ready");
+      return applied;
     } catch (error) {
-      console.warn("ProjectFlow local AI fallback:", error);
-      const fallback = aiExecutePatternFallback(source);
-      if (fallback) {
-        aiBuilderSetStatus("Fallback locale · modello generativo non disponibile", "fallback");
-        fallback.message += " · Ho usato il planner di compatibilità perché il modello locale non era disponibile.";
-        return fallback;
-      }
-      aiBuilderSetStatus("AI locale non disponibile", "error");
+      aiBuilderSetStatus("Gemini · richiesta fallita", "error");
       throw error;
     }
   }
@@ -10541,10 +10607,10 @@
       console.error("ProjectFlow AI Builder:", error);
       aiBuilderAddMessage(
         "assistant",
-        "Non riesco ad avviare il modello locale su questo dispositivo: " +
+        "Gemini via Firebase AI Logic non è disponibile: " +
           String(error && error.message ? error.message : error)
       );
-      showToast("AI Builder · modello locale non disponibile");
+      showToast("AI Builder · Gemini non disponibile");
     } finally {
       if (button) button.disabled = false;
       requestAnimationFrame(() => input.focus());
