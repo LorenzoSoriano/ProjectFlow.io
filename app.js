@@ -1460,8 +1460,24 @@
   }
 
   function currentSchemaId() {
-    const documentProject = (typeof rootProject !== "undefined" && rootProject) || (typeof project !== "undefined" && project) || null;
+    const documentProject = rootProject || project || null;
     return normalizeProjectSchema(documentProject && documentProject.schema);
+  }
+
+  function schemaAllowsNodeType(type) {
+    if (["graphInput", "graphOutput", "note", "sketch"].includes(type)) return true;
+    const schema = currentSchemaId();
+    if (schema === "unity") return true;
+
+    const neutral = new Set([
+      "function", "emptyGraph", "enum",
+      "event", "action", "ifElse", "switch", "forLoop", "foreachLoop", "whileLoop", "doWhileLoop",
+      "breakFlow", "continueFlow", "returnFlow",
+      "constant", "variable", "adapter", "math", "logic", "compare"
+    ]);
+
+    if (schema === "classic") neutral.delete("enum");
+    return neutral.has(type);
   }
 
   function blankProject(name, schema) {
@@ -11420,7 +11436,8 @@
   }
 
   function aiSafeNodeType(type) {
-    return new Set(aiPlannerCatalog().map((entry) => entry.type)).has(type) ? type : null;
+    const supported = new Set(aiPlannerCatalog().map((entry) => entry.type));
+    return supported.has(type) && schemaAllowsNodeType(type) ? type : null;
   }
 
   function aiRowFromSpec(spec) {
@@ -11790,6 +11807,10 @@
   }
 
   function addNode(type, presetComponent, preset) {
+    if (!schemaAllowsNodeType(type)) {
+      showToast((TYPE_META[type] || TYPE_META.object).label + " non è disponibile nello schema " + projectSchemaMeta(currentSchemaId()).label + ".");
+      return;
+    }
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
     const node = defaultNode(type, center.x - nodeWidthFor(type) / 2 + offset, center.y - 100 + offset, presetComponent, preset);
