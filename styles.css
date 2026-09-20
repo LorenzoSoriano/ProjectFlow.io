@@ -6893,3 +6893,124 @@ body,
 .collaboration-layer{
   z-index:5;
 }
+
+
+/* v2.17 — programming control-flow blocks and universal data adapter */
+.type-switch,
+.type-ifElse,
+.type-whileLoop,
+.type-doWhileLoop,
+.type-forLoop,
+.type-foreachLoop{
+  --node-accent:#9b82c4;
+}
+.type-adapter{
+  --node-accent:#55a9b7;
+}
+.type-switch .node-type-dot,
+.type-ifElse .node-type-dot,
+.type-whileLoop .node-type-dot,
+.type-doWhileLoop .node-type-dot,
+.type-forLoop .node-type-dot,
+.type-foreachLoop .node-type-dot{
+  color:#b59ad8;
+}
+.type-adapter .node-type-dot{
+  color:#71c2cb;
+}
+.switch-meta-inline{
+  align-items:center;
+  gap:5px;
+}
+.switch-case-action{
+  width:27px;
+  height:27px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid #334052;
+  border-radius:7px;
+  background:#131b27;
+  color:#8795a8;
+  cursor:pointer;
+  font-weight:900;
+}
+.switch-case-action:hover:not(:disabled){
+  border-color:#52667d;
+  color:#dce5ed;
+}
+.switch-case-action:disabled{
+  opacity:.32;
+  cursor:default;
+}
+.switch-case-editor{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  padding:0 10px 8px;
+}
+.switch-case-input{
+  min-width:74px;
+  flex:1 1 84px;
+  height:27px;
+  border:1px solid #2e394b;
+  border-radius:7px;
+  background:#0d141f;
+  color:#aeb9c7;
+  padding:0 7px;
+  font-size:9px;
+}
+.adapter-meta-inline{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr) 30px;
+  align-items:center;
+  gap:5px;
+  padding:8px 10px 5px;
+}
+.adapter-meta-inline .type-picker{
+  min-width:0;
+}
+.adapter-type-picker{
+  width:100%;
+  min-width:0;
+  height:29px;
+  padding:0 8px;
+  border:1px solid #334052;
+  border-radius:7px;
+  background:#111925;
+  color:#aebbc8;
+  cursor:pointer;
+  font-size:9px;
+  font-weight:800;
+}
+.adapter-arrow{
+  display:grid;
+  place-items:center;
+  color:#6d8294;
+  font-size:14px;
+}
+.adapter-swap{
+  width:30px;
+  height:29px;
+  padding:0;
+  border:1px solid #334052;
+  border-radius:7px;
+  background:#111925;
+  color:#7fa6b4;
+  cursor:pointer;
+}
+.adapter-swap:hover{
+  border-color:#4f6877;
+  color:#c8e2e7;
+}
+.adapter-hint{
+  margin:0 10px 7px;
+  padding:6px 8px;
+  border:1px solid #263443;
+  border-radius:7px;
+  background:#0d151f;
+  color:#718393;
+  font-size:8px;
+  font-weight:750;
+  letter-spacing:.2px;
+}
