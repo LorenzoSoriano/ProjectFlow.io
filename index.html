@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.45</span>
+        <span class="build-badge" title="Build corrente">v2.46</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -404,7 +404,8 @@
       <div class="top-actions editor-top-actions">
         <div class="collab-presence topbar-presence" id="collabPresence" hidden></div>
         <button class="toolbar-button share-button" id="shareProjectButton" type="button" title="Condividi progetto" aria-expanded="false">⌁ <span>Condividi</span></button>
-        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account, dati e sincronizzazione" aria-haspopup="menu" aria-expanded="false">
+        <button class="toolbar-button page-menu-button" id="pageMenuButton" type="button" title="Page menu" aria-label="Page menu" aria-haspopup="menu" aria-expanded="false">•••</button>
+        <button class="toolbar-button editor-account-button" id="editorAuthButton" type="button" title="Account" aria-haspopup="menu" aria-expanded="false">
           <span class="account-avatar" id="editorAccountAvatar">G</span>
           <span id="editorAccountLabel">Accedi</span>
           <span class="account-chevron">▾</span>
@@ -705,25 +706,87 @@
   <div class="account-popover" id="accountMenu" role="menu" aria-hidden="true">
     <div class="account-popover-profile">
       <span class="account-menu-avatar" id="accountMenuAvatar">G</span>
-      <div><strong id="accountMenuName">Account</strong><small id="accountMenuEmail">Modalità locale</small></div>
+      <div><strong id="accountMenuName">Account</strong><small id="accountMenuEmail">Local mode</small></div>
     </div>
-    <div class="account-popover-status"><span class="sync-dot local" id="accountMenuSyncDot"></span><span id="accountMenuSyncText">Salvataggio locale</span></div>
-    <div class="account-popover-section">
-      <span class="account-popover-section-title">DATI PROGETTO</span>
-      <div class="account-popover-actions account-data-actions">
-        <button type="button" id="exportProject">↥ Esporta JSON</button>
-        <button type="button" id="importProject">↧ Importa JSON</button>
-        <button type="button" id="resetProject">◇ Carica demo inventario</button>
-      </div>
-    </div>
+    <div class="account-popover-status"><span class="sync-dot local" id="accountMenuSyncDot"></span><span id="accountMenuSyncText">Local saving</span></div>
     <div class="account-popover-section account-popover-section-main">
-      <span class="account-popover-section-title">ACCOUNT</span>
+      <span class="account-popover-section-title" id="accountSectionTitle">ACCOUNT</span>
       <div class="account-popover-actions">
-        <button type="button" id="accountSyncNow">↻ Sincronizza ora</button>
         <button type="button" id="accountPrivacy">ⓘ Privacy</button>
-        <button type="button" id="accountLogout" class="danger-text">Esci dall'account</button>
+        <button type="button" id="accountLogout" class="danger-text">Sign out</button>
       </div>
     </div>
+  </div>
+
+  <div class="page-popover" id="pageMenu" role="menu" aria-hidden="true">
+    <div class="page-popover-head">
+      <span class="eyebrow" id="pageMenuEyebrow">PAGE</span>
+      <strong id="pageMenuTitle">Page controls</strong>
+    </div>
+    <div class="page-popover-section">
+      <span class="page-popover-section-title" id="pageProjectSectionTitle">PROJECT</span>
+      <div class="page-popover-actions">
+        <button type="button" id="accountSyncNow">↻ <span id="pageSyncLabel">Synchronize</span></button>
+        <button type="button" id="exportProject">↥ <span id="pageExportLabel">Export JSON</span></button>
+        <button type="button" id="importProject">↧ <span id="pageImportLabel">Import JSON</span></button>
+        <button type="button" id="resetProject">◇ <span id="pageDemoLabel">Load Inventory Demo</span></button>
+      </div>
+    </div>
+    <div class="page-popover-section">
+      <span class="page-popover-section-title" id="pagePreferencesSectionTitle">PREFERENCES</span>
+      <div class="page-popover-actions">
+        <button type="button" id="pageOptions">⚙ <span id="pageOptionsLabel">Options</span></button>
+      </div>
+    </div>
+    <div class="page-popover-section">
+      <span class="page-popover-section-title" id="pageDangerSectionTitle">PAGE MANAGEMENT</span>
+      <div class="page-popover-actions">
+        <button type="button" id="pageDelete" class="danger-text">⌫ <span id="pageDeleteLabel">Delete page</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="options-overlay" id="optionsPanel" aria-hidden="true">
+    <section class="options-dialog" role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
+      <div class="options-dialog-head">
+        <div>
+          <span class="eyebrow" id="optionsEyebrow">PREFERENCES</span>
+          <strong id="optionsTitle">Options</strong>
+        </div>
+        <button class="new-block-close" id="closeOptionsPanel" type="button" aria-label="Close options">×</button>
+      </div>
+      <div class="options-dialog-body">
+        <label class="options-field">
+          <span id="optionLanguageLabel">Language</span>
+          <select id="optionLanguage">
+            <option value="en">English</option>
+            <option value="it">Italiano</option>
+          </select>
+          <small id="optionLanguageHelp">English is the default interface language.</small>
+        </label>
+        <label class="options-field">
+          <span id="optionTextSizeLabel">Text size</span>
+          <select id="optionTextSize">
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+          <small id="optionTextSizeHelp">Changes the readability of editor controls and panels.</small>
+        </label>
+        <label class="options-field">
+          <span id="optionThemeLabel">Interface tone</span>
+          <select id="optionTheme">
+            <option value="system">System</option>
+            <option value="dark">Black tone</option>
+            <option value="light">White tone</option>
+          </select>
+          <small id="optionThemeHelp">System follows the operating-system light or dark appearance.</small>
+        </label>
+      </div>
+      <div class="options-dialog-footer">
+        <button class="primary-button" id="optionsDone" type="button">Done</button>
+      </div>
+    </section>
   </div>
 
   <div class="create-project-overlay" id="createProjectDialog" aria-hidden="true">
@@ -780,7 +843,7 @@
     </div>
   </div>
 
-  <script src="firebase-config.js?v=20260920-1645"></script>
-  <script src="app.js?v=20260920-2355"></script>
+  <script src="firebase-config.js?v=20260920-2000"></script>
+  <script src="app.js?v=20260920-2000"></script>
 </body>
 </html>
