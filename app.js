@@ -3749,6 +3749,10 @@
       joinedAt: Date.now()
     }, { merge: true });
 
+    try {
+      await cloudState.api.deleteDoc(sharedKickDocumentRef(projectId, cloudState.user.uid));
+    } catch (error) {}
+
     const email = normalizeShareEmail(cloudState.user.email);
     if (email) {
       await cloudState.api.setDoc(inviteDocumentRef(email, projectId), {
@@ -3760,6 +3764,47 @@
     }
 
     return true;
+  }
+
+  async function ensureCurrentSharedMember(record) {
+    if (!record || !record.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    if (record.ownerId === cloudState.user.uid || record.sharedRole === "owner") return;
+
+    try {
+      await cloudState.api.setDoc(sharedMemberDocumentRef(record.sharedProjectId, cloudState.user.uid), {
+        uid: cloudState.user.uid,
+        email: normalizeShareEmail(cloudState.user.email),
+        name: cloudState.user.displayName || "",
+        role: "editor",
+        joinedAt: Date.now()
+      }, { merge: true });
+
+      try {
+        await cloudState.api.deleteDoc(sharedKickDocumentRef(record.sharedProjectId, cloudState.user.uid));
+      } catch (error) {}
+    } catch (error) {
+      console.warn("ProjectFlow: registrazione membro collaborativo non riuscita.", error);
+    }
+  }
+
+  function forceExitSharedProject(message) {
+    const activeRecord = projectRecordById(currentProjectId);
+    const sharedId = activeRecord && activeRecord.sharedProjectId
+      ? activeRecord.sharedProjectId
+      : cloudState.sharedProjectId;
+
+    stopSharedProjectSession();
+    cloudState.sharedMeta = null;
+
+    if (activeRecord && activeRecord.sharedRole === "editor") {
+      projectLibrary = projectLibrary.filter((entry) => entry.id !== activeRecord.id);
+      persistProjectLibrary();
+    }
+
+    setActiveProjectId("");
+    renderProjectLibrary();
+    showProjectHome("projects");
+    showToast(message || "Accesso al progetto condiviso revocato");
   }
 
   async function joinSharedProjectByCode(codeValue) {
