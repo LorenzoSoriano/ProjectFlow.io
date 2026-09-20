@@ -59,6 +59,9 @@
     doWhileLoop: { label: "Do While", icon: "⟳", color: "#6f91ad" },
     forLoop: { label: "For", icon: "i", color: "#6fb47b" },
     foreachLoop: { label: "Foreach", icon: "∀", color: "#6fb47b" },
+    breakFlow: { label: "Break", icon: "■", color: "#b87a63" },
+    continueFlow: { label: "Continue", icon: "↪", color: "#7e9fb7" },
+    returnFlow: { label: "Return", icon: "↩", color: "#8a78b5" },
     adapter: { label: "Adapter", icon: "↔", color: "#55a9b7" },
     math: { label: "Math", icon: "±", color: "#6fb47b" },
     logic: { label: "Logic", icon: "∧", color: "#c88455" },
@@ -475,6 +478,29 @@
     node.rows = [enter, selector].concat(outputs, [defaultRow]);
   }
 
+  function syncReturnFlowNode(node) {
+    if (!node || node.type !== "returnFlow") return;
+    if (typeof node.returnFlowType !== "string" || !node.returnFlowType) node.returnFlowType = "void";
+    if (typeof node.returnFlowInId !== "string" || !node.returnFlowInId) node.returnFlowInId = uid("return_flow_in");
+    if (typeof node.returnValueRowId !== "string" || !node.returnValueRowId) node.returnValueRowId = uid("return_value");
+
+    node.rows = [{
+      id: node.returnFlowInId,
+      label: "Enter",
+      value: "",
+      kind: "flowIn"
+    }];
+    if (node.returnFlowType !== "void") {
+      node.rows.push({
+        id: node.returnValueRowId,
+        label: "Value",
+        value: node.returnFlowType,
+        kind: "input"
+      });
+    }
+    node.pseudo = node.returnFlowType === "void" ? "return;" : "return Value;";
+  }
+
   function syncConstantNode(node) {
     if (!node || node.type !== "constant") return;
     if (typeof node.constantType !== "string" || !node.constantType) node.constantType = "int";
@@ -827,6 +853,9 @@
       }
     }
 
+    if (node.type === "returnFlow") {
+      syncReturnFlowNode(node);
+    }
     if (node.type === "constant") {
       syncConstantNode(node);
     }
@@ -4094,6 +4123,11 @@
     if (node.type === "doWhileLoop") return "CONTROL FLOW · DO WHILE";
     if (node.type === "forLoop") return "CONTROL FLOW · FOR";
     if (node.type === "foreachLoop") return "CONTROL FLOW · FOREACH " + (node.foreachItemType || "any");
+    if (node.type === "returnFlow") {
+      return "CONTROL FLOW · RETURN " + String(node.returnFlowType || "void").toUpperCase();
+    }
+    if (node.type === "breakFlow") return "CONTROL FLOW · BREAK";
+    if (node.type === "continueFlow") return "CONTROL FLOW · CONTINUE";
     if (node.type === "constant") {
       return "VALUE · " + (node.constantType || "int");
     }
@@ -5385,6 +5419,19 @@
           });
           body.appendChild(caseEditor);
         }
+      }
+
+      if (node.type === "returnFlow") {
+        syncReturnFlowNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        const returnTypes = [["void", "void"]].concat(availableDataTypes().map((value) => [value, value]));
+        meta.appendChild(compactSelect(node.returnFlowType, returnTypes, (value) => {
+          node.returnFlowType = value;
+          syncReturnFlowNode(node);
+          rerenderNode();
+        }, "inline-type-picker"));
+        body.appendChild(meta);
       }
 
       if (node.type === "constant") {
@@ -8811,7 +8858,7 @@
     renderTypeSettings(node);
 
     const classLike = node.type === "class" || node.type === "object";
-    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"];
+    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
     const directStructured = ["function", "enum", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
     $("addVariable").style.display = classLike ? "" : "none";
     $("addMethod").style.display = classLike ? "" : "none";
@@ -9476,6 +9523,29 @@
         pseudo: "foreach (Item item in Collection)",
         extra: { foreachItemType: "any" }
       },
+      breakFlow: {
+        title: "Break",
+        description: "Interrompe il loop più vicino.",
+        rows: [row("Enter", "", "flowIn")],
+        pseudo: "break;"
+      },
+      continueFlow: {
+        title: "Continue",
+        description: "Salta alla prossima iterazione del loop più vicino.",
+        rows: [row("Enter", "", "flowIn")],
+        pseudo: "continue;"
+      },
+      returnFlow: {
+        title: "Return",
+        description: "Termina la funzione corrente e restituisce opzionalmente un valore.",
+        rows: [],
+        pseudo: "return;",
+        extra: {
+          returnFlowType: "void",
+          returnFlowInId: uid("return_flow_in"),
+          returnValueRowId: uid("return_value")
+        }
+      },
       constant: {
         title: "Value",
         description: "Valore letterale tipato: numero, bool, string, vector, enum o riferimento nullo.",
@@ -9657,6 +9727,9 @@
       { type: "foreachLoop", category: "FLOW", label: "Foreach", description: "Itera gli elementi di una collezione", icon: "∀" },
       { type: "whileLoop", category: "FLOW", label: "While", description: "Ripete finché la condizione è vera", icon: "↻" },
       { type: "doWhileLoop", category: "FLOW", label: "Do While", description: "Esegue una volta, poi controlla la condizione", icon: "⟳" },
+      { type: "breakFlow", category: "FLOW", label: "Break", description: "Esce dal loop corrente", icon: "■" },
+      { type: "continueFlow", category: "FLOW", label: "Continue", description: "Passa alla prossima iterazione", icon: "↪" },
+      { type: "returnFlow", category: "FLOW", label: "Return", description: "Termina la funzione e restituisce un valore opzionale", icon: "↩" },
 
       { type: "constant", category: "DATI", label: "Valore", description: "Costante tipata: bool, numero, string, vector, enum…", icon: "•" },
       { type: "variable", category: "DATI", label: "Variabile", description: "Dato, configurazione o riferimento condiviso", icon: "x" },
@@ -10040,6 +10113,9 @@
       { type: "doWhileLoop", purpose: "do while loop", ports: "IN Enter:flow, OUT Loop:flow, IN Condition:bool, OUT Done:flow" },
       { type: "forLoop", purpose: "indexed loop", ports: "IN Enter:flow, IN Start:int, IN End:int, IN Step:int, OUT Index:int, OUT Loop:flow, OUT Done:flow" },
       { type: "foreachLoop", purpose: "collection loop", config: "foreachItemType", ports: "IN Enter:flow, IN Collection:any, OUT Item:any, OUT Index:int, OUT Loop:flow, OUT Done:flow" },
+      { type: "breakFlow", purpose: "exit nearest loop", ports: "IN Enter:flow" },
+      { type: "continueFlow", purpose: "continue nearest loop", ports: "IN Enter:flow" },
+      { type: "returnFlow", purpose: "return from current function", config: "returnFlowType", ports: "IN Enter:flow, optional IN Value:data" },
       { type: "math", purpose: "numeric expression", config: "mathOperation(add|subtract|multiply|divide|modulo|power|min|max|clamp|lerp|abs|sqrt), mathDataType", ports: "inputs depend on operation: A/B or Value/Min/Max; OUT Result:data" },
       { type: "logic", purpose: "boolean expression", config: "logicOperation(and|or|xor|not)", ports: "IN A:bool, optional IN B:bool, OUT Result:bool" },
       { type: "compare", purpose: "comparison", config: "compareOperation(equal|notEqual|greater|greaterEqual|less|lessEqual), compareDataType", ports: "IN A:data, IN B:data, OUT Result:bool" },
