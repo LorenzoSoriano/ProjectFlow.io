@@ -20,7 +20,7 @@
     if (type === "enum") return 440;
     if (type === "component") return 430;
     if (["event", "action", "condition", "state", "switch", "ifElse", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"].includes(type)) return 430;
-    if (type === "adapter") return 440;
+    if (["adapter", "math", "logic", "compare"].includes(type)) return 440;
     if (type === "note") return 390;
     if (type === "sketch") {
       return node && typeof node.sketchWidth === "number"
@@ -59,6 +59,9 @@
     forLoop: { label: "For", icon: "i", color: "#6fb47b" },
     foreachLoop: { label: "Foreach", icon: "∀", color: "#6fb47b" },
     adapter: { label: "Adapter", icon: "↔", color: "#55a9b7" },
+    math: { label: "Math", icon: "±", color: "#6fb47b" },
+    logic: { label: "Logic", icon: "∧", color: "#c88455" },
+    compare: { label: "Compare", icon: "≶", color: "#c88455" },
     event: { label: "Evento", icon: "⚡", color: "#c9ad58" },
     action: { label: "Azione", icon: "▶", color: "#70b77c" },
     state: { label: "Stato", icon: "S", color: "#5f93ba" },
@@ -504,6 +507,110 @@
     return "Conversione esplicita";
   }
 
+  function mathOperationLabel(operation) {
+    const labels = {
+      add: "Add",
+      subtract: "Subtract",
+      multiply: "Multiply",
+      divide: "Divide",
+      modulo: "Modulo",
+      power: "Power",
+      min: "Min",
+      max: "Max",
+      clamp: "Clamp",
+      lerp: "Lerp",
+      abs: "Absolute",
+      sqrt: "Square Root"
+    };
+    return labels[operation] || "Math";
+  }
+
+  function logicOperationLabel(operation) {
+    return ({ and: "AND", or: "OR", xor: "XOR", not: "NOT" })[operation] || "Logic";
+  }
+
+  function compareOperationLabel(operation) {
+    return ({
+      equal: "Equal",
+      notEqual: "Not Equal",
+      greater: "Greater Than",
+      greaterEqual: "Greater / Equal",
+      less: "Less Than",
+      lessEqual: "Less / Equal"
+    })[operation] || "Compare";
+  }
+
+  function ensureStableRowId(node, key, prefix) {
+    if (typeof node[key] !== "string" || !node[key]) node[key] = uid(prefix);
+    return node[key];
+  }
+
+  function syncMathNode(node) {
+    if (!node || node.type !== "math") return;
+    if (typeof node.mathOperation !== "string") node.mathOperation = "add";
+    if (typeof node.mathDataType !== "string" || !node.mathDataType) node.mathDataType = "float";
+
+    const aId = ensureStableRowId(node, "mathInputAId", "math_a");
+    const bId = ensureStableRowId(node, "mathInputBId", "math_b");
+    const cId = ensureStableRowId(node, "mathInputCId", "math_c");
+    const outId = ensureStableRowId(node, "mathOutputId", "math_out");
+    const type = node.mathDataType;
+    const rows = [];
+
+    if (["abs", "sqrt"].includes(node.mathOperation)) {
+      rows.push({ id: aId, label: "Value", value: type, kind: "input" });
+    } else if (node.mathOperation === "clamp") {
+      rows.push(
+        { id: aId, label: "Value", value: type, kind: "input" },
+        { id: bId, label: "Min", value: type, kind: "input" },
+        { id: cId, label: "Max", value: type, kind: "input" }
+      );
+    } else if (node.mathOperation === "lerp") {
+      rows.push(
+        { id: aId, label: "A", value: type, kind: "input" },
+        { id: bId, label: "B", value: type, kind: "input" },
+        { id: cId, label: "T", value: "float", kind: "input" }
+      );
+    } else {
+      rows.push(
+        { id: aId, label: "A", value: type, kind: "input" },
+        { id: bId, label: "B", value: type, kind: "input" }
+      );
+    }
+
+    rows.push({ id: outId, label: "Result", value: type, kind: "output" });
+    node.rows = rows;
+  }
+
+  function syncLogicNode(node) {
+    if (!node || node.type !== "logic") return;
+    if (typeof node.logicOperation !== "string") node.logicOperation = "and";
+    const aId = ensureStableRowId(node, "logicInputAId", "logic_a");
+    const bId = ensureStableRowId(node, "logicInputBId", "logic_b");
+    const outId = ensureStableRowId(node, "logicOutputId", "logic_out");
+
+    node.rows = [{ id: aId, label: "A", value: "bool", kind: "input" }];
+    if (node.logicOperation !== "not") {
+      node.rows.push({ id: bId, label: "B", value: "bool", kind: "input" });
+    }
+    node.rows.push({ id: outId, label: "Result", value: "bool", kind: "output" });
+  }
+
+  function syncCompareNode(node) {
+    if (!node || node.type !== "compare") return;
+    if (typeof node.compareOperation !== "string") node.compareOperation = "equal";
+    if (typeof node.compareDataType !== "string" || !node.compareDataType) node.compareDataType = "float";
+    const aId = ensureStableRowId(node, "compareInputAId", "compare_a");
+    const bId = ensureStableRowId(node, "compareInputBId", "compare_b");
+    const outId = ensureStableRowId(node, "compareOutputId", "compare_out");
+
+    node.rows = [
+      { id: aId, label: "A", value: node.compareDataType, kind: "input" },
+      { id: bId, label: "B", value: node.compareDataType, kind: "input" },
+      { id: outId, label: "Result", value: "bool", kind: "output" }
+    ];
+  }
+
   function componentRow(componentType, category, source, extra) {
     return row(componentType || "Component", "", "component", Object.assign({
       componentType: componentType || "Component",
@@ -702,6 +809,15 @@
 
     if (node.type === "adapter") {
       syncAdapterNode(node);
+    }
+    if (node.type === "math") {
+      syncMathNode(node);
+    }
+    if (node.type === "logic") {
+      syncLogicNode(node);
+    }
+    if (node.type === "compare") {
+      syncCompareNode(node);
     }
 
     if (node.type === "foreachLoop") {
@@ -1120,11 +1236,20 @@
       if (!Array.isArray(edge.points)) edge.points = [];
       edge.points = edge.points.filter((point) =>
         point && typeof point.x === "number" && typeof point.y === "number"
-      ).map((point) => ({
-        id: point.id || uid("junction"),
-        x: point.x,
-        y: point.y
-      }));
+      ).map((point) => {
+        const normalized = {
+          id: point.id || uid("junction"),
+          x: point.x,
+          y: point.y
+        };
+        if (point.junctionLink && point.junctionLink.edgeId && point.junctionLink.pointId) {
+          normalized.junctionLink = {
+            edgeId: String(point.junctionLink.edgeId),
+            pointId: String(point.junctionLink.pointId)
+          };
+        }
+        return normalized;
+      });
     });
     base.nodes.forEach((node) => {
       if (!node.id) node.id = uid("node");
@@ -1329,6 +1454,9 @@
   let selectedJunctionIds = new Set();
   let selectedGroupId = null;
   let pendingPort = null;
+  let pendingJunction = null;
+  let junctionClickSuppressKey = "";
+  let junctionClickSuppressUntil = 0;
   let dragState = null;
   let groupDrag = null;
   let junctionDrag = null;
@@ -1890,11 +2018,36 @@
     broadcastActivity("Sposta gruppo " + (group && group.title ? group.title : ""));
     if (!group) return;
     const start = screenToWorld(event.clientX, event.clientY);
+    const startBounds = groupWorldBounds(group);
+    const groupNodeIds = new Set(group.nodeIds);
+    const junctionStarts = [];
+
+    project.connections.forEach((edge) => {
+      const bothInside = groupNodeIds.has(edge.from.nodeId) && groupNodeIds.has(edge.to.nodeId);
+      (edge.points || []).forEach((edgePoint) => {
+        if (edgePoint.junctionLink) return;
+        const insideFrame = startBounds &&
+          edgePoint.x >= startBounds.x &&
+          edgePoint.x <= startBounds.x + startBounds.width &&
+          edgePoint.y >= startBounds.y &&
+          edgePoint.y <= startBounds.y + startBounds.height;
+        if (bothInside || insideFrame) {
+          junctionStarts.push({
+            edgeId: edge.id,
+            pointId: edgePoint.id,
+            x: edgePoint.x,
+            y: edgePoint.y
+          });
+        }
+      });
+    });
+
     groupDrag = {
       groupId: groupId,
       startX: start.x,
       startY: start.y,
-      starts: group.nodeIds.map(nodeById).filter(Boolean).map((node) => ({ id: node.id, x: node.x, y: node.y }))
+      starts: group.nodeIds.map(nodeById).filter(Boolean).map((node) => ({ id: node.id, x: node.x, y: node.y })),
+      junctionStarts: junctionStarts
     };
     window.addEventListener("pointermove", moveGroup);
     window.addEventListener("pointerup", endGroupDrag, { once: true });
@@ -1917,6 +2070,17 @@
         el.style.top = node.y + "px";
       }
     });
+
+    (groupDrag.junctionStarts || []).forEach((startPoint) => {
+      const edge = project.connections.find((item) => item.id === startPoint.edgeId);
+      const edgePoint = edge && Array.isArray(edge.points)
+        ? edge.points.find((item) => item.id === startPoint.pointId)
+        : null;
+      if (!edgePoint) return;
+      edgePoint.x = Math.round(startPoint.x + dx);
+      edgePoint.y = Math.round(startPoint.y + dy);
+    });
+    syncLinkedJunctionPoints();
 
     const group = groupById(groupDrag.groupId);
     broadcastDragPreview(group ? group.nodeIds.map(nodeById).filter(Boolean) : [], "Sposta gruppo");
@@ -1976,6 +2140,7 @@
     selectedJunctionIds.clear();
     selectedGroupId = null;
     pendingPort = null;
+    pendingJunction = null;
     $("connectionBanner").classList.remove("show");
   }
 
@@ -2352,8 +2517,10 @@
         const initial = user && (user.displayName || user.email)
           ? (user.displayName || user.email).trim().charAt(0).toUpperCase()
           : "G";
-        avatar.textContent = initial;
-        avatar.style.backgroundImage = user && user.photoURL ? 'url("' + user.photoURL + '")' : "";
+        const hasPhoto = !!(user && user.photoURL);
+        avatar.textContent = hasPhoto ? "" : initial;
+        avatar.classList.toggle("has-photo", hasPhoto);
+        avatar.style.backgroundImage = hasPhoto ? 'url("' + user.photoURL + '")' : "";
       }
     }
 
@@ -2361,8 +2528,10 @@
       const initial = user && (user.displayName || user.email)
         ? (user.displayName || user.email).trim().charAt(0).toUpperCase()
         : "G";
-      menuAvatar.textContent = initial;
-      menuAvatar.style.backgroundImage = user && user.photoURL ? 'url("' + user.photoURL + '")' : "";
+      const hasPhoto = !!(user && user.photoURL);
+      menuAvatar.textContent = hasPhoto ? "" : initial;
+      menuAvatar.classList.toggle("has-photo", hasPhoto);
+      menuAvatar.style.backgroundImage = hasPhoto ? 'url("' + user.photoURL + '")' : "";
     }
     if (menuName) menuName.textContent = user ? (user.displayName || "Account Google") : "Modalità locale";
     if (menuEmail) menuEmail.textContent = user ? (user.email || "Account Google") : "Nessun account collegato";
@@ -3877,6 +4046,9 @@
     if (node.type === "adapter") {
       return (node.adapterInputType || "int") + " → " + (node.adapterOutputType || "float");
     }
+    if (node.type === "math") return "MATH · " + mathOperationLabel(node.mathOperation) + " · " + (node.mathDataType || "float");
+    if (node.type === "logic") return "LOGIC · " + logicOperationLabel(node.logicOperation);
+    if (node.type === "compare") return "COMPARE · " + compareOperationLabel(node.compareOperation) + " · " + (node.compareDataType || "float");
     if (node.type === "event") {
       return "FLOW EVENT · " + String(node.eventKind || "custom").toUpperCase();
     }
@@ -5178,6 +5350,65 @@
         hint.className = "adapter-hint";
         hint.textContent = adapterConversionHint(node.adapterInputType, node.adapterOutputType);
         body.append(meta, hint);
+      }
+
+      if (node.type === "math") {
+        syncMathNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline math-meta-inline";
+        meta.append(
+          compactSelect(node.mathOperation, [
+            ["add", "Add"], ["subtract", "Subtract"], ["multiply", "Multiply"], ["divide", "Divide"],
+            ["modulo", "Modulo"], ["power", "Power"], ["min", "Min"], ["max", "Max"],
+            ["clamp", "Clamp"], ["lerp", "Lerp"], ["abs", "Absolute"], ["sqrt", "Square Root"]
+          ], (value) => {
+            node.mathOperation = value;
+            syncMathNode(node);
+            rerenderNode();
+          }, "node-meta-select"),
+          typePicker(node.mathDataType, (value) => {
+            node.mathDataType = value;
+            syncMathNode(node);
+            rerenderNode();
+          }, "inline-type-picker")
+        );
+        body.appendChild(meta);
+      }
+
+      if (node.type === "logic") {
+        syncLogicNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline math-meta-inline";
+        meta.appendChild(compactSelect(node.logicOperation, [
+          ["and", "AND"], ["or", "OR"], ["xor", "XOR"], ["not", "NOT"]
+        ], (value) => {
+          node.logicOperation = value;
+          syncLogicNode(node);
+          rerenderNode();
+        }, "node-meta-select"));
+        body.appendChild(meta);
+      }
+
+      if (node.type === "compare") {
+        syncCompareNode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline math-meta-inline";
+        meta.append(
+          compactSelect(node.compareOperation, [
+            ["equal", "Equal"], ["notEqual", "Not Equal"], ["greater", "Greater Than"],
+            ["greaterEqual", "Greater / Equal"], ["less", "Less Than"], ["lessEqual", "Less / Equal"]
+          ], (value) => {
+            node.compareOperation = value;
+            syncCompareNode(node);
+            rerenderNode();
+          }, "node-meta-select"),
+          typePicker(node.compareDataType, (value) => {
+            node.compareDataType = value;
+            syncCompareNode(node);
+            rerenderNode();
+          }, "inline-type-picker")
+        );
+        body.appendChild(meta);
       }
 
       if (node.type === "foreachLoop") {
@@ -6631,6 +6862,9 @@
         syncAdapterNode(node);
         appendSection("DATA IN", node.rows.filter((item) => item.kind === "input"), []);
         appendSection("DATA OUT", node.rows.filter((item) => item.kind === "output"), []);
+      } else if (["math", "logic", "compare"].includes(node.type)) {
+        appendSection("INPUT", node.rows.filter((item) => item.kind === "input"), []);
+        appendSection("RESULT", node.rows.filter((item) => item.kind === "output"), []);
       } else if (["ifElse", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"].includes(node.type)) {
         appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
         appendSection("DATA IN", node.rows.filter((item) => item.kind === "input"), []);
@@ -7085,6 +7319,136 @@
     return edgeId + "::" + pointId;
   }
 
+  function edgeDataType(edge) {
+    if (!edge) return "any";
+    return edge.dataType || memberOutputType(memberByRef(edge.from));
+  }
+
+  function junctionRecord(edgeId, pointId) {
+    const edge = project.connections.find((item) => item.id === edgeId);
+    if (!edge || !Array.isArray(edge.points)) return null;
+    const point = edge.points.find((item) => item.id === pointId);
+    return point ? { edge: edge, point: point, type: edgeDataType(edge) } : null;
+  }
+
+  function syncLinkedJunctionPoints() {
+    const points = new Map();
+    project.connections.forEach((edge) => {
+      (edge.points || []).forEach((point) => {
+        if (!point.junctionLink) points.set(junctionSelectionKey(edge.id, point.id), point);
+      });
+    });
+
+    project.connections.forEach((edge) => {
+      (edge.points || []).forEach((point) => {
+        if (!point.junctionLink) return;
+        const target = points.get(junctionSelectionKey(point.junctionLink.edgeId, point.junctionLink.pointId));
+        if (!target) return;
+        point.x = target.x;
+        point.y = target.y;
+      });
+    });
+  }
+
+  function makeLinkedJunctionPoint(edgeId, pointId, point) {
+    return {
+      id: uid("junction_link"),
+      x: point.x,
+      y: point.y,
+      junctionLink: { edgeId: edgeId, pointId: pointId }
+    };
+  }
+
+  function finishJunctionConnection(portRef, edgeId, pointId) {
+    const junction = junctionRecord(edgeId, pointId);
+    if (!junction || !portRef) return false;
+
+    let check = null;
+    let from = null;
+    let to = null;
+
+    if (portRef.side === "in") {
+      check = connectionCheck(junction.edge.from, portRef);
+      from = junction.edge.from;
+      to = portRef;
+    } else {
+      check = connectionCheck(portRef, junction.edge.to);
+      from = portRef;
+      to = junction.edge.to;
+    }
+
+    if (!check || !check.ok) {
+      showToast(check ? check.reason : "Connessione non compatibile.");
+      return false;
+    }
+
+    const duplicate = project.connections.some((edge) =>
+      edge.from.nodeId === from.nodeId &&
+      edge.from.rowId === from.rowId &&
+      edge.to.nodeId === to.nodeId &&
+      edge.to.rowId === to.rowId &&
+      (edge.points || []).some((point) =>
+        point.junctionLink &&
+        point.junctionLink.edgeId === edgeId &&
+        point.junctionLink.pointId === pointId
+      )
+    );
+
+    if (!duplicate) {
+      project.connections.push({
+        id: uid("edge"),
+        from: { nodeId: from.nodeId, rowId: from.rowId, side: "out", kind: check.outputType === "__flow__" ? "flow" : "data" },
+        to: { nodeId: to.nodeId, rowId: to.rowId, side: "in", kind: check.outputType === "__flow__" ? "flow" : "data" },
+        points: [makeLinkedJunctionPoint(edgeId, pointId, junction.point)],
+        dataType: check.outputType
+      });
+      markDirty();
+      showToast(check.outputType === "__flow__" ? "Nuovo ramo FLOW collegato" : "Nuovo ramo DATA collegato");
+    }
+
+    pendingPort = null;
+    pendingJunction = null;
+    $("connectionBanner").classList.remove("show");
+    renderNodes();
+    renderEdges();
+    renderMinimap();
+    return true;
+  }
+
+  function handleJunctionConnectorClick(event, edgeId, pointId) {
+    const key = junctionSelectionKey(edgeId, pointId);
+    if (junctionClickSuppressKey === key && Date.now() < junctionClickSuppressUntil) return;
+    if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) return;
+
+    if (pendingPort) {
+      finishJunctionConnection(pendingPort, edgeId, pointId);
+      return;
+    }
+
+    if (pendingJunction &&
+        pendingJunction.edgeId === edgeId &&
+        pendingJunction.pointId === pointId) {
+      cancelConnection();
+      return;
+    }
+
+    const record = junctionRecord(edgeId, pointId);
+    if (!record) return;
+    pendingJunction = {
+      edgeId: edgeId,
+      pointId: pointId,
+      dataType: record.type
+    };
+    pendingPort = null;
+    $("connectionBanner").classList.add("show");
+    selectedEdgeId = edgeId;
+    selectedJunctionIds = new Set([key]);
+    renderEdges();
+    showToast(record.type === "__flow__"
+      ? "Junction FLOW attivo · scegli una porta"
+      : "Junction " + record.type + " attivo · scegli una porta");
+  }
+
   function selectedJunctionRecords() {
     const result = [];
     project.connections.forEach((edge) => {
@@ -7170,6 +7534,8 @@
 
     const start = screenToWorld(event.clientX, event.clientY);
     junctionDrag = {
+      key: key,
+      moved: false,
       startX: start.x,
       startY: start.y,
       starts: selectedJunctionRecords().map((entry) => ({
@@ -7188,6 +7554,7 @@
     const worldPoint = screenToWorld(event.clientX, event.clientY);
     const dx = worldPoint.x - junctionDrag.startX;
     const dy = worldPoint.y - junctionDrag.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) junctionDrag.moved = true;
 
     junctionDrag.starts.forEach((startPoint) => {
       const edge = project.connections.find((item) => item.id === startPoint.edgeId);
@@ -7203,6 +7570,10 @@
   function endJunctionDrag() {
     window.removeEventListener("pointermove", moveJunction);
     if (junctionDrag) {
+      if (junctionDrag.moved) {
+        junctionClickSuppressKey = junctionDrag.key;
+        junctionClickSuppressUntil = Date.now() + 260;
+      }
       junctionDrag = null;
       markDirty();
       renderMinimap();
@@ -7214,6 +7585,10 @@
     if (!edge || !Array.isArray(edge.points)) return;
     edge.points = edge.points.filter((point) => point.id !== pointId);
     selectedJunctionIds.delete(junctionSelectionKey(edgeId, pointId));
+    if (pendingJunction && pendingJunction.edgeId === edgeId && pendingJunction.pointId === pointId) {
+      pendingJunction = null;
+      $("connectionBanner").classList.remove("show");
+    }
     renderEdges();
     renderInspector();
     markDirty();
@@ -7223,6 +7598,7 @@
   function renderEdges() {
     edgeLayer.innerHTML = "";
     project.connections = project.connections.filter((edge) => nodeById(edge.from.nodeId) && nodeById(edge.to.nodeId));
+    syncLinkedJunctionPoints();
 
     project.connections.forEach((edge) => {
       const a = getPortWorldPosition(edge.from);
@@ -7291,18 +7667,26 @@
       edgeLayer.appendChild(hitPath);
 
       edge.points.forEach((point) => {
+        if (point.junctionLink) return;
         const key = junctionSelectionKey(edge.id, point.id);
         const pointSelected = selectedJunctionIds.has(key);
+        const pointPending = !!(pendingJunction && pendingJunction.edgeId === edge.id && pendingJunction.pointId === point.id);
         const junction = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         junction.setAttribute("cx", point.x);
         junction.setAttribute("cy", point.y);
-        junction.setAttribute("r", pointSelected ? "7" : (selectedEdgeId === edge.id ? "6" : "5"));
-        junction.setAttribute("class", "edge-junction" + (pointSelected ? " selected" : ""));
+        junction.setAttribute("r", pointPending ? "8" : (pointSelected ? "7" : (selectedEdgeId === edge.id ? "6" : "5")));
+        junction.setAttribute("class", "edge-junction" + (pointSelected ? " selected" : "") + (pointPending ? " pending-connector" : ""));
         junction.style.setProperty("--junction-color", edgeColor);
         junction.addEventListener("pointerdown", (event) => startJunctionDrag(event, edge.id, point.id));
+        junction.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          handleJunctionConnectorClick(event, edge.id, point.id);
+        });
         junction.addEventListener("dblclick", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          cancelConnection();
           removeJunction(edge.id, point.id);
         });
         edgeLayer.appendChild(junction);
@@ -8093,7 +8477,7 @@
 
     const classLike = node.type === "class" || node.type === "object";
     const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"];
-    const directStructured = ["function", "enum", "adapter"].concat(flowStructured).includes(node.type);
+    const directStructured = ["function", "enum", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
     $("addVariable").style.display = classLike ? "" : "none";
     $("addMethod").style.display = classLike ? "" : "none";
     $("addEvent").style.display = node.type === "class" ? "" : "none";
@@ -8108,6 +8492,8 @@
           ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
           : node.type === "adapter"
             ? "Adapter converte esplicitamente il tipo dell'ingresso nel tipo dell'uscita."
+          : ["math", "logic", "compare"].includes(node.type)
+            ? "Nodi matematici e logici con porte DATA tipate."
           : node.type === "enum"
             ? "I valori dell'Enum si modificano direttamente nel blocco."
             : "Contenuto libero del blocco.";
@@ -8311,6 +8697,11 @@
   }
 
   function handlePortClick(ref) {
+    if (pendingJunction && !pendingPort) {
+      finishJunctionConnection(ref, pendingJunction.edgeId, pendingJunction.pointId);
+      return;
+    }
+
     if (!pendingPort) {
       const item = memberByRef(ref);
       if (ref.side === "out" && item && item.kind === "function" && normalizedType(item.returnType) === "void") {
@@ -8371,8 +8762,10 @@
 
   function cancelConnection() {
     pendingPort = null;
+    pendingJunction = null;
     $("connectionBanner").classList.remove("show");
     renderNodes();
+    renderEdges();
   }
 
   function removeEdge(id) {
@@ -8436,8 +8829,9 @@
     showToast(count === 1 ? "Blocco eliminato" : count + " blocchi eliminati");
   }
 
-  function defaultNode(type, x, y, presetComponent) {
+  function defaultNode(type, x, y, presetComponent, preset) {
     const componentType = presetComponent || "Animator";
+    const nodePreset = preset && typeof preset === "object" ? preset : {};
     const templates = {
       object: {
         title: "New GameObject",
@@ -8598,6 +8992,45 @@
           adapterOutputRowId: uid("adapter_out")
         }
       },
+      math: {
+        title: "Math",
+        description: "Operazione matematica tipata e collegabile.",
+        rows: [],
+        pseudo: "",
+        extra: {
+          mathOperation: "add",
+          mathDataType: "float",
+          mathInputAId: uid("math_a"),
+          mathInputBId: uid("math_b"),
+          mathInputCId: uid("math_c"),
+          mathOutputId: uid("math_out")
+        }
+      },
+      logic: {
+        title: "Logic",
+        description: "Operazione booleana AND, OR, XOR o NOT.",
+        rows: [],
+        pseudo: "",
+        extra: {
+          logicOperation: "and",
+          logicInputAId: uid("logic_a"),
+          logicInputBId: uid("logic_b"),
+          logicOutputId: uid("logic_out")
+        }
+      },
+      compare: {
+        title: "Compare",
+        description: "Confronta due valori tipati e restituisce bool.",
+        rows: [],
+        pseudo: "",
+        extra: {
+          compareOperation: "equal",
+          compareDataType: "float",
+          compareInputAId: uid("compare_a"),
+          compareInputBId: uid("compare_b"),
+          compareOutputId: uid("compare_out")
+        }
+      },
       event: {
         title: "Gameplay Event",
         description: "Punto di ingresso del flusso: evento Unity, input o evento custom.",
@@ -8686,7 +9119,10 @@
       x: Math.round(x),
       y: Math.round(y)
     };
-    Object.assign(node, source.extra || {});
+    Object.assign(node, source.extra || {}, nodePreset);
+    if (type === "math") node.title = mathOperationLabel(node.mathOperation);
+    if (type === "logic") node.title = logicOperationLabel(node.logicOperation);
+    if (type === "compare") node.title = compareOperationLabel(node.compareOperation);
     ensureNodeMeta(node);
     return node;
   }
@@ -8717,6 +9153,29 @@
       { type: "action", category: "GAME FLOW", label: "Azione", description: "Esegue una modifica o un metodo", icon: "▶" },
       { type: "condition", category: "GAME FLOW", label: "Condizione", description: "Confronto booleano riutilizzabile", icon: "?" },
       { type: "state", category: "GAME FLOW", label: "Stato", description: "Fase o modalità del gameplay", icon: "S" },
+
+      { type: "math", preset: { mathOperation: "add" }, category: "MATH & LOGIC", label: "Add", description: "A + B", icon: "+" },
+      { type: "math", preset: { mathOperation: "subtract" }, category: "MATH & LOGIC", label: "Subtract", description: "A − B", icon: "−" },
+      { type: "math", preset: { mathOperation: "multiply" }, category: "MATH & LOGIC", label: "Multiply", description: "A × B", icon: "×" },
+      { type: "math", preset: { mathOperation: "divide" }, category: "MATH & LOGIC", label: "Divide", description: "A ÷ B", icon: "÷" },
+      { type: "math", preset: { mathOperation: "modulo" }, category: "MATH & LOGIC", label: "Modulo", description: "A % B", icon: "%" },
+      { type: "math", preset: { mathOperation: "power" }, category: "MATH & LOGIC", label: "Power", description: "A ^ B", icon: "^" },
+      { type: "math", preset: { mathOperation: "min" }, category: "MATH & LOGIC", label: "Min", description: "Valore minimo", icon: "↓" },
+      { type: "math", preset: { mathOperation: "max" }, category: "MATH & LOGIC", label: "Max", description: "Valore massimo", icon: "↑" },
+      { type: "math", preset: { mathOperation: "clamp" }, category: "MATH & LOGIC", label: "Clamp", description: "Value tra Min e Max", icon: "⊣" },
+      { type: "math", preset: { mathOperation: "lerp" }, category: "MATH & LOGIC", label: "Lerp", description: "Interpolazione A → B", icon: "↝" },
+      { type: "math", preset: { mathOperation: "abs" }, category: "MATH & LOGIC", label: "Absolute", description: "|Value|", icon: "|" },
+      { type: "math", preset: { mathOperation: "sqrt" }, category: "MATH & LOGIC", label: "Square Root", description: "√Value", icon: "√" },
+      { type: "logic", preset: { logicOperation: "and" }, category: "MATH & LOGIC", label: "AND", description: "A && B", icon: "∧" },
+      { type: "logic", preset: { logicOperation: "or" }, category: "MATH & LOGIC", label: "OR", description: "A || B", icon: "∨" },
+      { type: "logic", preset: { logicOperation: "xor" }, category: "MATH & LOGIC", label: "XOR", description: "A xor B", icon: "⊕" },
+      { type: "logic", preset: { logicOperation: "not" }, category: "MATH & LOGIC", label: "NOT", description: "!A", icon: "¬" },
+      { type: "compare", preset: { compareOperation: "equal" }, category: "MATH & LOGIC", label: "Equal", description: "A == B", icon: "=" },
+      { type: "compare", preset: { compareOperation: "notEqual" }, category: "MATH & LOGIC", label: "Not Equal", description: "A != B", icon: "≠" },
+      { type: "compare", preset: { compareOperation: "greater" }, category: "MATH & LOGIC", label: "Greater Than", description: "A > B", icon: ">" },
+      { type: "compare", preset: { compareOperation: "greaterEqual" }, category: "MATH & LOGIC", label: "Greater / Equal", description: "A >= B", icon: "≥" },
+      { type: "compare", preset: { compareOperation: "less" }, category: "MATH & LOGIC", label: "Less Than", description: "A < B", icon: "<" },
+      { type: "compare", preset: { compareOperation: "lessEqual" }, category: "MATH & LOGIC", label: "Less / Equal", description: "A <= B", icon: "≤" },
 
       { type: "variable", category: "DATI", label: "Variabile", description: "Dato o stato condiviso", icon: "x" },
       { type: "adapter", category: "DATI", label: "Adapter", description: "Converte un tipo in un altro", icon: "↔" },
@@ -8878,7 +9337,7 @@
     list.className = "new-block-fan-list";
     group.items.forEach((item) => {
       list.appendChild(createNewBlockResultButton(item, (picked) => {
-        addNode(picked.type, picked.component);
+        addNode(picked.type, picked.component, picked.preset);
         closeNewBlockFan();
         closeNewBlockPalette();
       }));
@@ -8918,7 +9377,7 @@
 
       items.forEach((item, index) => {
         const button = createNewBlockResultButton(item, (picked) => {
-          addNode(picked.type, picked.component);
+          addNode(picked.type, picked.component, picked.preset);
           closeNewBlockPalette();
         });
         if (index === 0) button.classList.add("keyboard-active");
@@ -8992,10 +9451,10 @@
     $("addObjectTop").setAttribute("aria-expanded", "false");
   }
 
-  function addNode(type, presetComponent) {
+  function addNode(type, presetComponent, preset) {
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
-    const node = defaultNode(type, center.x - nodeWidthFor(type) / 2 + offset, center.y - 100 + offset, presetComponent);
+    const node = defaultNode(type, center.x - nodeWidthFor(type) / 2 + offset, center.y - 100 + offset, presetComponent, preset);
     project.nodes.push(node);
     selectedNodeIds = new Set([node.id]);
     syncPrimarySelection();
