@@ -1041,10 +1041,16 @@
 
     if (node.type === "event") {
       if (typeof node.eventKind !== "string") node.eventKind = "custom";
+      if (currentSchemaId() === "classic" && !["start", "input", "manual"].includes(node.eventKind)) {
+        node.eventKind = "start";
+      }
     }
 
     if (node.type === "action") {
       if (typeof node.actionKind !== "string") node.actionKind = "custom";
+      if (currentSchemaId() === "classic" && !["process", "callFunction", "setVariable", "readInput", "writeOutput"].includes(node.actionKind)) {
+        node.actionKind = "process";
+      }
     }
 
     if (node.type === "state") {
@@ -1480,6 +1486,66 @@
 
     if (schema === "classic") neutral.delete("enum");
     return neutral.has(type);
+  }
+
+  function eventKindOptionsForSchema() {
+    if (currentSchemaId() === "classic") {
+      return [
+        ["start", "Start"],
+        ["input", "Input"],
+        ["manual", "Manual Entry"]
+      ];
+    }
+    return [
+      ["custom", "Custom Event"],
+      ["start", "Start"],
+      ["update", "Update"],
+      ["fixedUpdate", "Fixed Update"],
+      ["lateUpdate", "Late Update"],
+      ["input", "Input"],
+      ["trigger", "Trigger"],
+      ["collision", "Collision"],
+      ["unityEvent", "UnityEvent"]
+    ];
+  }
+
+  function actionKindOptionsForSchema() {
+    if (currentSchemaId() === "classic") {
+      return [
+        ["process", "Process"],
+        ["callFunction", "Call Function"],
+        ["setVariable", "Set Variable"],
+        ["readInput", "Read Input"],
+        ["writeOutput", "Write Output"]
+      ];
+    }
+    return [
+      ["custom", "Custom"],
+      ["callMethod", "Call Method"],
+      ["setVariable", "Set Variable"],
+      ["animator", "Animator"],
+      ["audio", "Audio"],
+      ["spawn", "Spawn"],
+      ["destroy", "Destroy"],
+      ["enable", "Enable / Disable"]
+    ];
+  }
+
+  function classicEventLabel(kind) {
+    if (kind === "input") return "INPUT";
+    if (kind === "manual") return "MANUAL ENTRY";
+    return "START";
+  }
+
+  function classicActionLabel(kind) {
+    const labels = {
+      process: "PROCESS",
+      callFunction: "CALL FUNCTION",
+      setVariable: "SET VARIABLE",
+      readInput: "READ INPUT",
+      writeOutput: "WRITE OUTPUT"
+    };
+    return labels[kind] || "PROCESS";
   }
 
   function blankProject(name, schema) {
@@ -4663,9 +4729,11 @@
     if (node.type === "logic") return "LOGIC · " + logicOperationLabel(node.logicOperation);
     if (node.type === "compare") return "COMPARE · " + compareOperationLabel(node.compareOperation) + " · " + (node.compareDataType || "float");
     if (node.type === "event") {
+      if (currentSchemaId() === "classic") return "FLOW CHART · " + classicEventLabel(node.eventKind);
       return "FLOW EVENT · " + String(node.eventKind || "custom").toUpperCase();
     }
     if (node.type === "action") {
+      if (currentSchemaId() === "classic") return "FLOW CHART · " + classicActionLabel(node.actionKind);
       return "FLOW ACTION · " + String(node.actionKind || "custom").toUpperCase();
     }
     if (LEGACY_BLOCK_TYPES.has(node.type)) {
@@ -6146,17 +6214,7 @@
       if (node.type === "event") {
         const meta = document.createElement("div");
         meta.className = "node-meta-inline gameplay-meta-inline";
-        meta.appendChild(compactSelect(node.eventKind, [
-          ["custom", "Custom Event"],
-          ["start", "Start"],
-          ["update", "Update"],
-          ["fixedUpdate", "Fixed Update"],
-          ["lateUpdate", "Late Update"],
-          ["input", "Input"],
-          ["trigger", "Trigger"],
-          ["collision", "Collision"],
-          ["unityEvent", "UnityEvent"]
-        ], (value) => {
+        meta.appendChild(compactSelect(node.eventKind, eventKindOptionsForSchema(), (value) => {
           node.eventKind = value;
           rerenderNode();
         }, "node-meta-select"));
@@ -6166,16 +6224,7 @@
       if (node.type === "action") {
         const meta = document.createElement("div");
         meta.className = "node-meta-inline gameplay-meta-inline";
-        meta.appendChild(compactSelect(node.actionKind, [
-          ["custom", "Custom"],
-          ["callMethod", "Call Method"],
-          ["setVariable", "Set Variable"],
-          ["animator", "Animator"],
-          ["audio", "Audio"],
-          ["spawn", "Spawn"],
-          ["destroy", "Destroy"],
-          ["enable", "Enable / Disable"]
-        ], (value) => {
+        meta.appendChild(compactSelect(node.actionKind, actionKindOptionsForSchema(), (value) => {
           node.actionKind = value;
           rerenderNode();
         }, "node-meta-select"));
@@ -6861,15 +6910,19 @@
         topLine.className = "inline-member-top";
 
         if (item.kind === "variable" || item.kind === "property") {
-          const access = compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
-            item.access = value;
-            if (value === "public" && item.collectionKind !== "dictionary") item.serialized = true;
-            rerenderNode();
-          }, "inline-access-select");
+          const access = currentSchemaId() === "unity"
+            ? compactSelect(item.access, ["public", "private", "protected", "internal"], (value) => {
+                item.access = value;
+                if (value === "public" && item.collectionKind !== "dictionary") item.serialized = true;
+                rerenderNode();
+              }, "inline-access-select")
+            : null;
 
           const type = typePicker(item.dataType, (value) => {
             item.dataType = value;
-            if (publicClassNodes().some((classNode) => classNode.title === value) && item.referenceMode === "value") {
+            if (currentSchemaId() === "unity" &&
+                publicClassNodes().some((classNode) => classNode.title === value) &&
+                item.referenceMode === "value") {
               item.referenceMode = "inspector";
             }
             rerenderNode();
@@ -6879,7 +6932,8 @@
             item.label = value;
           }, "inline-name-input");
 
-          topLine.append(access, type, name);
+          if (access) topLine.appendChild(access);
+          topLine.append(type, name);
 
           const collectionLine = document.createElement("div");
           collectionLine.className = "inline-collection-row";
@@ -6965,18 +7019,6 @@
             jobType.textContent = variableTypeLabel(item);
             second.append(jobAccess, jobType);
           } else {
-            const reference = compactSelect(item.referenceMode, [
-              ["value", "Valore"],
-              ["inspector", "Inspector"],
-              ["getComponent", "GetComponent"],
-              ["instance", "Instance"],
-              ["findFirst", "FindFirst"],
-              ["scriptableObject", "SO Asset"]
-            ], (value) => {
-              item.referenceMode = value;
-              rerenderNode();
-            }, "inline-reference-select");
-
             const enumType = enumByName(item.dataType);
             let defaultValue;
             if (enumType && item.collectionKind === "single" && !enumType.enumFlags) {
@@ -6995,24 +7037,42 @@
               );
             }
 
-            const serialized = document.createElement("button");
-            serialized.type = "button";
-            serialized.className = "inline-flag" + (item.serialized ? " active" : "") + (item.collectionKind === "dictionary" ? " disabled" : "");
-            serialized.textContent = "S";
-            serialized.title = item.collectionKind === "dictionary"
-              ? "Unity non serializza Dictionary direttamente"
-              : "SerializeField / Inspector";
-            serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
-            serialized.addEventListener("click", (event) => {
-              event.stopPropagation();
-              if (item.collectionKind === "dictionary") {
-                showToast("Unity non serializza Dictionary direttamente: usa gestione custom.");
-                return;
-              }
-              item.serialized = !item.serialized;
-              rerenderNode();
-            });
-            second.append(reference, defaultValue, serialized);
+            if (currentSchemaId() === "unity") {
+              const reference = compactSelect(item.referenceMode, [
+                ["value", "Valore"],
+                ["inspector", "Inspector"],
+                ["getComponent", "GetComponent"],
+                ["instance", "Instance"],
+                ["findFirst", "FindFirst"],
+                ["scriptableObject", "SO Asset"]
+              ], (value) => {
+                item.referenceMode = value;
+                rerenderNode();
+              }, "inline-reference-select");
+
+              const serialized = document.createElement("button");
+              serialized.type = "button";
+              serialized.className = "inline-flag" + (item.serialized ? " active" : "") + (item.collectionKind === "dictionary" ? " disabled" : "");
+              serialized.textContent = "S";
+              serialized.title = item.collectionKind === "dictionary"
+                ? "Unity non serializza Dictionary direttamente"
+                : "SerializeField / Inspector";
+              serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
+              serialized.addEventListener("click", (event) => {
+                event.stopPropagation();
+                if (item.collectionKind === "dictionary") {
+                  showToast("Unity non serializza Dictionary direttamente: usa gestione custom.");
+                  return;
+                }
+                item.serialized = !item.serialized;
+                rerenderNode();
+              });
+              second.append(reference, defaultValue, serialized);
+            } else {
+              item.referenceMode = "value";
+              item.serialized = false;
+              second.appendChild(defaultValue);
+            }
           }
 
           editor.append(topLine, collectionLine, second);
@@ -9079,6 +9139,39 @@
     container.innerHTML = "";
     ensureNodeMeta(node);
 
+    if (currentSchemaId() === "classic" && node.type === "event") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "FLOW CHART ENTRY";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      grid.appendChild(inspectorField("ENTRY TYPE", selectControl(node.eventKind, eventKindOptionsForSchema(), (value) => {
+        node.eventKind = value;
+        if (value === "start" && node.title === "Start") node.title = "Start";
+        renderNodes();
+        markDirty();
+      })));
+      container.appendChild(grid);
+    }
+
+    if (currentSchemaId() === "classic" && node.type === "action") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "FLOW CHART PROCESS";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      grid.appendChild(inspectorField("PROCESS TYPE", selectControl(node.actionKind, actionKindOptionsForSchema(), (value) => {
+        node.actionKind = value;
+        renderNodes();
+        markDirty();
+      })));
+      container.appendChild(grid);
+    }
+
     if (node.type === "component") {
       const title = document.createElement("div");
       title.className = "dynamic-section-title";
@@ -9426,7 +9519,10 @@
     wrapper.appendChild(head);
 
     if (!["class", "struct", "jobStruct"].includes(node.type)) {
-      const kindSelect = selectControl(item.kind, Object.keys(ROW_META).map((key) => [key, ROW_META[key].label]), (value) => {
+      const memberKinds = currentSchemaId() === "classic"
+        ? ["flowIn", "flowOut", "input", "output", "variable", "text"]
+        : Object.keys(ROW_META);
+      const kindSelect = selectControl(item.kind, memberKinds.map((key) => [key, ROW_META[key].label]), (value) => {
         item.kind = value;
         normalizeMember(item);
         renderNodes();
@@ -9445,15 +9541,17 @@
     if (item.kind === "variable" || item.kind === "property") {
       const grid = document.createElement("div");
       grid.className = "settings-grid member-grid";
-      const variableAccessOptions = (node.type === "struct" || node.type === "jobStruct")
-        ? ["public", "private", "internal"]
-        : ["public", "private", "protected", "internal"];
-      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, variableAccessOptions, (value) => {
-        item.access = value;
-        if (value === "public") item.serialized = true;
-        renderNodes();
-        markDirty();
-      })));
+      if (currentSchemaId() === "unity") {
+        const variableAccessOptions = (node.type === "struct" || node.type === "jobStruct")
+          ? ["public", "private", "internal"]
+          : ["public", "private", "protected", "internal"];
+        grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, variableAccessOptions, (value) => {
+          item.access = value;
+          if (value === "public") item.serialized = true;
+          renderNodes();
+          markDirty();
+        })));
+      }
       grid.appendChild(inspectorField("TIPO", selectControl(item.dataType, availableDataTypes(), (value) => {
         item.dataType = value;
         if (publicClassNodes().some((classNode) => classNode.title === value) && item.referenceMode === "value") {
@@ -9537,36 +9635,45 @@
           : "Per dati condivisi tra thread preferisci un Native container.";
         wrapper.appendChild(jobHint);
       } else {
-        grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
-          ["value", "Valore"],
-          ["inspector", "Inspector reference"],
-          ["getComponent", "GetComponent"],
-          ["instance", "Instance / Singleton"],
-          ["findFirst", "FindFirstObjectByType"],
-          ["scriptableObject", "ScriptableObject asset"]
-        ], (value) => {
-          item.referenceMode = value;
-          renderNodes();
-          markDirty();
-        })));
+        if (currentSchemaId() === "unity") {
+          grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
+            ["value", "Valore"],
+            ["inspector", "Inspector reference"],
+            ["getComponent", "GetComponent"],
+            ["instance", "Instance / Singleton"],
+            ["findFirst", "FindFirstObjectByType"],
+            ["scriptableObject", "ScriptableObject asset"]
+          ], (value) => {
+            item.referenceMode = value;
+            renderNodes();
+            markDirty();
+          })));
+        } else {
+          item.referenceMode = "value";
+          item.serialized = false;
+        }
+
         grid.appendChild(inspectorField("DEFAULT", textControl(item.defaultValue, "Valore iniziale", (value) => {
           item.defaultValue = value;
           markDirty();
         })));
         wrapper.appendChild(grid);
-        wrapper.appendChild(checkboxControl(item.serialized, item.collectionKind === "dictionary"
-          ? "Dictionary: serializzazione Unity custom necessaria"
-          : "Mostra / serializza nell'Inspector", (checked) => {
-          if (item.collectionKind === "dictionary" && checked) {
-            item.serialized = false;
-            showToast("Unity non serializza Dictionary direttamente.");
-            renderInspector();
-            return;
-          }
-          item.serialized = checked;
-          renderNodes();
-          markDirty();
-        }));
+
+        if (currentSchemaId() === "unity") {
+          wrapper.appendChild(checkboxControl(item.serialized, item.collectionKind === "dictionary"
+            ? "Dictionary: serializzazione Unity custom necessaria"
+            : "Mostra / serializza nell'Inspector", (checked) => {
+            if (item.collectionKind === "dictionary" && checked) {
+              item.serialized = false;
+              showToast("Unity non serializza Dictionary direttamente.");
+              renderInspector();
+              return;
+            }
+            item.serialized = checked;
+            renderNodes();
+            markDirty();
+          }));
+        }
       }
     } else if (item.kind === "function") {
       const grid = document.createElement("div");
@@ -9771,9 +9878,13 @@
       enum: ["ENUM VALUES", "Valori nominati disponibili come tipo nel progetto."]
     };
     const labelInfo = labels[node.type] || [
-      flowStructured.includes(node.type) ? "FLOW / DATA PORTS" : "CONTENT",
       flowStructured.includes(node.type)
-        ? "FLOW controlla l'esecuzione; DATA trasporta valori tipati."
+        ? (currentSchemaId() === "classic" ? "FLOW CHART PORTS" : "FLOW / DATA PORTS")
+        : "CONTENT",
+      flowStructured.includes(node.type)
+        ? (currentSchemaId() === "classic"
+          ? "Il flusso definisce l'ordine del diagramma; i dati trasportano valori tra i passaggi."
+          : "FLOW controlla l'esecuzione; DATA trasporta valori tipati.")
         : "Porte e contenuto del blocco."
     ];
     $("contentSectionLabel").textContent = labelInfo[0];
@@ -10757,11 +10868,11 @@
       } else if (type === "event") {
         node.title = "Start";
         node.description = "Punto di ingresso del diagramma.";
-        node.eventKind = "custom";
+        node.eventKind = "start";
       } else if (type === "action") {
         node.title = "Process";
         node.description = "Passaggio operativo del flow chart.";
-        node.actionKind = "custom";
+        node.actionKind = "process";
       } else if (type === "returnFlow") {
         node.title = "End / Return";
         node.description = "Termina il ramo corrente o restituisce un risultato.";
