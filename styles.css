@@ -7251,29 +7251,24 @@ body,
 }
 
 
-/* v2.23 — bottom-center animated AI dock */
+/* v2.26 — stable bottom AI drawer, no transformed backdrop layer */
 .canvas-panel > .ai-builder-dock{
   position:absolute;
   left:50%;
   bottom:0;
   z-index:72;
   width:min(520px,calc(100% - 24px));
-  contain:layout style;
-  isolation:isolate;
   display:flex;
   flex-direction:column;
   align-items:stretch;
   pointer-events:none;
-  transform:translate(-50%,calc(100% - 44px));
-  transition:transform .34s cubic-bezier(.22,.8,.22,1);
-  will-change:transform;
-}
-.ai-builder-dock.open{
-  transform:translate(-50%,0);
+  transform:translateX(-50%);
+  isolation:isolate;
 }
 .ai-builder-toggle{
   height:44px;
   min-width:178px;
+  flex:0 0 44px;
   align-self:center;
   display:flex;
   align-items:center;
@@ -7314,21 +7309,37 @@ body,
 }
 .ai-builder-panel{
   width:100%;
-  height:min(470px,calc(100vh - 150px));
-  min-height:300px;
+  height:0;
+  min-height:0;
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  border:1px solid #414141;
+  border:0 solid #414141;
   border-bottom:0;
   border-radius:14px 14px 0 0;
   background:rgba(31,31,31,.985);
-  backdrop-filter:blur(18px);
   box-shadow:0 -24px 70px rgba(0,0,0,.42);
-  pointer-events:auto;
-}
-.ai-builder-dock:not(.open) .ai-builder-panel{
+  opacity:0;
+  visibility:hidden;
   pointer-events:none;
+  transition:
+    height .30s cubic-bezier(.22,.8,.22,1),
+    opacity .14s ease,
+    border-width 0s linear .30s,
+    visibility 0s linear .30s;
+}
+.ai-builder-dock.open .ai-builder-panel{
+  height:min(470px,calc(100vh - 150px));
+  border-width:1px;
+  border-bottom-width:0;
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+  transition:
+    height .32s cubic-bezier(.22,.8,.22,1),
+    opacity .16s ease .04s,
+    border-width 0s,
+    visibility 0s;
 }
 .ai-builder-panel .side-work-panel-head{
   flex:0 0 auto;
@@ -7344,16 +7355,15 @@ body,
   flex:0 0 auto;
 }
 @media(max-width:850px){
-  .ai-builder-dock{
+  .canvas-panel > .ai-builder-dock{
     width:min(500px,calc(100% - 16px));
-    transform:translate(-50%,calc(100% - 42px));
   }
   .ai-builder-toggle{
     height:42px;
     min-width:154px;
+    flex-basis:42px;
   }
-  .ai-builder-panel{
+  .ai-builder-dock.open .ai-builder-panel{
     height:min(430px,calc(100vh - 110px));
-    min-height:280px;
   }
 }
