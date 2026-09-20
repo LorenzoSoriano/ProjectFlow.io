@@ -849,7 +849,8 @@
       if (typeof item.referenceMode !== "string") item.referenceMode = "value";
       if (typeof item.defaultValue !== "string") item.defaultValue = "";
       if (typeof item.collectionKind !== "string") item.collectionKind = "single";
-      if (!["single", "array", "list", "dictionary"].includes(item.collectionKind)) item.collectionKind = "single";
+      if (!["single", "array", "list", "dictionary", "nativeArray", "nativeList", "nativeReference"].includes(item.collectionKind)) item.collectionKind = "single";
+      if (typeof item.jobAccess !== "string" || !["readwrite", "readonly", "writeonly"].includes(item.jobAccess)) item.jobAccess = "readwrite";
       if (typeof item.arrayLength !== "number") item.arrayLength = 0;
       if (typeof item.listInitialCount !== "number") item.listInitialCount = 0;
       if (typeof item.dictionaryKeyType !== "string" || !item.dictionaryKeyType) item.dictionaryKeyType = "string";
@@ -4113,6 +4114,9 @@
     }
     if (mode === "list") return "List<" + base + ">";
     if (mode === "dictionary") return "Dictionary<" + normalizedType(keyType || "string") + ", " + base + ">";
+    if (mode === "nativeArray") return "NativeArray<" + base + ">";
+    if (mode === "nativeList") return "NativeList<" + base + ">";
+    if (mode === "nativeReference") return "NativeReference<" + base + ">";
     return base;
   }
 
@@ -4123,6 +4127,9 @@
     if (mode === "array") return base + "[]";
     if (mode === "list") return "List<" + base + ">";
     if (mode === "dictionary") return "Dictionary<" + normalizedType(keyType || "string") + ", " + base + ">";
+    if (mode === "nativeArray") return "NativeArray<" + base + ">";
+    if (mode === "nativeList") return "NativeList<" + base + ">";
+    if (mode === "nativeReference") return "NativeReference<" + base + ">";
     return base;
   }
 
@@ -4175,11 +4182,17 @@
   }
 
   function csharpVariableSignature(item) {
-    const attribute = item.serialized && item.access !== "public" && item.collectionKind !== "dictionary"
+    const nativeCollection = ["nativeArray", "nativeList", "nativeReference"].includes(item.collectionKind);
+    const jobAttribute = nativeCollection && item.jobAccess === "readonly"
+      ? "[ReadOnly] "
+      : nativeCollection && item.jobAccess === "writeonly"
+        ? "[WriteOnly] "
+        : "";
+    const serializeAttribute = !nativeCollection && item.serialized && item.access !== "public" && item.collectionKind !== "dictionary"
       ? "[SerializeField] "
       : "";
-    const value = item.defaultValue ? " = " + item.defaultValue : "";
-    return attribute + (item.access || "private") + " " + variableTypeKey(item) + " " + (item.label || "value") + value + ";";
+    const value = item.defaultValue && !nativeCollection ? " = " + item.defaultValue : "";
+    return jobAttribute + serializeAttribute + (item.access || "private") + " " + variableTypeKey(item) + " " + (item.label || "value") + value + ";";
   }
 
   function csharpEventSignature(item) {
@@ -6605,12 +6618,20 @@
           const collectionLine = document.createElement("div");
           collectionLine.className = "inline-collection-row";
 
-          const collection = compactSelect(item.collectionKind, [
-            ["single", "Single"],
-            ["array", "Array"],
-            ["list", "List"],
-            ["dictionary", "Dictionary"]
-          ], (value) => {
+          const inlineCollectionOptions = node.type === "jobStruct"
+            ? [
+                ["single", "Single"],
+                ["nativeArray", "NativeArray"],
+                ["nativeList", "NativeList"],
+                ["nativeReference", "NativeReference"]
+              ]
+            : [
+                ["single", "Single"],
+                ["array", "Array"],
+                ["list", "List"],
+                ["dictionary", "Dictionary"]
+              ];
+          const collection = compactSelect(item.collectionKind, inlineCollectionOptions, (value) => {
             item.collectionKind = value;
             if (value === "dictionary") item.serialized = false;
             rerenderNode();
@@ -6661,55 +6682,73 @@
 
           const second = document.createElement("div");
           second.className = "inline-member-bottom";
-          const reference = compactSelect(item.referenceMode, [
-            ["value", "Valore"],
-            ["inspector", "Inspector"],
-            ["getComponent", "GetComponent"],
-            ["instance", "Instance"],
-            ["findFirst", "FindFirst"],
-            ["scriptableObject", "SO Asset"]
-          ], (value) => {
-            item.referenceMode = value;
-            rerenderNode();
-          }, "inline-reference-select");
 
-          const enumType = enumByName(item.dataType);
-          let defaultValue;
-          if (enumType && item.collectionKind === "single" && !enumType.enumFlags) {
-            const enumOptions = enumType.enumValues.map((entry) => [entry.name, entry.name]);
-            if (!item.defaultValue && enumOptions.length) item.defaultValue = enumOptions[0][0];
-            defaultValue = compactSelect(item.defaultValue, enumOptions, (value) => {
-              item.defaultValue = value;
-              markDirty();
-            }, "inline-default-select");
+          if (node.type === "jobStruct") {
+            item.referenceMode = "value";
+            item.serialized = false;
+            const jobAccess = compactSelect(item.jobAccess || "readwrite", [
+              ["readwrite", "Read / Write"],
+              ["readonly", "[ReadOnly]"],
+              ["writeonly", "[WriteOnly]"]
+            ], (value) => {
+              item.jobAccess = value;
+              rerenderNode();
+            }, "inline-reference-select");
+            const jobType = document.createElement("span");
+            jobType.className = "collection-preview";
+            jobType.textContent = variableTypeLabel(item);
+            second.append(jobAccess, jobType);
           } else {
-            defaultValue = inlineInput(
-              item.defaultValue,
-              enumType && enumType.enumFlags ? "None | FlagA | FlagB" : "default",
-              (value) => { item.defaultValue = value; },
-              "inline-default-input"
-            );
+            const reference = compactSelect(item.referenceMode, [
+              ["value", "Valore"],
+              ["inspector", "Inspector"],
+              ["getComponent", "GetComponent"],
+              ["instance", "Instance"],
+              ["findFirst", "FindFirst"],
+              ["scriptableObject", "SO Asset"]
+            ], (value) => {
+              item.referenceMode = value;
+              rerenderNode();
+            }, "inline-reference-select");
+
+            const enumType = enumByName(item.dataType);
+            let defaultValue;
+            if (enumType && item.collectionKind === "single" && !enumType.enumFlags) {
+              const enumOptions = enumType.enumValues.map((entry) => [entry.name, entry.name]);
+              if (!item.defaultValue && enumOptions.length) item.defaultValue = enumOptions[0][0];
+              defaultValue = compactSelect(item.defaultValue, enumOptions, (value) => {
+                item.defaultValue = value;
+                markDirty();
+              }, "inline-default-select");
+            } else {
+              defaultValue = inlineInput(
+                item.defaultValue,
+                enumType && enumType.enumFlags ? "None | FlagA | FlagB" : "default",
+                (value) => { item.defaultValue = value; },
+                "inline-default-input"
+              );
+            }
+
+            const serialized = document.createElement("button");
+            serialized.type = "button";
+            serialized.className = "inline-flag" + (item.serialized ? " active" : "") + (item.collectionKind === "dictionary" ? " disabled" : "");
+            serialized.textContent = "S";
+            serialized.title = item.collectionKind === "dictionary"
+              ? "Unity non serializza Dictionary direttamente"
+              : "SerializeField / Inspector";
+            serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
+            serialized.addEventListener("click", (event) => {
+              event.stopPropagation();
+              if (item.collectionKind === "dictionary") {
+                showToast("Unity non serializza Dictionary direttamente: usa gestione custom.");
+                return;
+              }
+              item.serialized = !item.serialized;
+              rerenderNode();
+            });
+            second.append(reference, defaultValue, serialized);
           }
 
-          const serialized = document.createElement("button");
-          serialized.type = "button";
-          serialized.className = "inline-flag" + (item.serialized ? " active" : "") + (item.collectionKind === "dictionary" ? " disabled" : "");
-          serialized.textContent = "S";
-          serialized.title = item.collectionKind === "dictionary"
-            ? "Unity non serializza Dictionary direttamente"
-            : "SerializeField / Inspector";
-          serialized.addEventListener("pointerdown", (event) => event.stopPropagation());
-          serialized.addEventListener("click", (event) => {
-            event.stopPropagation();
-            if (item.collectionKind === "dictionary") {
-              showToast("Unity non serializza Dictionary direttamente: usa gestione custom.");
-              return;
-            }
-            item.serialized = !item.serialized;
-            rerenderNode();
-          });
-
-          second.append(reference, defaultValue, serialized);
           editor.append(topLine, collectionLine, second);
         } else if (item.kind === "function") {
           ensureFunctionSignature(item, item.access);
@@ -9112,12 +9151,20 @@
         markDirty();
       })));
 
-      grid.appendChild(inspectorField("CONTENITORE", selectControl(item.collectionKind, [
-        ["single", "Single"],
-        ["array", "Array"],
-        ["list", "List"],
-        ["dictionary", "Dictionary"]
-      ], (value) => {
+      const collectionOptions = node.type === "jobStruct"
+        ? [
+            ["single", "Single / unmanaged"],
+            ["nativeArray", "NativeArray"],
+            ["nativeList", "NativeList"],
+            ["nativeReference", "NativeReference"]
+          ]
+        : [
+            ["single", "Single"],
+            ["array", "Array"],
+            ["list", "List"],
+            ["dictionary", "Dictionary"]
+          ];
+      grid.appendChild(inspectorField(node.type === "jobStruct" ? "JOB CONTAINER" : "CONTENITORE", selectControl(item.collectionKind, collectionOptions, (value) => {
         item.collectionKind = value;
         if (value === "dictionary") item.serialized = false;
         renderNodes();
@@ -9157,36 +9204,57 @@
         })));
       }
 
-      grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
-        ["value", "Valore"],
-        ["inspector", "Inspector reference"],
-        ["getComponent", "GetComponent"],
-        ["instance", "Instance / Singleton"],
-        ["findFirst", "FindFirstObjectByType"],
-        ["scriptableObject", "ScriptableObject asset"]
-      ], (value) => {
-        item.referenceMode = value;
-        renderNodes();
-        markDirty();
-      })));
-      grid.appendChild(inspectorField("DEFAULT", textControl(item.defaultValue, "Valore iniziale", (value) => {
-        item.defaultValue = value;
-        markDirty();
-      })));
-      wrapper.appendChild(grid);
-      wrapper.appendChild(checkboxControl(item.serialized, item.collectionKind === "dictionary"
-        ? "Dictionary: serializzazione Unity custom necessaria"
-        : "Mostra / serializza nell'Inspector", (checked) => {
-        if (item.collectionKind === "dictionary" && checked) {
-          item.serialized = false;
-          showToast("Unity non serializza Dictionary direttamente.");
-          renderInspector();
-          return;
-        }
-        item.serialized = checked;
-        renderNodes();
-        markDirty();
-      }));
+      if (node.type === "jobStruct") {
+        item.referenceMode = "value";
+        item.serialized = false;
+        grid.appendChild(inspectorField("JOB ACCESS", selectControl(item.jobAccess || "readwrite", [
+          ["readwrite", "Read / Write"],
+          ["readonly", "[ReadOnly]"],
+          ["writeonly", "[WriteOnly]"]
+        ], (value) => {
+          item.jobAccess = value;
+          renderNodes();
+          markDirty();
+        })));
+        wrapper.appendChild(grid);
+        const jobHint = document.createElement("div");
+        jobHint.className = "unity-hint";
+        jobHint.textContent = ["nativeArray", "nativeList", "nativeReference"].includes(item.collectionKind)
+          ? "Unity.Collections · dato job-safe"
+          : "Per dati condivisi tra thread preferisci un Native container.";
+        wrapper.appendChild(jobHint);
+      } else {
+        grid.appendChild(inspectorField("RIFERIMENTO", selectControl(item.referenceMode, [
+          ["value", "Valore"],
+          ["inspector", "Inspector reference"],
+          ["getComponent", "GetComponent"],
+          ["instance", "Instance / Singleton"],
+          ["findFirst", "FindFirstObjectByType"],
+          ["scriptableObject", "ScriptableObject asset"]
+        ], (value) => {
+          item.referenceMode = value;
+          renderNodes();
+          markDirty();
+        })));
+        grid.appendChild(inspectorField("DEFAULT", textControl(item.defaultValue, "Valore iniziale", (value) => {
+          item.defaultValue = value;
+          markDirty();
+        })));
+        wrapper.appendChild(grid);
+        wrapper.appendChild(checkboxControl(item.serialized, item.collectionKind === "dictionary"
+          ? "Dictionary: serializzazione Unity custom necessaria"
+          : "Mostra / serializza nell'Inspector", (checked) => {
+          if (item.collectionKind === "dictionary" && checked) {
+            item.serialized = false;
+            showToast("Unity non serializza Dictionary direttamente.");
+            renderInspector();
+            return;
+          }
+          item.serialized = checked;
+          renderNodes();
+          markDirty();
+        }));
+      }
     } else if (item.kind === "function") {
       const grid = document.createElement("div");
       grid.className = "settings-grid member-grid";
