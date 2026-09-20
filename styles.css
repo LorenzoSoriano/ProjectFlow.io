@@ -7367,3 +7367,25 @@ body,
     height:min(430px,calc(100vh - 110px));
   }
 }
+
+
+/* v2.28 — local generative AI model state */
+.ai-builder-status.loading .ai-builder-status-dot{
+  animation:aiModelPulse 1s ease-in-out infinite;
+}
+.ai-builder-status.ready .ai-builder-status-dot{
+  background:#6fb47b;
+  box-shadow:0 0 9px rgba(111,180,123,.45);
+}
+.ai-builder-status.error .ai-builder-status-dot{
+  background:#c76a6e;
+  box-shadow:0 0 9px rgba(199,106,110,.35);
+}
+.ai-builder-status.fallback .ai-builder-status-dot{
+  background:#c69a5c;
+  box-shadow:0 0 9px rgba(198,154,92,.35);
+}
+@keyframes aiModelPulse{
+  0%,100%{opacity:.45;transform:scale(.82)}
+  50%{opacity:1;transform:scale(1.08)}
+}
