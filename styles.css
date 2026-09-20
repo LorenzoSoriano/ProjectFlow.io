@@ -8900,3 +8900,226 @@ html[data-ui-theme="light"] .project-join-status[data-state="error"]{
   background:#fff4f4;
   color:#9b4141;
 }
+
+
+/* v2.52 — complete light-tone text contrast pass */
+html[data-ui-theme="light"] .project-name,
+html[data-ui-theme="light"] .panel-heading h2,
+html[data-ui-theme="light"] .block-template,
+html[data-ui-theme="light"] .block-template strong,
+html[data-ui-theme="light"] .library-tip strong,
+html[data-ui-theme="light"] .empty-inspector h3,
+html[data-ui-theme="light"] .node-heading strong,
+html[data-ui-theme="light"] .node-title-inline,
+html[data-ui-theme="light"] .row-copy strong,
+html[data-ui-theme="light"] .component-inline-name strong,
+html[data-ui-theme="light"] .flow-member-label strong,
+html[data-ui-theme="light"] .enum-value-name,
+html[data-ui-theme="light"] .enum-value-number,
+html[data-ui-theme="light"] .member-code-signature,
+html[data-ui-theme="light"] .parameter-name-input,
+html[data-ui-theme="light"] .return-name-input,
+html[data-ui-theme="light"] .inline-member-input,
+html[data-ui-theme="light"] .inline-name-input,
+html[data-ui-theme="light"] .inline-default-input,
+html[data-ui-theme="light"] .inline-params-input,
+html[data-ui-theme="light"] .inline-default-select,
+html[data-ui-theme="light"] .node-meta-select,
+html[data-ui-theme="light"] .inline-member-select,
+html[data-ui-theme="light"] .inline-access-select,
+html[data-ui-theme="light"] .inline-type-select,
+html[data-ui-theme="light"] .inline-reference-select,
+html[data-ui-theme="light"] .inline-method-kind,
+html[data-ui-theme="light"] .graph-group-title,
+html[data-ui-theme="light"] .graph-breadcrumb strong,
+html[data-ui-theme="light"] .new-block-result-copy strong,
+html[data-ui-theme="light"] .share-member-copy strong,
+html[data-ui-theme="light"] .inventory-demo-card strong,
+html[data-ui-theme="light"] .inventory-guide-details strong,
+html[data-ui-theme="light"] .ai-message strong,
+html[data-ui-theme="light"] .method-mode-button.active{
+  color:#242931!important;
+}
+
+html[data-ui-theme="light"] .node-heading small,
+html[data-ui-theme="light"] .node-description,
+html[data-ui-theme="light"] .row-copy small,
+html[data-ui-theme="light"] .library-tip,
+html[data-ui-theme="light"] .library-tip p,
+html[data-ui-theme="light"] .block-template small,
+html[data-ui-theme="light"] .canvas-status,
+html[data-ui-theme="light"] .canvas-hint,
+html[data-ui-theme="light"] .empty-inspector,
+html[data-ui-theme="light"] .field-label,
+html[data-ui-theme="light"] .inspector-section-head small,
+html[data-ui-theme="light"] .new-block-hint,
+html[data-ui-theme="light"] .share-method-label,
+html[data-ui-theme="light"] .share-footnote,
+html[data-ui-theme="light"] .share-member-copy small,
+html[data-ui-theme="light"] .account-popover-profile small,
+html[data-ui-theme="light"] .page-popover-section-title,
+html[data-ui-theme="light"] .options-field small,
+html[data-ui-theme="light"] .ai-message p{
+  color:#626b77!important;
+}
+
+html[data-ui-theme="light"] .search-box,
+html[data-ui-theme="light"] .field-label input,
+html[data-ui-theme="light"] .field-label textarea,
+html[data-ui-theme="light"] .field-label select,
+html[data-ui-theme="light"] .row-edit input,
+html[data-ui-theme="light"] .row-edit select,
+html[data-ui-theme="light"] .parameter-name-input,
+html[data-ui-theme="light"] .return-name-input,
+html[data-ui-theme="light"] .inline-member-input,
+html[data-ui-theme="light"] .inline-name-input,
+html[data-ui-theme="light"] .inline-default-input,
+html[data-ui-theme="light"] .inline-params-input,
+html[data-ui-theme="light"] .inline-default-select,
+html[data-ui-theme="light"] .node-meta-select,
+html[data-ui-theme="light"] .inline-member-select,
+html[data-ui-theme="light"] .inline-access-select,
+html[data-ui-theme="light"] .inline-type-select,
+html[data-ui-theme="light"] .inline-reference-select,
+html[data-ui-theme="light"] .inline-method-kind,
+html[data-ui-theme="light"] .share-code-join-row input,
+html[data-ui-theme="light"] .ai-builder-compose textarea{
+  border-color:#d3d8e0!important;
+  background:#fff!important;
+  color:#252a31!important;
+}
+
+html[data-ui-theme="light"] .search-box input{
+  color:#252a31;
+}
+html[data-ui-theme="light"] .search-box input::placeholder,
+html[data-ui-theme="light"] .new-block-search input::placeholder,
+html[data-ui-theme="light"] .share-email-field input::placeholder,
+html[data-ui-theme="light"] .project-join-controls input::placeholder{
+  color:#8b939e;
+}
+
+html[data-ui-theme="light"] .row-edit,
+html[data-ui-theme="light"] .node-pseudo,
+html[data-ui-theme="light"] .empty-symbol,
+html[data-ui-theme="light"] .library-tip,
+html[data-ui-theme="light"] .share-method-card,
+html[data-ui-theme="light"] .share-join-card,
+html[data-ui-theme="light"] .ai-message,
+html[data-ui-theme="light"] .ai-builder-examples button,
+html[data-ui-theme="light"] .ai-builder-compose,
+html[data-ui-theme="light"] .menu-popover{
+  border-color:#d8dde5;
+  background:#f6f8fa;
+}
+
+html[data-ui-theme="light"] .node-pseudo,
+html[data-ui-theme="light"] .code-area{
+  color:#4f5966!important;
+}
+
+html[data-ui-theme="light"] .menu-popover button,
+html[data-ui-theme="light"] .new-block-close,
+html[data-ui-theme="light"] .share-email-field button,
+html[data-ui-theme="light"] .share-link-button,
+html[data-ui-theme="light"] .share-code-row button,
+html[data-ui-theme="light"] .share-code-join-row button,
+html[data-ui-theme="light"] .sketch-toolbar button,
+html[data-ui-theme="light"] .node-sketch-tools button,
+html[data-ui-theme="light"] .node-sketch-mode-button,
+html[data-ui-theme="light"] .node-sketch-action,
+html[data-ui-theme="light"] .minimap-center-button,
+html[data-ui-theme="light"] .minimap-zoom-button,
+html[data-ui-theme="light"] .minimap-zoom-readout,
+html[data-ui-theme="light"] .account-data-actions button,
+html[data-ui-theme="light"] .new-block-fan-close,
+html[data-ui-theme="light"] .switch-case-action,
+html[data-ui-theme="light"] .adapter-swap,
+html[data-ui-theme="light"] .ai-builder-examples button,
+html[data-ui-theme="light"] .ai-builder-toggle{
+  color:#4e5864;
+}
+
+html[data-ui-theme="light"] .menu-popover button:hover,
+html[data-ui-theme="light"] .node-more:hover,
+html[data-ui-theme="light"] .section-add-option:hover,
+html[data-ui-theme="light"] .fan-option:hover,
+html[data-ui-theme="light"] .share-email-field button:hover,
+html[data-ui-theme="light"] .share-link-button:hover,
+html[data-ui-theme="light"] .share-code-row button:hover,
+html[data-ui-theme="light"] .share-code-join-row button:hover,
+html[data-ui-theme="light"] .sketch-toolbar button:hover,
+html[data-ui-theme="light"] .page-menu-button[aria-expanded="true"],
+html[data-ui-theme="light"] .page-popover-actions button:hover:not(:disabled),
+html[data-ui-theme="light"] .new-block-close:hover{
+  background:#eef1f5;
+  color:#20252c!important;
+}
+
+html[data-ui-theme="light"] .node-more{
+  color:#707986;
+}
+html[data-ui-theme="light"] .node-row:hover{
+  background:rgba(31,38,48,.035);
+}
+html[data-ui-theme="light"] .row-kind{
+  background:#edf0f4;
+  color:#66717f;
+}
+html[data-ui-theme="light"] .block-template:hover{
+  border-color:#d9dee6;
+  background:#f3f5f8;
+}
+html[data-ui-theme="light"] .block-template kbd{
+  border-color:#d8dde5;
+  background:#f2f4f7;
+  color:#68717d;
+}
+
+html[data-ui-theme="light"] .canvas-hint{
+  border-color:#d7dce4;
+  background:rgba(255,255,255,.9);
+  color:#66707c!important;
+}
+html[data-ui-theme="light"] .canvas-hint strong{
+  color:#333a43;
+}
+
+html[data-ui-theme="light"] .minimap{
+  border-color:#d4dae3;
+  background:rgba(255,255,255,.92);
+}
+html[data-ui-theme="light"] .minimap-title{
+  color:#697381;
+}
+
+html[data-ui-theme="light"] .toast{
+  border-color:#d5dae2;
+  background:#fff;
+  color:#293039;
+  box-shadow:0 12px 32px rgba(35,43,56,.14);
+}
+
+/* Public/project pages also inherit the selected white tone. */
+html[data-ui-theme="light"] .project-library-head h2,
+html[data-ui-theme="light"] .site-page-heading h1,
+html[data-ui-theme="light"] .home-info-card h2,
+html[data-ui-theme="light"] .home-info-card h3,
+html[data-ui-theme="light"] .home-overview-grid h3,
+html[data-ui-theme="light"] .guide-callout h2,
+html[data-ui-theme="light"] .about-story-copy h2,
+html[data-ui-theme="light"] .about-feature-story h2,
+html[data-ui-theme="light"] .about-roadmap h2,
+html[data-ui-theme="light"] .privacy-heading h2,
+html[data-ui-theme="light"] .privacy-legal-grid h3,
+html[data-ui-theme="light"] .privacy-technical h2,
+html[data-ui-theme="light"] .project-card-title-row h3,
+html[data-ui-theme="light"] .footer-brand strong{
+  color:#252a31!important;
+}
+
+html[data-ui-theme="light"] .home-search input,
+html[data-ui-theme="light"] .home-nav a:hover,
+html[data-ui-theme="light"] .home-nav button.active{
+  color:#343b45!important;
+}
