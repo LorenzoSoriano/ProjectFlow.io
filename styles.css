@@ -8853,3 +8853,50 @@ html[data-ui-theme="light"] .project-join-controls input{
     width:100%;
   }
 }
+
+
+/* v2.50 — visible join state and resilient shared-project access */
+.project-join-status{
+  margin-top:9px;
+  padding:9px 10px;
+  border:1px solid #344158;
+  border-radius:8px;
+  background:#0d1522;
+  color:#93a2b8;
+  font-size:10px;
+  line-height:1.45;
+}
+.project-join-status[hidden]{display:none!important}
+.project-join-status[data-state="loading"]{
+  border-color:#405b78;
+  color:#a9bdd4;
+}
+.project-join-status[data-state="success"]{
+  border-color:#355f49;
+  background:#102019;
+  color:#9ed1b2;
+}
+.project-join-status[data-state="error"]{
+  border-color:#6f4141;
+  background:#211313;
+  color:#e0a4a4;
+}
+.project-join-controls button:disabled{
+  cursor:wait;
+  opacity:.72;
+}
+html[data-ui-theme="light"] .project-join-status{
+  border-color:#d6dde7;
+  background:#f7f9fc;
+  color:#5e6876;
+}
+html[data-ui-theme="light"] .project-join-status[data-state="success"]{
+  border-color:#b9d8c4;
+  background:#f1faf4;
+  color:#356847;
+}
+html[data-ui-theme="light"] .project-join-status[data-state="error"]{
+  border-color:#e3bcbc;
+  background:#fff4f4;
+  color:#9b4141;
+}
