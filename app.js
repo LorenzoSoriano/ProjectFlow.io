@@ -2097,6 +2097,7 @@
     sharedProjectUnsubscribe: null,
     presenceUnsubscribe: null,
     nodePositionsUnsubscribe: null,
+    kickUnsubscribe: null,
     remoteNodePositions: new Map(),
     presenceHeartbeat: null,
     presenceWriteTimer: null,
@@ -3663,6 +3664,28 @@
       "sharedProjects",
       projectId,
       "members",
+      userId
+    );
+  }
+
+  function sharedKickDocumentRef(projectId, userId) {
+    if (!projectId || !userId || !cloudState.api || !cloudState.db) return null;
+    return cloudState.api.doc(
+      cloudState.db,
+      "sharedProjects",
+      projectId,
+      "kicks",
+      userId
+    );
+  }
+
+  function sharedPresenceDocumentRef(projectId, userId) {
+    if (!projectId || !userId || !cloudState.api || !cloudState.db) return null;
+    return cloudState.api.doc(
+      cloudState.db,
+      "sharedProjects",
+      projectId,
+      "presence",
       userId
     );
   }
