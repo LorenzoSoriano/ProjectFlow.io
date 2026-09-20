@@ -4283,6 +4283,14 @@
       const check = connectionCheck(pendingPort, { nodeId: nodeId, rowId: rowId, side: side });
       port.classList.add(check.ok ? "compatible" : "incompatible");
       if (!check.ok) port.title = check.reason;
+    } else if (!pendingPort && selectedNodeIds.size === 1 && selectedNodeId && selectedNodeId !== nodeId) {
+      const selectedNode = nodeById(selectedNodeId);
+      const wantedSide = side === "in" ? "out" : "in";
+      const targetRef = { nodeId: nodeId, rowId: rowId, side: side };
+      const canAutoConnect = selectedNode && nodeSemanticPortRefs(selectedNode, wantedSide)
+        .some((entry) => connectionCheck(entry.ref, targetRef).ok);
+      port.classList.add(canAutoConnect ? "compatible" : "incompatible");
+      if (canAutoConnect) port.title = "Collega automaticamente il nodo selezionato";
     }
     port.addEventListener("pointerdown", (event) => {
       event.preventDefault();
