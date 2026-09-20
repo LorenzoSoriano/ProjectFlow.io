@@ -3913,27 +3913,27 @@
           });
         });
         meta.invites.sort((a, b) => a.email.localeCompare(b.email));
-
-        const memberCollection = cloudState.api.collection(
-          cloudState.db,
-          "sharedProjects",
-          snapshot.id,
-          "members"
-        );
-        const memberSnapshot = await cloudState.api.getDocs(memberCollection);
-        memberSnapshot.forEach((memberDoc) => {
-          const member = memberDoc.data() || {};
-          if (!member.uid || member.uid === meta.ownerId) return;
-          meta.members.push({
-            uid: member.uid,
-            email: normalizeShareEmail(member.email),
-            name: member.name || "",
-            joinedAt: Number(member.joinedAt) || 0,
-            role: member.role || "editor"
-          });
-        });
-        meta.members.sort((a, b) => (a.name || a.email || a.uid).localeCompare(b.name || b.email || b.uid));
       }
+
+      const memberCollection = cloudState.api.collection(
+        cloudState.db,
+        "sharedProjects",
+        snapshot.id,
+        "members"
+      );
+      const memberSnapshot = await cloudState.api.getDocs(memberCollection);
+      memberSnapshot.forEach((memberDoc) => {
+        const member = memberDoc.data() || {};
+        if (!member.uid || member.uid === meta.ownerId) return;
+        meta.members.push({
+          uid: member.uid,
+          email: normalizeShareEmail(member.email),
+          name: member.name || "",
+          joinedAt: Number(member.joinedAt) || 0,
+          role: member.role || "editor"
+        });
+      });
+      meta.members.sort((a, b) => (a.name || a.email || a.uid).localeCompare(b.name || b.email || b.uid));
 
       if (meta.ownerId === cloudState.user.uid && meta.joinCode && record) {
         record.shareCode = formatShareCode(meta.joinCode);
