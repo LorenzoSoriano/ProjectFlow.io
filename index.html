@@ -468,17 +468,42 @@
             </div>
             <div class="share-controls" id="shareControls" hidden>
               <div class="share-owner-copy" id="shareOwnerCopy"></div>
-              <label class="share-email-field" id="shareInviteField">
-                <span>INVITA PER EMAIL</span>
-                <div>
-                  <input id="shareEmailInput" type="email" placeholder="nome@email.com" autocomplete="email" />
-                  <button id="shareInviteButton" type="button">Invita</button>
+              <div class="share-owner-methods" id="shareOwnerMethods">
+                <label class="share-email-field" id="shareInviteField">
+                  <span>EMAIL</span>
+                  <div>
+                    <input id="shareEmailInput" type="email" placeholder="nome@email.com" autocomplete="email" />
+                    <button id="shareInviteButton" type="button">Invita</button>
+                  </div>
+                </label>
+
+                <div class="share-method-card">
+                  <span class="share-method-label">LINK DI ACCESSO</span>
+                  <button class="share-link-button" id="copyShareLink" type="button">⌁ Copia link</button>
+                  <small>Il link contiene il token di accesso. Dopo il login collega direttamente il progetto.</small>
                 </div>
-              </label>
-              <button class="share-link-button" id="copyShareLink" type="button">⌁ Copia link del progetto</button>
+
+                <div class="share-method-card" id="shareCodeCard">
+                  <span class="share-method-label">CODICE</span>
+                  <div class="share-code-row">
+                    <code id="shareCodeValue">—</code>
+                    <button id="copyShareCode" type="button">Copia</button>
+                  </div>
+                  <small>Condividi questo codice per permettere a un altro account di collegarsi.</small>
+                </div>
+              </div>
+
+              <div class="share-join-card" id="shareJoinCard">
+                <span class="share-method-label">COLLEGATI CON CODICE</span>
+                <div class="share-code-join-row">
+                  <input id="shareJoinCodeInput" type="text" inputmode="text" maxlength="16" placeholder="PF-XXXX-XXXX" autocomplete="off" />
+                  <button id="shareJoinCodeButton" type="button">Collegati</button>
+                </div>
+              </div>
+
               <div class="share-section-title">ACCESSI</div>
               <div class="share-member-list" id="shareMemberList"></div>
-              <p class="share-footnote">L’accesso resta attivo finché il proprietario non lo revoca. Il link richiede comunque l’account Google invitato.</p>
+              <p class="share-footnote">Email, link e codice creano un accesso persistente associato all’account Google. La collaborazione realtime passa tramite Firebase/Firestore.</p>
             </div>
           </div>
         </aside>
