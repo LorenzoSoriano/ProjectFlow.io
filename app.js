@@ -913,7 +913,7 @@
           execute.methodParameters[0].dataType !== "int") {
         execute.methodParameters = [functionParameter("index", "int", { access: "public" })];
       }
-    } else if (interfaceName === "IJob") {
+    } else if (interfaceName === "IJob" || interfaceName === "IJobEntity") {
       execute.methodParameters = [];
     }
     syncLegacyParameters(execute);
@@ -6346,6 +6346,10 @@
       }
 
       const removeMember = (item) => {
+        if (node.type === "jobStruct" && item.jobExecute) {
+          showToast("Execute è obbligatorio per un Unity Job.");
+          return;
+        }
         if (item.kind === "component" && item.locked) {
           showToast("Transform è obbligatorio su ogni GameObject.");
           return;
@@ -9056,6 +9060,10 @@
     remove.textContent = "×";
     remove.title = "Rimuovi";
     remove.addEventListener("click", () => {
+      if (node.type === "jobStruct" && item.jobExecute) {
+        showToast("Execute è obbligatorio per un Unity Job.");
+        return;
+      }
       node.rows = node.rows.filter((rowItem) => rowItem.id !== item.id);
       project.connections = project.connections.filter((edge) => edge.from.rowId !== item.id && edge.to.rowId !== item.id);
       render();
@@ -9085,7 +9093,10 @@
     if (item.kind === "variable" || item.kind === "property") {
       const grid = document.createElement("div");
       grid.className = "settings-grid member-grid";
-      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, ["public", "private", "protected", "internal"], (value) => {
+      const variableAccessOptions = (node.type === "struct" || node.type === "jobStruct")
+        ? ["public", "private", "internal"]
+        : ["public", "private", "protected", "internal"];
+      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, variableAccessOptions, (value) => {
         item.access = value;
         if (value === "public") item.serialized = true;
         renderNodes();
@@ -9179,7 +9190,10 @@
     } else if (item.kind === "function") {
       const grid = document.createElement("div");
       grid.className = "settings-grid member-grid";
-      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, ["public", "private", "protected", "internal"], (value) => {
+      const methodAccessOptions = (node.type === "struct" || node.type === "jobStruct")
+        ? ["public", "private", "internal"]
+        : ["public", "private", "protected", "internal"];
+      grid.appendChild(inspectorField("ACCESSO", selectControl(item.access, methodAccessOptions, (value) => {
         item.access = value;
         renderNodes();
         markDirty();
@@ -10656,6 +10670,8 @@
     return [
       { type: "object", purpose: "GameObject / target reference", ports: "OUT GameObject:GameObject" },
       { type: "component", purpose: "Unity component reference", config: "componentType", ports: "OUT component reference" },
+      { type: "struct", purpose: "C# value type with fields and methods", ports: "member ports" },
+      { type: "jobStruct", purpose: "Unity Job struct implementing a job interface", config: "jobInterface, jobScheduleMode, jobBurst", ports: "job data and Execute members" },
       { type: "event", purpose: "flow entry point", ports: "OUT Next:flow, OUT payload:any; may add extra output rows" },
       { type: "action", purpose: "perform a gameplay action", ports: "IN Enter:flow, OUT Next:flow; may add extra input/output rows" },
       { type: "constant", purpose: "typed literal / constant value", config: "constantType, constantValue", ports: "OUT Value:data" },
