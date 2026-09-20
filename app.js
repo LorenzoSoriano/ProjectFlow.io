@@ -2715,6 +2715,7 @@
   function endGroupDrag() {
     window.removeEventListener("pointermove", moveGroup);
     if (!groupDrag) return;
+    const movedNodes = groupDrag.starts.map((entry) => rootNodeById(entry.id)).filter(Boolean);
     groupDrag = null;
     if (interactionFrame) {
       cancelAnimationFrame(interactionFrame);
@@ -2726,7 +2727,7 @@
     renderEdges();
     renderMinimap();
     markDirty();
-    finishDragPreview();
+    finishDragPreview(movedNodes);
   }
 
   function projectStats(data) {
@@ -4292,6 +4293,7 @@
     const previousId = cloudState.sharedProjectId;
     if (cloudState.sharedProjectUnsubscribe) cloudState.sharedProjectUnsubscribe();
     if (cloudState.presenceUnsubscribe) cloudState.presenceUnsubscribe();
+    if (cloudState.nodePositionsUnsubscribe) cloudState.nodePositionsUnsubscribe();
     clearInterval(cloudState.presenceHeartbeat);
     clearTimeout(cloudState.presenceWriteTimer);
     clearTimeout(cloudState.presencePreviewClearTimer);
@@ -4311,6 +4313,8 @@
 
     cloudState.sharedProjectUnsubscribe = null;
     cloudState.presenceUnsubscribe = null;
+    cloudState.nodePositionsUnsubscribe = null;
+    cloudState.remoteNodePositions = new Map();
     cloudState.presenceHeartbeat = null;
     cloudState.presenceWriteTimer = null;
     cloudState.presencePreviewClearTimer = null;
@@ -4367,6 +4371,8 @@
         $("projectName").value = value.name || project.name || "Untitled Flow";
         updateProjectNameAccess();
         render();
+        applyStoredRemoteNodePositions();
+        renderRemotePresence();
         resetHistory();
       } finally {
         cloudState.applyingRemote = false;
@@ -4385,8 +4391,10 @@
     );
     cloudState.presenceUnsubscribe = cloudState.api.onSnapshot(presenceCollection, (snapshot) => {
       const next = new Map();
+      const receivedAt = Date.now();
       snapshot.forEach((docSnapshot) => {
         const value = docSnapshot.data() || {};
+        value._receivedAt = receivedAt;
         if (value.uid) next.set(value.uid, value);
       });
       cloudState.remotePresence = next;
@@ -4394,6 +4402,33 @@
       scheduleMinimapRender(0);
     }, (error) => {
       console.warn("ProjectFlow: cursori collaborativi non disponibili.", error);
+    });
+
+    const nodePositionsCollection = cloudState.api.collection(
+      cloudState.db,
+      "sharedProjects",
+      record.sharedProjectId,
+      "nodePositions"
+    );
+    cloudState.nodePositionsUnsubscribe = cloudState.api.onSnapshot(nodePositionsCollection, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "removed") {
+          cloudState.remoteNodePositions.delete(change.doc.id);
+          return;
+        }
+        const value = change.doc.data() || {};
+        const position = {
+          id: value.nodeId || change.doc.id,
+          x: Number(value.x),
+          y: Number(value.y),
+          updatedBy: value.updatedBy || ""
+        };
+        if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+        cloudState.remoteNodePositions.set(position.id, position);
+        if (position.updatedBy !== cloudState.user.uid) applyRemoteNodePositions([position]);
+      });
+    }, (error) => {
+      console.warn("ProjectFlow: posizioni realtime non disponibili.", error);
     });
 
     writePresenceNow();
@@ -10670,7 +10705,7 @@
     renderEdges();
     renderMinimap();
     markDirty();
-    finishDragPreview();
+    finishDragPreview(droppedNodeIds.map((id) => rootNodeById(id)).filter(Boolean));
 
     if (assignments.length === 1) {
       const group = groupById(assignments[0].groupId);
