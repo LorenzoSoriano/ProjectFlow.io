@@ -4139,6 +4139,38 @@
     }
   }
 
+  function collaboratorUidsByEmail(emailValue) {
+    const email = normalizeShareEmail(emailValue);
+    if (!email) return [];
+    const ids = new Set();
+
+    const meta = cloudState.sharedMeta || {};
+    (meta.members || []).forEach((member) => {
+      if (normalizeShareEmail(member.email) === email && member.uid) ids.add(member.uid);
+    });
+    cloudState.remotePresence.forEach((entry) => {
+      if (entry && normalizeShareEmail(entry.email) === email && entry.uid) ids.add(entry.uid);
+    });
+    return Array.from(ids);
+  }
+
+  async function kickSharedUser(projectId, userId, emailValue) {
+    if (!projectId || !userId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    const email = normalizeShareEmail(emailValue);
+    const tasks = [
+      cloudState.api.setDoc(sharedKickDocumentRef(projectId, userId), {
+        uid: userId,
+        email: email,
+        revokedBy: cloudState.user.uid,
+        revokedAt: Date.now(),
+        active: true
+      }, { merge: true }),
+      cloudState.api.deleteDoc(sharedMemberDocumentRef(projectId, userId)).catch(() => {}),
+      cloudState.api.deleteDoc(sharedPresenceDocumentRef(projectId, userId)).catch(() => {})
+    ];
+    await Promise.all(tasks);
+  }
+
   async function revokeCollaborator(emailValue) {
     const record = projectRecordById(currentProjectId);
     const email = normalizeShareEmail(emailValue);
@@ -4146,12 +4178,15 @@
     if (record.ownerId && record.ownerId !== cloudState.user.uid) return;
 
     try {
+      const userIds = collaboratorUidsByEmail(email);
+      await Promise.all(userIds.map((userId) => kickSharedUser(record.sharedProjectId, userId, email)));
       await Promise.all([
         cloudState.api.deleteDoc(inviteDocumentRef(email, record.sharedProjectId)),
         cloudState.api.deleteDoc(ownerInviteDocumentRef(record.sharedProjectId, email))
       ]);
       await refreshSharePanelMeta();
-      showToast("Accesso revocato a " + email);
+      renderRemotePresence();
+      showToast(userIds.length ? "Collaboratore espulso: " + email : "Invito revocato a " + email);
     } catch (error) {
       console.warn("ProjectFlow: revoca non riuscita.", error);
       showToast("Revoca non riuscita");
@@ -4164,14 +4199,18 @@
     if (record.ownerId && record.ownerId !== cloudState.user.uid) return;
 
     try {
-      const tasks = [
-        cloudState.api.deleteDoc(sharedMemberDocumentRef(record.sharedProjectId, userId))
-      ];
       const email = normalizeShareEmail(emailValue);
-      if (email) tasks.push(cloudState.api.deleteDoc(inviteDocumentRef(email, record.sharedProjectId)));
+      await kickSharedUser(record.sharedProjectId, userId, email);
+
+      const tasks = [];
+      if (email) {
+        tasks.push(cloudState.api.deleteDoc(inviteDocumentRef(email, record.sharedProjectId)).catch(() => {}));
+        tasks.push(cloudState.api.deleteDoc(ownerInviteDocumentRef(record.sharedProjectId, email)).catch(() => {}));
+      }
       await Promise.all(tasks);
       await refreshSharePanelMeta();
-      showToast("Accesso editor revocato");
+      renderRemotePresence();
+      showToast("Editor espulso dal progetto");
     } catch (error) {
       console.warn("ProjectFlow: revoca membro non riuscita.", error);
       showToast("Revoca non riuscita");
