@@ -10203,6 +10203,21 @@
     }
     if (!selectedNodeIds.size) return;
 
+    const protectedIds = new Set(
+      project.nodes
+        .filter((item) => item && item.boundaryLocked && selectedNodeIds.has(item.id))
+        .map((item) => item.id)
+    );
+    if (protectedIds.size) {
+      protectedIds.forEach((id) => selectedNodeIds.delete(id));
+      syncPrimarySelection();
+      if (!selectedNodeIds.size) {
+        render();
+        showToast("Graph Input e Graph Output sono generati dal nodo padre.");
+        return;
+      }
+    }
+
     const ids = new Set(selectedNodeIds);
     const count = ids.size;
     project.nodes = project.nodes.filter((item) => !ids.has(item.id));
@@ -11458,7 +11473,13 @@
           (skipped.length ? " · " + skipped.length + " connessioni scartate dal validator" : "")
       };
     } catch (error) {
-      project = normalizeProject(snapshot);
+      const restored = normalizeProject(snapshot);
+      if (project === rootProject) {
+        setProjectDocument(restored);
+      } else {
+        Object.keys(project).forEach((key) => delete project[key]);
+        Object.assign(project, restored);
+      }
       resetEditorSelection();
       render();
       throw error;
@@ -12267,6 +12288,12 @@
 
   $("backToProjects").addEventListener("click", () => {
     saveProject(false);
+    if (graphWorkspaceStack.length) {
+      project = rootProject;
+      graphWorkspaceStack = [];
+      currentWorkspaceLabel = "";
+      updateGraphBreadcrumb();
+    }
     showProjectHome("projects");
   });
 
