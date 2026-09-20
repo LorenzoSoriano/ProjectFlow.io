@@ -12103,6 +12103,7 @@
     createProjectFromDialog();
   });
   $("createProjectCancel").addEventListener("click", closeCreateProjectDialog);
+  $("createProjectCancelFooter").addEventListener("click", closeCreateProjectDialog);
   $("createProjectSchema").addEventListener("change", updateCreateProjectSchemaPreview);
   $("createProjectDialog").addEventListener("mousedown", (event) => {
     if (event.target === $("createProjectDialog")) closeCreateProjectDialog();
