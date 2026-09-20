@@ -80,7 +80,7 @@ service cloud.firestore {
           && request.resource.data.updatedBy == request.auth.uid;
 
         allow delete:
-          if isSharedOwner(projectId);
+          if canAccessShared(projectId);
       }
 
       match /members/{memberId} {
