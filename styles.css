@@ -8108,3 +8108,107 @@ body,
 .type-flowIO{
   border-color:#2d4650;
 }
+
+
+/* v2.44 — collaboration share methods */
+.share-owner-methods{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+.share-owner-methods[hidden]{display:none}
+.share-method-card,
+.share-join-card{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  padding:10px;
+  border:1px solid #393939;
+  border-radius:9px;
+  background:#222;
+}
+.share-method-card small,
+.share-join-card small{
+  color:#6f6f6f;
+  font-size:8px;
+  line-height:1.45;
+}
+.share-method-label{
+  color:#747474;
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:1px;
+}
+.share-code-row,
+.share-code-join-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:6px;
+  align-items:center;
+}
+.share-code-row code{
+  min-width:0;
+  height:35px;
+  display:flex;
+  align-items:center;
+  padding:0 10px;
+  overflow:hidden;
+  border:1px solid #3b4650;
+  border-radius:7px;
+  background:#171b1e;
+  color:#a9c9da;
+  font:800 11px "SFMono-Regular",Consolas,monospace;
+  letter-spacing:.8px;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.share-code-row code.empty{
+  color:#696969;
+  font-size:8px;
+  letter-spacing:0;
+}
+.share-code-row button,
+.share-code-join-row button{
+  min-height:35px;
+  padding:0 11px;
+  border:1px solid #46505a;
+  border-radius:7px;
+  background:#2a2d2f;
+  color:#c7c7c7;
+  cursor:pointer;
+  font-size:9px;
+}
+.share-code-row button:hover,
+.share-code-join-row button:hover{
+  border-color:#5b7180;
+  background:#33383b;
+  color:#fff;
+}
+.share-join-card{
+  margin:12px 0 14px;
+  border-color:#3d4950;
+  background:#202425;
+}
+.share-code-join-row input{
+  min-width:0;
+  height:35px;
+  padding:0 10px;
+  border:1px solid #3d454a;
+  border-radius:7px;
+  outline:0;
+  background:#17191a;
+  color:#d4d4d4;
+  font:800 10px "SFMono-Regular",Consolas,monospace;
+  letter-spacing:.5px;
+  text-transform:uppercase;
+}
+.share-code-join-row input:focus{
+  border-color:#5d8297;
+  box-shadow:0 0 0 2px rgba(93,130,151,.11);
+}
+.share-method-card .share-link-button{
+  margin:0;
+}
+.remote-node-preview{
+  opacity:.48;
+}
