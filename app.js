@@ -3803,7 +3803,8 @@
         ownerName: cloudState.user.displayName || "",
         ownerEmail: normalizeShareEmail(cloudState.user.email),
         joinCode: "",
-        invites: []
+        invites: [],
+        members: []
       };
       renderSharePanel();
       return;
@@ -3824,7 +3825,8 @@
         ownerName: value.ownerName || "",
         ownerEmail: value.ownerEmail || "",
         joinCode: normalizeShareCode(value.joinCode),
-        invites: []
+        invites: [],
+        members: []
       };
 
       if (meta.ownerId === cloudState.user.uid) {
@@ -3843,6 +3845,31 @@
           });
         });
         meta.invites.sort((a, b) => a.email.localeCompare(b.email));
+
+        const memberCollection = cloudState.api.collection(
+          cloudState.db,
+          "sharedProjects",
+          snapshot.id,
+          "members"
+        );
+        const memberSnapshot = await cloudState.api.getDocs(memberCollection);
+        memberSnapshot.forEach((memberDoc) => {
+          const member = memberDoc.data() || {};
+          if (!member.uid || member.uid === meta.ownerId) return;
+          meta.members.push({
+            uid: member.uid,
+            email: normalizeShareEmail(member.email),
+            name: member.name || "",
+            joinedAt: Number(member.joinedAt) || 0,
+            role: member.role || "editor"
+          });
+        });
+        meta.members.sort((a, b) => (a.name || a.email || a.uid).localeCompare(b.name || b.email || b.uid));
+      }
+
+      if (meta.ownerId === cloudState.user.uid && meta.joinCode && record) {
+        record.shareCode = formatShareCode(meta.joinCode);
+        persistProjectLibrary();
       }
 
       cloudState.sharedMeta = meta;
@@ -3858,8 +3885,10 @@
     const controls = $("shareControls");
     const ownerCopy = $("shareOwnerCopy");
     const inviteField = $("shareInviteField");
+    const ownerMethods = $("shareOwnerMethods");
     const memberList = $("shareMemberList");
     const copyButton = $("copyShareLink");
+    const codeValue = $("shareCodeValue");
     if (!notice || !controls || !memberList) return;
 
     const record = projectRecordById(currentProjectId);
@@ -3877,7 +3906,9 @@
       ownerId: record && record.ownerId || cloudState.user.uid,
       ownerName: record && record.ownerName || cloudState.user.displayName || "",
       ownerEmail: record && record.ownerEmail || normalizeShareEmail(cloudState.user.email),
-      invites: []
+      joinCode: normalizeShareCode(record && record.shareCode),
+      invites: [],
+      members: []
     };
     const isOwner = !meta.ownerId || meta.ownerId === cloudState.user.uid;
 
@@ -3890,7 +3921,13 @@
     }
 
     if (inviteField) inviteField.hidden = !isOwner;
+    if (ownerMethods) ownerMethods.hidden = !isOwner;
     if (copyButton) copyButton.hidden = !isOwner;
+    if (codeValue) {
+      const code = formatShareCode(meta.joinCode || (record && record.shareCode));
+      codeValue.textContent = code || "Genera al primo utilizzo";
+      codeValue.classList.toggle("empty", !code);
+    }
 
     memberList.innerHTML = "";
     const ownerRow = document.createElement("div");
@@ -3909,7 +3946,9 @@
     memberList.appendChild(ownerRow);
 
     if (isOwner) {
+      const joinedEmails = new Set((meta.members || []).map((member) => member.email).filter(Boolean));
       (meta.invites || []).forEach((invite) => {
+        if (joinedEmails.has(invite.email)) return;
         const row = document.createElement("div");
         row.className = "share-member";
 
@@ -3922,13 +3961,38 @@
         const strong = document.createElement("strong");
         strong.textContent = invite.email;
         const small = document.createElement("small");
-        small.textContent = "Editor invitato";
+        small.textContent = "Invito email · in attesa / abilitato";
         copy.append(strong, small);
 
         const revoke = document.createElement("button");
         revoke.type = "button";
         revoke.textContent = "Revoca";
         revoke.addEventListener("click", () => revokeCollaborator(invite.email));
+
+        row.append(avatar, copy, revoke);
+        memberList.appendChild(row);
+      });
+
+      (meta.members || []).forEach((member) => {
+        const row = document.createElement("div");
+        row.className = "share-member";
+
+        const avatar = document.createElement("span");
+        avatar.className = "share-member-avatar";
+        avatar.textContent = (member.name || member.email || "E").trim().charAt(0).toUpperCase();
+
+        const copy = document.createElement("span");
+        copy.className = "share-member-copy";
+        const strong = document.createElement("strong");
+        strong.textContent = member.name || member.email || "Editor";
+        const small = document.createElement("small");
+        small.textContent = (member.email ? member.email + " · " : "") + "editor collegato";
+        copy.append(strong, small);
+
+        const revoke = document.createElement("button");
+        revoke.type = "button";
+        revoke.textContent = "Revoca";
+        revoke.addEventListener("click", () => revokeSharedMember(member.uid, member.email));
 
         row.append(avatar, copy, revoke);
         memberList.appendChild(row);
