@@ -10396,6 +10396,10 @@
       aiBuilderSetStatus("Gemini · " + GEMINI_MODEL_ID + " · pronto", "ready");
       return applied;
     } catch (error) {
+      // Recreate the Firebase AI client on the next attempt. This matters when
+      // AI Logic / IAM / API restrictions are enabled while ProjectFlow is open.
+      geminiModel = null;
+      geminiModelPromise = null;
       aiBuilderSetStatus("Gemini · richiesta fallita", "error");
       throw error;
     }
@@ -10404,13 +10408,20 @@
   function aiFriendlyFirebaseError(error) {
     const code = error && error.code ? String(error.code) : "";
     const message = String(error && error.message ? error.message : error || "");
+    const lower = message.toLowerCase();
 
-    if (code === "AI/api-not-enabled" || message.includes("firebasevertexai.googleapis.com")) {
-      aiBuilderSetStatus("Firebase AI Logic non attivo · apri Console e premi Get started", "error");
+    if (code === "AI/api-not-enabled" || lower.includes("firebasevertexai.googleapis.com") && lower.includes("enable")) {
+      aiBuilderSetStatus("Firebase AI Logic · attivazione non ancora propagata", "error");
       return (
-        "Firebase AI Logic non è ancora attivo per questo progetto. " +
-        "Apri Firebase Console → AI Services → AI Logic → Get started, scegli Gemini Developer API e completa la configurazione. " +
-        "Dopo l'attivazione attendi qualche minuto e riprova."
+        "Firebase AI Logic risulta ancora non attivo alla richiesta. Se hai appena premuto Get started, attendi qualche minuto e riprova. " +
+        "Nel progetto devono essere abilitate sia Firebase AI Logic API (firebasevertexai.googleapis.com) sia Gemini Developer API (generativelanguage.googleapis.com)."
+      );
+    }
+    if (lower.includes("firebasevertexai.googleapis.com") && (lower.includes("blocked") || lower.includes("forbidden") || lower.includes("permission"))) {
+      aiBuilderSetStatus("Firebase AI Logic · API key bloccata", "error");
+      return (
+        "La Firebase API key sta bloccando Firebase AI Logic. In Google Cloud → API e servizi → Credenziali, apri la chiave usata dalla web app " +
+        "e assicurati che Firebase AI Logic API sia inclusa nelle API consentite."
       );
     }
     if (code.includes("app-check") || /app check/i.test(message)) {
@@ -10420,7 +10431,17 @@
         "Configura App Check per la web app ProjectFlow nella Firebase Console e poi riprova."
       );
     }
-    return "Gemini via Firebase AI Logic non è disponibile: " + message;
+    if (lower.includes("quota") || lower.includes("resource_exhausted") || code.includes("quota")) {
+      aiBuilderSetStatus("Gemini · quota temporaneamente esaurita", "error");
+      return "La quota Gemini disponibile per questo progetto è temporaneamente esaurita. Riprova più tardi o controlla le quote Firebase AI Logic.";
+    }
+    if (lower.includes("model") && (lower.includes("not found") || lower.includes("unsupported"))) {
+      aiBuilderSetStatus("Gemini · modello non disponibile", "error");
+      return "Il modello " + GEMINI_MODEL_ID + " non risulta disponibile per questo progetto/provider.";
+    }
+
+    aiBuilderSetStatus("Gemini · errore " + (code || "sconosciuto"), "error");
+    return "Gemini via Firebase AI Logic non è disponibile" + (code ? " (" + code + ")" : "") + ": " + message;
   }
 
   async function submitAiBuilderPrompt() {
