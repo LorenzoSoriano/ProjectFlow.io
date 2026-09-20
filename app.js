@@ -1896,6 +1896,7 @@
             ownerId: entry.ownerId ? String(entry.ownerId) : "",
             ownerName: entry.ownerName ? String(entry.ownerName) : "",
             ownerEmail: entry.ownerEmail ? String(entry.ownerEmail) : "",
+            shareCode: entry.shareCode ? String(entry.shareCode) : "",
             data: normalizeProject(entry.data)
           }));
       }
@@ -1977,6 +1978,7 @@
         ownerId: opts.ownerId || "",
         ownerName: opts.ownerName || "",
         ownerEmail: opts.ownerEmail || "",
+        shareCode: opts.shareCode || "",
         data: normalizeProject(cloneProjectData(data))
       };
       projectLibrary.unshift(record);
@@ -1989,6 +1991,7 @@
       if (opts.ownerId !== undefined) record.ownerId = opts.ownerId || "";
       if (opts.ownerName !== undefined) record.ownerName = opts.ownerName || "";
       if (opts.ownerEmail !== undefined) record.ownerEmail = opts.ownerEmail || "";
+      if (opts.shareCode !== undefined) record.shareCode = opts.shareCode || "";
     }
 
     persistProjectLibrary();
@@ -2093,6 +2096,7 @@
     sharedProjectId: "",
     sharedProjectUnsubscribe: null,
     presenceUnsubscribe: null,
+    nodePositionsUnsubscribe: null,
     presenceHeartbeat: null,
     presenceWriteTimer: null,
     presenceCursor: null,
