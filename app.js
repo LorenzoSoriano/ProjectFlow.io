@@ -4090,6 +4090,73 @@
     }
   }
 
+  async function revokeSharedMember(userId, emailValue) {
+    const record = projectRecordById(currentProjectId);
+    if (!record || !record.sharedProjectId || !cloudState.user || !userId) return;
+    if (record.ownerId && record.ownerId !== cloudState.user.uid) return;
+
+    try {
+      const tasks = [
+        cloudState.api.deleteDoc(sharedMemberDocumentRef(record.sharedProjectId, userId))
+      ];
+      const email = normalizeShareEmail(emailValue);
+      if (email) tasks.push(cloudState.api.deleteDoc(inviteDocumentRef(email, record.sharedProjectId)));
+      await Promise.all(tasks);
+      await refreshSharePanelMeta();
+      showToast("Accesso editor revocato");
+    } catch (error) {
+      console.warn("ProjectFlow: revoca membro non riuscita.", error);
+      showToast("Revoca non riuscita");
+    }
+  }
+
+  async function writeClipboardText(text, fallbackTitle) {
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (clipboardError) {
+        console.warn("ProjectFlow: Clipboard API non disponibile.", clipboardError);
+      }
+    }
+
+    if (!copied) {
+      const field = document.createElement("textarea");
+      field.value = text;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.left = "-9999px";
+      document.body.appendChild(field);
+      field.select();
+      copied = document.execCommand("copy");
+      field.remove();
+    }
+
+    if (!copied) window.prompt(fallbackTitle || "Copia:", text);
+    return copied;
+  }
+
+  async function copyCurrentShareCode() {
+    const record = projectRecordById(currentProjectId);
+    if (!record || !cloudState.user) {
+      showToast("Accedi con Google per condividere");
+      return;
+    }
+
+    try {
+      const code = await ensureSharedAccessCode(record);
+      if (!code) return;
+      const display = formatShareCode(code);
+      const copied = await writeClipboardText(display, "Copia questo codice:");
+      await refreshSharePanelMeta();
+      showToast(copied ? "Codice copiato" : "Codice generato");
+    } catch (error) {
+      console.warn("ProjectFlow: codice condivisione non disponibile.", error);
+      showToast("Impossibile creare il codice · controlla le Firestore Rules");
+    }
+  }
+
   async function copyCurrentShareLink() {
     const record = projectRecordById(currentProjectId);
     if (!record || !cloudState.user) {
@@ -4098,42 +4165,20 @@
     }
 
     try {
-      await ensureSharedProject(record);
+      const code = await ensureSharedAccessCode(record);
       const url = new URL(window.location.href);
       url.searchParams.set("shared", record.sharedProjectId);
+      url.searchParams.set("join", code);
       url.hash = "";
       const text = url.toString();
-
-      let copied = false;
-      if (navigator.clipboard && window.isSecureContext) {
-        try {
-          await navigator.clipboard.writeText(text);
-          copied = true;
-        } catch (clipboardError) {
-          console.warn("ProjectFlow: Clipboard API non disponibile.", clipboardError);
-        }
-      }
-
-      if (!copied) {
-        const field = document.createElement("textarea");
-        field.value = text;
-        field.setAttribute("readonly", "");
-        field.style.position = "fixed";
-        field.style.left = "-9999px";
-        document.body.appendChild(field);
-        field.select();
-        copied = document.execCommand("copy");
-        field.remove();
-      }
-
+      const copied = await writeClipboardText(text, "Copia questo link:");
       await refreshSharePanelMeta();
-      if (copied) showToast("Link copiato");
-      else window.prompt("Copia questo link:", text);
+      showToast(copied ? "Link di accesso copiato" : "Link pronto");
     } catch (error) {
       console.warn("ProjectFlow: copia link non riuscita.", error);
       const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
       showToast(denied
-        ? "Permesso Firebase negato · pubblica le nuove Firestore Rules"
+        ? "Permesso Firebase negato · pubblica le Firestore Rules aggiornate"
         : "Impossibile creare il link · " + (error.code || "errore Firebase"));
     }
   }
@@ -4882,6 +4927,7 @@
       ownerId: value.ownerId || "",
       ownerName: value.ownerName || "",
       ownerEmail: value.ownerEmail || "",
+      shareCode: owner ? formatShareCode(value.joinCode) : "",
       data: normalizeProject(value.data)
     };
   }
@@ -4899,6 +4945,7 @@
     local.ownerId = remote.ownerId;
     local.ownerName = remote.ownerName;
     local.ownerEmail = remote.ownerEmail;
+    if (remote.shareCode) local.shareCode = remote.shareCode;
     local.createdAt = remote.createdAt || local.createdAt;
 
     if (!local.updatedAt || remote.updatedAt >= local.updatedAt || local.sharedRole !== "owner") {
@@ -4961,6 +5008,11 @@
     if (!id || !cloudState.user || !cloudState.api || !cloudState.db) return false;
 
     try {
+      const joinCode = shareJoinCodeFromLocation();
+      if (joinCode) {
+        await claimSharedProjectAccess(id, joinCode);
+      }
+
       const snapshot = await cloudState.api.getDoc(sharedProjectRef(id));
       if (!snapshot.exists()) return false;
       const remote = sharedRecordFromSnapshot(snapshot);
@@ -4969,10 +5021,14 @@
       persistProjectLibrary();
       renderProjectLibrary();
       await activateProject(remote.id, true);
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("join");
+      window.history.replaceState({}, "", url.toString());
       return true;
     } catch (error) {
       console.warn("ProjectFlow: link condiviso non accessibile.", error);
-      showToast("Questo account non ha accesso al progetto condiviso");
+      showToast("Link non valido, revocato o Firestore Rules non aggiornate");
       return false;
     }
   }
