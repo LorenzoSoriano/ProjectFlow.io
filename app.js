@@ -2426,6 +2426,23 @@
     if (!Array.isArray(graph.nodes)) graph.nodes = [];
     if (!Array.isArray(graph.connections)) graph.connections = [];
     if (!Array.isArray(graph.groups)) graph.groups = [];
+
+    graph.nodes = graph.nodes
+      .filter((entry) => entry && typeof entry === "object")
+      .map((entry, index) => {
+        const legacyInlineAction = entry.type === "action" &&
+          (!Array.isArray(entry.rows) || !entry.rows.length) &&
+          typeof entry.x !== "number" &&
+          typeof entry.y !== "number";
+        if (!legacyInlineAction) return entry;
+
+        const migrated = defaultNode("action", 430 + index * 470, 320);
+        migrated.id = entry.id || migrated.id;
+        migrated.title = entry.title || migrated.title;
+        migrated.actionKind = entry.actionKind || migrated.actionKind;
+        return migrated;
+      });
+
     return normalizeProject(graph);
   }
 
