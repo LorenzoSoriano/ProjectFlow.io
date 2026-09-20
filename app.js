@@ -840,6 +840,8 @@
     }
 
     if (node.type === "sketch") {
+      const fallbackSketchWidth = Math.max(360, Math.min(1400, Number(node.sketchWidth) || 520));
+      const fallbackSketchHeight = Math.max(220, Math.min(1000, Number(node.sketchHeight) || 320));
       if (!Array.isArray(node.sketchStrokes)) node.sketchStrokes = [];
       node.sketchStrokes = node.sketchStrokes
         .filter((stroke) => stroke && Array.isArray(stroke.points) && stroke.points.length > 1)
@@ -848,6 +850,11 @@
           color: typeof stroke.color === "string" ? stroke.color : "#52677c",
           size: Math.max(1, Math.min(16, Number(stroke.size) || 3)),
           mode: stroke.mode === "erase" ? "erase" : "draw",
+          // Every stroke keeps the local paper size it was drawn on.
+          // Resizing the Sketch can therefore reveal/crop space without
+          // scaling artwork that already exists.
+          spaceWidth: Math.max(1, Number(stroke.spaceWidth) || fallbackSketchWidth),
+          spaceHeight: Math.max(1, Number(stroke.spaceHeight) || fallbackSketchHeight),
           points: stroke.points
             .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
             .map((point) => ({
@@ -860,10 +867,8 @@
       if (typeof node.sketchSize !== "number") node.sketchSize = 3;
       node.sketchSize = Math.max(1, Math.min(16, node.sketchSize));
       if (node.sketchMode !== "erase") node.sketchMode = "draw";
-      if (typeof node.sketchWidth !== "number") node.sketchWidth = 520;
-      if (typeof node.sketchHeight !== "number") node.sketchHeight = 320;
-      node.sketchWidth = Math.max(360, Math.min(1400, node.sketchWidth));
-      node.sketchHeight = Math.max(220, Math.min(1000, node.sketchHeight));
+      node.sketchWidth = fallbackSketchWidth;
+      node.sketchHeight = fallbackSketchHeight;
     }
 
     if (node.type === "class") {
@@ -3138,9 +3143,11 @@
               : (stroke.color || "#52677c");
             if (stroke.mode === "erase") ctx.setLineDash([6 * ratio, 4 * ratio]);
             ctx.beginPath();
+            const spaceWidth = Math.max(1, Number(stroke.spaceWidth) || paper.clientWidth);
+            const spaceHeight = Math.max(1, Number(stroke.spaceHeight) || paper.clientHeight);
             stroke.points.forEach((point, index) => {
-              const x = point.x * overlay.width;
-              const y = point.y * overlay.height;
+              const x = point.x * spaceWidth * ratio;
+              const y = point.y * spaceHeight * ratio;
               if (index === 0) ctx.moveTo(x, y);
               else ctx.lineTo(x, y);
             });
@@ -3265,6 +3272,8 @@
         color: stroke.color || "#52677c",
         size: Number(stroke.size) || 3,
         mode: stroke.mode === "erase" ? "erase" : "draw",
+        spaceWidth: Math.max(1, Number(stroke.spaceWidth) || Number(node.sketchWidth) || 520),
+        spaceHeight: Math.max(1, Number(stroke.spaceHeight) || Number(node.sketchHeight) || 320),
         points: compactSketchPreviewPoints(stroke.points, 180)
       },
       updatedAt: Date.now()
@@ -4633,12 +4642,18 @@
     if (!canvas || !stroke || !from || !to) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const ratio = canvas.width / Math.max(1, canvas.clientWidth || canvas.width);
+    const clientWidth = Math.max(1, canvas.clientWidth || canvas.width);
+    const clientHeight = Math.max(1, canvas.clientHeight || canvas.height);
+    const ratioX = canvas.width / clientWidth;
+    const ratioY = canvas.height / clientHeight;
+    const ratio = Math.max(1, (ratioX + ratioY) / 2);
+    const spaceWidth = Math.max(1, Number(stroke.spaceWidth) || clientWidth);
+    const spaceHeight = Math.max(1, Number(stroke.spaceHeight) || clientHeight);
     ctx.save();
     applySketchStrokeStyle(ctx, stroke, ratio);
     ctx.beginPath();
-    ctx.moveTo(from.x * canvas.width, from.y * canvas.height);
-    ctx.lineTo(to.x * canvas.width, to.y * canvas.height);
+    ctx.moveTo(from.x * spaceWidth * ratioX, from.y * spaceHeight * ratioY);
+    ctx.lineTo(to.x * spaceWidth * ratioX, to.y * spaceHeight * ratioY);
     ctx.stroke();
     ctx.restore();
   }
@@ -4662,12 +4677,14 @@
 
     const drawStroke = (stroke) => {
       if (!stroke || !Array.isArray(stroke.points) || stroke.points.length < 2) return;
+      const spaceWidth = Math.max(1, Number(stroke.spaceWidth) || widthCss);
+      const spaceHeight = Math.max(1, Number(stroke.spaceHeight) || heightCss);
       ctx.save();
       applySketchStrokeStyle(ctx, stroke, ratio);
       ctx.beginPath();
       stroke.points.forEach((point, index) => {
-        const x = point.x * canvas.width;
-        const y = point.y * canvas.height;
+        const x = point.x * spaceWidth * ratio;
+        const y = point.y * spaceHeight * ratio;
         if (index === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
@@ -5084,6 +5101,8 @@
           color: node.sketchColor || "#52677c",
           size: Number(node.sketchSize) || 3,
           mode: node.sketchMode === "erase" ? "erase" : "draw",
+          spaceWidth: Math.max(1, canvas.clientWidth),
+          spaceHeight: Math.max(1, canvas.clientHeight),
           points: [pointFromEvent(event)]
         };
         broadcastActivity((draft.mode === "erase" ? "Cancella" : "Disegna") + " nello Sketch " + (node.title || ""));
