@@ -1666,6 +1666,7 @@
       surface.style.marginLeft = "";
       surface.style.marginTop = "";
       if (surface.id === "newBlockPalette") closeNewBlockFan();
+      if (surface.id === "aiBuilderPanel" && $("aiBuilderButton")) $("aiBuilderButton").classList.remove("active");
       if (typeof surface._resetFanPopup === "function") surface._resetFanPopup();
       if (typeof surface._resetTypePicker === "function") surface._resetTypePicker();
     };
@@ -10024,6 +10025,7 @@
     selectedNodeIds = new Set([node.id]);
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedTypeRelationId = null;
     selectedGroupId = null;
     selectedJunctionIds.clear();
     render();
@@ -10585,6 +10587,10 @@
       }
       if ($("sharePanel") && $("sharePanel").classList.contains("open")) {
         closeInterfaceSurfaces();
+        return;
+      }
+      if ($("aiBuilderPanel") && $("aiBuilderPanel").classList.contains("open")) {
+        closeAiBuilderPanel();
         return;
       }
       cancelConnection();
