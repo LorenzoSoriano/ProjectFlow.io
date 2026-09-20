@@ -2097,6 +2097,7 @@
     sharedProjectUnsubscribe: null,
     presenceUnsubscribe: null,
     nodePositionsUnsubscribe: null,
+    remoteNodePositions: new Map(),
     presenceHeartbeat: null,
     presenceWriteTimer: null,
     presenceCursor: null,
@@ -3914,6 +3915,72 @@
     if (willOpen) refreshSharePanelMeta();
   }
 
+  function localDragOwnsNode(nodeId) {
+    if (dragState && Array.isArray(dragState.starts) && dragState.starts.some((entry) => entry.id === nodeId)) return true;
+    if (groupDrag && Array.isArray(groupDrag.starts) && groupDrag.starts.some((entry) => entry.id === nodeId)) return true;
+    return false;
+  }
+
+  function applyRemoteNodePositions(positions) {
+    let touchedActiveGraph = false;
+    (positions || []).forEach((position) => {
+      if (!position || !position.id || typeof position.x !== "number" || typeof position.y !== "number") return;
+      if (localDragOwnsNode(position.id)) return;
+
+      const node = rootNodeById(position.id);
+      if (!node) return;
+      node.x = Math.round(position.x);
+      node.y = Math.round(position.y);
+
+      const activeNode = nodeById(position.id);
+      if (activeNode) {
+        const el = nodeLayer.querySelector('[data-node-id="' + position.id + '"]');
+        if (el) {
+          el.style.left = node.x + "px";
+          el.style.top = node.y + "px";
+        }
+        touchedActiveGraph = true;
+      }
+    });
+
+    if (touchedActiveGraph) scheduleInteractionRender(true, true);
+  }
+
+  function applyStoredRemoteNodePositions() {
+    applyRemoteNodePositions(Array.from(cloudState.remoteNodePositions.values()));
+  }
+
+  async function commitSharedNodePositions(nodes) {
+    if (!cloudState.sharedProjectId || !cloudState.user || !cloudState.api || !cloudState.db) return;
+    const positions = (nodes || []).filter(Boolean).map((node) => ({
+      id: node.id,
+      x: Math.round(node.x),
+      y: Math.round(node.y)
+    }));
+    if (!positions.length) return;
+
+    try {
+      await Promise.all(positions.map((position) => {
+        const ref = cloudState.api.doc(
+          cloudState.db,
+          "sharedProjects",
+          cloudState.sharedProjectId,
+          "nodePositions",
+          position.id
+        );
+        return cloudState.api.setDoc(ref, {
+          nodeId: position.id,
+          x: position.x,
+          y: position.y,
+          updatedBy: cloudState.user.uid,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }));
+    } catch (error) {
+      console.warn("ProjectFlow: commit posizione realtime non riuscito.", error);
+    }
+  }
+
   function renderRemotePresence() {
     const toolbar = $("collabPresence");
     if (toolbar) {
@@ -3933,7 +4000,7 @@
 
     const now = Date.now();
     const active = Array.from(cloudState.remotePresence.values())
-      .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry.updatedAt || 0) < 45000);
+      .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry._receivedAt || now) < 45000);
     const activeKeys = new Set();
 
     const getPresenceElement = (key, className) => {
@@ -3977,7 +4044,8 @@
       }
 
       const preview = entry.preview;
-      if (preview && preview.kind === "nodes" && Array.isArray(preview.positions) && now - Number(preview.updatedAt || entry.updatedAt || 0) < 5000) {
+      if (preview && preview.kind === "nodes" && Array.isArray(preview.positions) && now - Number(entry._receivedAt || now) < 8000) {
+        applyRemoteNodePositions(preview.positions);
         preview.positions.forEach((position) => {
           const node = nodeById(position.id);
           if (!node || typeof position.x !== "number" || typeof position.y !== "number") return;
@@ -4011,7 +4079,7 @@
 
       if (preview && preview.kind === "sketch" && preview.nodeId && preview.stroke &&
           Array.isArray(preview.stroke.points) && preview.stroke.points.length > 1 &&
-          now - Number(preview.updatedAt || entry.updatedAt || 0) < 5000) {
+          now - Number(entry._receivedAt || now) < 8000) {
         const nodeElement = nodeLayer.querySelector('[data-node-id="' + preview.nodeId + '"]');
         const paper = nodeElement && nodeElement.querySelector(".node-sketch-paper");
         if (paper) {
@@ -4111,7 +4179,7 @@
 
   function queuePresenceWrite(immediate, realtime) {
     if (!cloudState.sharedProjectId || !cloudState.user) return;
-    const interval = realtime ? 140 : 260;
+    const interval = realtime ? 90 : 260;
     const elapsed = Date.now() - cloudState.presenceLastWrite;
     if (immediate || elapsed >= interval) {
       writePresenceNow();
@@ -4131,6 +4199,7 @@
     if (!positions.length) return;
     cloudState.presencePreview = {
       kind: "nodes",
+      phase: "drag",
       positions: positions,
       updatedAt: Date.now()
     };
@@ -4138,9 +4207,25 @@
     queuePresenceWrite(false, true);
   }
 
-  function finishDragPreview() {
+  function finishDragPreview(nodes) {
     if (!cloudState.sharedProjectId || !cloudState.user) return;
+    const positions = (nodes || []).filter(Boolean).map((node) => ({
+      id: node.id,
+      x: Math.round(node.x),
+      y: Math.round(node.y)
+    }));
+
     clearTimeout(cloudState.presencePreviewClearTimer);
+    cloudState.presencePreview = positions.length ? {
+      kind: "nodes",
+      phase: "commit",
+      positions: positions,
+      updatedAt: Date.now()
+    } : null;
+    cloudState.presenceActivity = "Posizione aggiornata";
+    queuePresenceWrite(true, true);
+    commitSharedNodePositions(nodes);
+
     clearTimeout(saveTimer);
     saveProject(false);
     cloudState.presencePreviewClearTimer = setTimeout(() => {
@@ -4148,7 +4233,7 @@
       cloudState.presencePreview = null;
       cloudState.presenceActivity = "Nel progetto";
       queuePresenceWrite(true, true);
-    }, 900);
+    }, 5000);
   }
 
   function compactSketchPreviewPoints(points, limit) {
