@@ -570,68 +570,95 @@
 
         <div class="inspector-content hidden" id="inspectorContent">
           <div class="panel-heading inspector-heading">
-            <div>
-              <span class="eyebrow">ISPETTORE</span>
+            <div class="inspector-heading-copy">
+              <span class="eyebrow">INSPECTOR</span>
               <h2 id="inspectorTitle">Blocco</h2>
+              <div class="inspector-heading-meta">
+                <span class="inspector-type-chip" id="inspectorTypeChip">NODE</span>
+                <span id="inspectorSubtitle">Selezione corrente</span>
+              </div>
             </div>
             <button class="icon-button" id="closeInspector" title="Deseleziona">×</button>
           </div>
 
           <div class="inspector-scroll">
-            <label class="field-label">TIPO
-              <select id="nodeType">
-                <option value="object">GameObject</option>
-                <option value="component">Componente Unity</option>
-                <option value="class">Classe</option>
-                <option value="function">Funzione</option>
-                <option value="enum">Enum</option>
-                <option value="event">Evento</option>
-                <option value="action">Azione</option>
-                <option value="condition">Condizione</option>
-                <option value="state">Stato</option>
-                <option value="ifElse">If / Else</option>
-                <option value="switch">Switch</option>
-                <option value="whileLoop">While</option>
-                <option value="doWhileLoop">Do While</option>
-                <option value="forLoop">For</option>
-                <option value="foreachLoop">Foreach</option>
-                <option value="adapter">Adapter</option>
-                <option value="math">Math</option>
-                <option value="logic">Logic</option>
-                <option value="compare">Compare</option>
-                <option value="variable">Variabile</option>
-                <option value="ui">Interfaccia</option>
-                <option value="note">Nota</option>
-              </select>
-            </label>
-
-            <label class="field-label">NOME
-              <input id="nodeTitle" type="text" />
-            </label>
-
-            <label class="field-label">DESCRIZIONE
-              <textarea id="nodeDescription" rows="3" placeholder="Che responsabilità ha questo blocco?"></textarea>
-            </label>
-
-            <div id="nodeTypeSettings" class="node-type-settings"></div>
-
-            <div class="inspector-section-head">
-              <div>
-                <span class="field-label static" id="contentSectionLabel">CONTENUTO</span>
-                <small id="contentSectionHint">Variabili, funzioni, proprietà o testo libero.</small>
+            <section class="inspector-card inspector-identity-card" id="inspectorIdentitySection">
+              <div class="inspector-card-head">
+                <div><strong>IDENTITY</strong><small>Tipo e identità del blocco</small></div>
               </div>
-            </div>
-            <div class="member-actions" id="memberActions">
-              <button class="mini-button member-action" id="addVariable">＋ Variabile</button>
-              <button class="mini-button member-action" id="addMethod">＋ Metodo</button>
-              <button class="mini-button member-action" id="addEvent">＋ UnityEvent</button>
-              <button class="mini-button member-action" id="addRow">＋ Riga</button>
-            </div>
-            <div class="row-editor-list" id="rowEditorList"></div>
 
-            <label class="field-label pseudo-label">PSEUDOCODICE
-              <textarea id="nodePseudo" class="code-area" rows="8" spellcheck="false" placeholder="// Qualsiasi sintassi va bene&#10;if key.id == door.id&#10;  door.open = true"></textarea>
-            </label>
+              <label class="field-label">TIPO
+                <select id="nodeType">
+                  <option value="object">GameObject</option>
+                  <option value="component">Unity Component</option>
+                  <option value="class">Classe</option>
+                  <option value="struct">Struct</option>
+                  <option value="jobStruct">Unity Job Struct</option>
+                  <option value="function">Funzione</option>
+                  <option value="enum">Enum</option>
+                  <option value="event">Evento</option>
+                  <option value="action">Azione</option>
+                  <option value="ifElse">If / Else</option>
+                  <option value="switch">Switch</option>
+                  <option value="whileLoop">While</option>
+                  <option value="doWhileLoop">Do While</option>
+                  <option value="forLoop">For</option>
+                  <option value="foreachLoop">Foreach</option>
+                  <option value="breakFlow">Break</option>
+                  <option value="continueFlow">Continue</option>
+                  <option value="returnFlow">Return</option>
+                  <option value="constant">Valore</option>
+                  <option value="variable">Variabile</option>
+                  <option value="adapter">Adapter</option>
+                  <option value="math">Math</option>
+                  <option value="logic">Logic</option>
+                  <option value="compare">Compare</option>
+                  <option value="note">Nota</option>
+                  <option value="sketch">Sketch</option>
+                  <option value="condition">Condizione (Legacy)</option>
+                  <option value="state">Stato (Legacy)</option>
+                  <option value="ui">Interfaccia (Legacy)</option>
+                </select>
+              </label>
+
+              <label class="field-label">NOME
+                <input id="nodeTitle" type="text" />
+              </label>
+
+              <label class="field-label" id="nodeDescriptionField">DESCRIZIONE
+                <textarea id="nodeDescription" rows="3" placeholder="Responsabilità e ruolo del blocco"></textarea>
+              </label>
+            </section>
+
+            <section class="inspector-card inspector-context-card" id="inspectorContextSection">
+              <div class="inspector-card-head">
+                <div><strong id="inspectorContextTitle">STRUCTURE</strong><small id="inspectorContextHint">Impostazioni specifiche del tipo selezionato</small></div>
+              </div>
+              <div id="nodeTypeSettings" class="node-type-settings"></div>
+            </section>
+
+            <section class="inspector-card inspector-members-card" id="inspectorMembersSection">
+              <div class="inspector-card-head inspector-section-head">
+                <div>
+                  <strong id="contentSectionLabel">CONTENUTO</strong>
+                  <small id="contentSectionHint">Variabili, funzioni, proprietà o porte.</small>
+                </div>
+              </div>
+              <div class="member-actions" id="memberActions">
+                <button class="mini-button member-action" id="addVariable">＋ Variabile</button>
+                <button class="mini-button member-action" id="addMethod">＋ Metodo</button>
+                <button class="mini-button member-action" id="addEvent">＋ UnityEvent</button>
+                <button class="mini-button member-action" id="addRow">＋ Riga</button>
+              </div>
+              <div class="row-editor-list" id="rowEditorList"></div>
+            </section>
+
+            <section class="inspector-card inspector-pseudo-card" id="inspectorPseudoSection">
+              <div class="inspector-card-head">
+                <div><strong>PSEUDOCODE</strong><small>Nota logica avanzata del blocco</small></div>
+              </div>
+              <textarea id="nodePseudo" class="code-area" rows="7" spellcheck="false" placeholder="// Logica, vincoli o note tecniche"></textarea>
+            </section>
           </div>
 
           <div class="inspector-footer">
