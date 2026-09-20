@@ -4182,9 +4182,12 @@
   function connectionScopeId(ref) {
     if (!ref) return "";
     const node = nodeById(ref.nodeId);
-    if (!node) return ref.nodeId || "";
+    if (!node) return "__graph__";
+    if (node.type === "class") return node.id;
     if (node.type === "function" && node.ownerClassId) return node.ownerClassId;
-    return node.id;
+    // Standalone visual nodes live in the same graph scope. Treating each node
+    // as its own scope made private variables impossible to use across blocks.
+    return "__graph__";
   }
 
   function normalizeConnectionRefs(a, b) {
@@ -8769,6 +8772,12 @@
   function selectNode(id, event, forceSingle) {
     const additive = !forceSingle && !!(event && (event.ctrlKey || event.metaKey || event.shiftKey));
 
+    // Selecting a block arms block-to-port auto-connect and cancels any stale
+    // half-finished port/junction interaction from a previous gesture.
+    pendingPort = null;
+    pendingJunction = null;
+    $("connectionBanner").classList.remove("show");
+
     if (additive) {
       if (selectedNodeIds.has(id)) selectedNodeIds.delete(id);
       else selectedNodeIds.add(id);
@@ -8970,7 +8979,7 @@
 
   function autoConnectSelectedNodeToPort(ref) {
     if (!ref || selectedNodeIds.size !== 1) return { handled: false };
-    const selectedId = Array.from(selectedNodeIds)[0];
+    const selectedId = selectedNodeId || Array.from(selectedNodeIds)[0];
     if (!selectedId || selectedId === ref.nodeId) return { handled: false };
 
     const selectedElement = nodeLayer.querySelector('[data-node-id="' + selectedId + '"]');
@@ -10330,6 +10339,28 @@
     }
   }
 
+  function aiFriendlyFirebaseError(error) {
+    const code = error && error.code ? String(error.code) : "";
+    const message = String(error && error.message ? error.message : error || "");
+
+    if (code === "AI/api-not-enabled" || message.includes("firebasevertexai.googleapis.com")) {
+      aiBuilderSetStatus("Firebase AI Logic non attivo · apri Console e premi Get started", "error");
+      return (
+        "Firebase AI Logic non è ancora attivo per questo progetto. " +
+        "Apri Firebase Console → AI Services → AI Logic → Get started, scegli Gemini Developer API e completa la configurazione. " +
+        "Dopo l'attivazione attendi qualche minuto e riprova."
+      );
+    }
+    if (code.includes("app-check") || /app check/i.test(message)) {
+      aiBuilderSetStatus("Firebase App Check richiede configurazione", "error");
+      return (
+        "Firebase AI Logic è attivo, ma App Check sta bloccando la richiesta. " +
+        "Configura App Check per la web app ProjectFlow nella Firebase Console e poi riprova."
+      );
+    }
+    return "Gemini via Firebase AI Logic non è disponibile: " + message;
+  }
+
   async function submitAiBuilderPrompt() {
     const input = $("aiBuilderPrompt");
     const button = $("aiBuilderSend");
@@ -10351,11 +10382,7 @@
       }
     } catch (error) {
       console.error("ProjectFlow AI Builder:", error);
-      aiBuilderAddMessage(
-        "assistant",
-        "Gemini via Firebase AI Logic non è disponibile: " +
-          String(error && error.message ? error.message : error)
-      );
+      aiBuilderAddMessage("assistant", aiFriendlyFirebaseError(error));
       showToast("AI Builder · Gemini non disponibile");
     } finally {
       if (button) button.disabled = false;
