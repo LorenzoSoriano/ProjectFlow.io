@@ -51,6 +51,8 @@
     object: { label: "GameObject", icon: "◇", color: "#5b9bc4" },
     component: { label: "Componente Unity", icon: "⬡", color: "#6f91ad" },
     class: { label: "Classe", icon: "C", color: "#4faab7" },
+    struct: { label: "Struct", icon: "{}", color: "#63a59a" },
+    jobStruct: { label: "Unity Job Struct", icon: "J", color: "#d29a58" },
     function: { label: "Funzione", icon: "ƒ", color: "#6fb47b" },
     enum: { label: "Enum", icon: "E", color: "#9c7fb5" },
     switch: { label: "Switch", icon: "⇆", color: "#8f7fb2" },
@@ -96,11 +98,12 @@
   const DATA_TYPES = [
     "bool", "int", "float", "double", "string",
     "Vector2", "Vector3", "Quaternion", "Color",
-    "GameObject", "Transform", "Rigidbody", "Rigidbody2D", "Collider", "Collider2D",
-    "BoxCollider", "SphereCollider", "CapsuleCollider", "NavMeshAgent", "NavMeshObstacle",
-    "Animator", "Animation", "AudioSource", "AudioListener", "AudioClip",
+    "GameObject", "Transform", "Rigidbody", "Rigidbody2D", "CharacterController", "Collider", "Collider2D",
+    "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider", "BoxCollider2D", "CircleCollider2D", "CapsuleCollider2D",
+    "NavMeshAgent", "NavMeshObstacle", "OffMeshLink",
+    "Animator", "Animation", "PlayableDirector", "AudioSource", "AudioListener", "AudioReverbZone", "AudioClip",
     "Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer",
-    "ParticleSystem", "TrailRenderer", "LineRenderer", "Canvas", "CanvasGroup",
+    "ParticleSystem", "TrailRenderer", "LineRenderer", "Canvas", "CanvasGroup", "GraphicRaycaster",
     "Texture2D", "Material", "AnimationClip", "RuntimeAnimatorController",
     "LayerMask", "RectTransform"
   ];
@@ -114,37 +117,37 @@
     {
       id: "physics",
       label: "PHYSICS",
-      components: ["Rigidbody", "Rigidbody2D", "BoxCollider", "SphereCollider", "CapsuleCollider", "Collider2D"]
+      components: ["Rigidbody", "Rigidbody2D", "CharacterController", "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider", "Collider2D", "BoxCollider2D", "CircleCollider2D", "CapsuleCollider2D"]
     },
     {
       id: "animation",
       label: "ANIMATION",
-      components: ["Animator", "Animation"]
+      components: ["Animator", "Animation", "PlayableDirector"]
     },
     {
       id: "audio",
       label: "AUDIO",
-      components: ["AudioSource", "AudioListener"]
+      components: ["AudioSource", "AudioListener", "AudioReverbZone"]
     },
     {
       id: "rendering",
       label: "RENDERING",
-      components: ["Camera", "Light", "MeshRenderer", "SkinnedMeshRenderer", "SpriteRenderer"]
+      components: ["Camera", "Light", "MeshRenderer", "SkinnedMeshRenderer", "SpriteRenderer", "LineRenderer", "TrailRenderer"]
     },
     {
       id: "ui",
       label: "UI",
-      components: ["Canvas", "CanvasGroup", "RectTransform"]
+      components: ["Canvas", "CanvasGroup", "RectTransform", "GraphicRaycaster"]
     },
     {
       id: "effects",
       label: "EFFECTS",
-      components: ["ParticleSystem", "TrailRenderer", "LineRenderer"]
+      components: ["ParticleSystem"]
     },
     {
       id: "navigation",
       label: "NAVIGATION",
-      components: ["NavMeshAgent", "NavMeshObstacle"]
+      components: ["NavMeshAgent", "NavMeshObstacle", "OffMeshLink"]
     }
   ];
 
@@ -711,6 +714,12 @@
         variableRow("mass", "float", "public"),
         variableRow("gravityScale", "float", "public")
       ],
+      CharacterController: [
+        variableRow("velocity", "Vector3", "public"),
+        variableRow("isGrounded", "bool", "public"),
+        variableRow("height", "float", "public"),
+        variableRow("radius", "float", "public")
+      ],
       Animator: [
         variableRow("controller", "RuntimeAnimatorController", "public"),
         variableRow("speed", "float", "public"),
@@ -735,6 +744,21 @@
       ],
       Canvas: [
         variableRow("enabled", "bool", "public")
+      ],
+      CanvasGroup: [
+        variableRow("alpha", "float", "public"),
+        variableRow("interactable", "bool", "public"),
+        variableRow("blocksRaycasts", "bool", "public")
+      ],
+      NavMeshAgent: [
+        variableRow("speed", "float", "public"),
+        variableRow("stoppingDistance", "float", "public"),
+        variableRow("isStopped", "bool", "public"),
+        variableRow("velocity", "Vector3", "public")
+      ],
+      SpriteRenderer: [
+        variableRow("color", "Color", "public"),
+        variableRow("enabled", "bool", "public")
       ]
     };
     return (presets[componentType] || []).map((item) => item);
@@ -748,9 +772,17 @@
     return project.nodes.filter((node) => node.type === "class");
   }
 
+  function publicStructNodes() {
+    return project.nodes.filter((node) =>
+      (node.type === "struct" || node.type === "jobStruct") &&
+      (node.structVisibility || "public") === "public"
+    );
+  }
+
   function availableDataTypes() {
     return DATA_TYPES
       .concat(publicClassNodes().map((node) => node.title))
+      .concat(publicStructNodes().map((node) => node.title))
       .concat(enumNodes().map((node) => node.title))
       .filter((value, index, array) => array.indexOf(value) === index);
   }
@@ -813,6 +845,43 @@
     return item;
   }
 
+  function syncJobExecuteMethod(node) {
+    if (!node || node.type !== "jobStruct") return;
+    let execute = (node.rows || []).find((item) => item && item.kind === "function" && item.jobExecute);
+    if (!execute) {
+      execute = methodRow("Execute", "void", "custom");
+      execute.access = "public";
+      execute.jobExecute = true;
+      node.rows.push(execute);
+    }
+
+    execute.label = "Execute";
+    execute.access = "public";
+    execute.returnType = "void";
+    execute.returnCollectionKind = "single";
+    execute.methodKind = "custom";
+
+    const interfaceName = node.jobInterface || "IJob";
+    if (interfaceName === "IJobFor" || interfaceName === "IJobParallelFor") {
+      if (!execute.methodParameters.length ||
+          execute.methodParameters.length !== 1 ||
+          execute.methodParameters[0].name !== "index" ||
+          execute.methodParameters[0].dataType !== "int") {
+        execute.methodParameters = [functionParameter("index", "int", { access: "public" })];
+      }
+    } else if (interfaceName === "IJob") {
+      execute.methodParameters = [];
+    }
+    syncLegacyParameters(execute);
+  }
+
+  function structureKindLabel(node) {
+    if (!node) return "Structure";
+    if (node.type === "jobStruct") return node.jobInterface || "IJob";
+    if (node.type === "struct") return node.structReadonly ? "readonly struct" : "struct";
+    return typeMeta(node.type).label;
+  }
+
   function ensureNodeMeta(node) {
     if (!Array.isArray(node.rows)) node.rows = [];
     node.rows.forEach(normalizeMember);
@@ -828,6 +897,19 @@
       if (typeof node.componentType !== "string" || !node.componentType) node.componentType = "Animator";
       if (typeof node.componentCategory !== "string") node.componentCategory = componentCategoryFor(node.componentType);
       if (typeof node.componentSource !== "string") node.componentSource = "unity";
+    }
+
+    if (node.type === "struct" || node.type === "jobStruct") {
+      if (typeof node.structVisibility !== "string") node.structVisibility = "public";
+      if (typeof node.structReadonly !== "boolean") node.structReadonly = false;
+      if (typeof node.structSerializable !== "boolean") node.structSerializable = node.type === "struct";
+    }
+
+    if (node.type === "jobStruct") {
+      if (!["IJob", "IJobFor", "IJobParallelFor", "IJobEntity"].includes(node.jobInterface)) node.jobInterface = "IJob";
+      if (!["Run", "Schedule", "ScheduleParallel"].includes(node.jobScheduleMode)) node.jobScheduleMode = "Schedule";
+      if (typeof node.jobBurst !== "boolean") node.jobBurst = true;
+      syncJobExecuteMethod(node);
     }
 
     if (node.type === "enum") {
@@ -4124,6 +4206,12 @@
     if (node.type === "function") {
       const owner = ownerClassName(node);
       return (owner ? owner + " · " : "") + node.methodAccess + " " + nodeReturnTypeLabel(node);
+    }
+    if (node.type === "struct") {
+      return node.structVisibility + " " + (node.structReadonly ? "readonly struct" : "struct") + (node.structSerializable ? " · Serializable" : "");
+    }
+    if (node.type === "jobStruct") {
+      return node.structVisibility + " struct · " + (node.jobInterface || "IJob") + (node.jobBurst ? " · Burst" : "");
     }
     if (node.type === "component") {
       return componentCategoryLabel(node.componentCategory) + " · Unity Component";
@@ -9612,6 +9700,35 @@
           executionOrder: 0
         }
       },
+      struct: {
+        title: "NewStruct",
+        description: "Struttura dati C# compatta con campi e metodi.",
+        rows: [
+          variableRow("value", "float", "public")
+        ],
+        pseudo: "",
+        extra: {
+          structVisibility: "public",
+          structReadonly: false,
+          structSerializable: true
+        }
+      },
+      jobStruct: {
+        title: "NewJob",
+        description: "Unity Job struct: dati di input/output e metodo Execute.",
+        rows: [
+          variableRow("deltaTime", "float", "public")
+        ],
+        pseudo: "",
+        extra: {
+          structVisibility: "public",
+          structReadonly: false,
+          structSerializable: false,
+          jobInterface: "IJob",
+          jobScheduleMode: "Schedule",
+          jobBurst: true
+        }
+      },
       function: {
         title: "NewMethod",
         description: "Metodo concettuale con firma C#/Unity.",
@@ -9919,6 +10036,8 @@
     const items = [
       { type: "object", category: "STRUTTURA", label: "GameObject", description: "Riferimento a un oggetto Unity e ai suoi componenti", icon: "◇" },
       { type: "class", category: "STRUTTURA", label: "Classe", description: "Contenitore C# per stato, metodi ed eventi", icon: "C" },
+      { type: "struct", category: "STRUTTURA", label: "Struct", description: "Value type C# con campi e metodi", icon: "{}" },
+      { type: "jobStruct", category: "STRUTTURA", label: "Unity Job Struct", description: "IJob / IJobFor / IJobParallelFor / IJobEntity", icon: "J" },
       { type: "function", category: "STRUTTURA", label: "Funzione", description: "Metodo con parametri, return e logica", icon: "ƒ" },
       { type: "enum", category: "STRUTTURA", label: "Enum", description: "Valori nominati per stati e modalità", icon: "E" },
 
