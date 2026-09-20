@@ -1666,7 +1666,6 @@
       surface.style.marginLeft = "";
       surface.style.marginTop = "";
       if (surface.id === "newBlockPalette") closeNewBlockFan();
-      if (surface.id === "aiBuilderPanel" && $("aiBuilderButton")) $("aiBuilderButton").classList.remove("active");
       if (typeof surface._resetFanPopup === "function") surface._resetFanPopup();
       if (typeof surface._resetTypePicker === "function") surface._resetTypePicker();
     };
@@ -1674,7 +1673,7 @@
     closeSurface($("accountMenu"));
     closeSurface($("newBlockPalette"));
     closeSurface($("sharePanel"));
-    closeSurface($("aiBuilderPanel"));
+    if ($("aiBuilderPanel") && except !== $("aiBuilderPanel")) closeAiBuilderPanel();
     if ($("addObjectTop")) $("addObjectTop").setAttribute("aria-expanded", "false");
     if ($("shareProjectButton")) $("shareProjectButton").setAttribute("aria-expanded", "false");
     if ($("aiBuilderButton")) $("aiBuilderButton").setAttribute("aria-expanded", "false");
@@ -9656,14 +9655,18 @@
   }
 
   function openAiBuilderPanel() {
+    const dock = $("aiBuilderDock");
     const panel = $("aiBuilderPanel");
-    if (!panel) return;
-    const willOpen = !panel.classList.contains("open");
+    const button = $("aiBuilderButton");
+    if (!dock || !panel || !button) return;
+
+    const willOpen = !dock.classList.contains("open");
     closeInterfaceSurfaces(willOpen ? panel : null);
-    panel.classList.toggle("open", willOpen);
+    dock.classList.toggle("open", willOpen);
     panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
-    $("aiBuilderButton").setAttribute("aria-expanded", willOpen ? "true" : "false");
-    $("aiBuilderButton").classList.toggle("active", willOpen);
+    button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    button.classList.toggle("active", willOpen);
+
     if (willOpen) {
       requestAnimationFrame(() => {
         const input = $("aiBuilderPrompt");
@@ -9673,12 +9676,14 @@
   }
 
   function closeAiBuilderPanel() {
+    const dock = $("aiBuilderDock");
     const panel = $("aiBuilderPanel");
-    if (!panel) return;
-    panel.classList.remove("open");
+    const button = $("aiBuilderButton");
+    if (!dock || !panel || !button) return;
+    dock.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
-    $("aiBuilderButton").setAttribute("aria-expanded", "false");
-    $("aiBuilderButton").classList.remove("active");
+    button.setAttribute("aria-expanded", "false");
+    button.classList.remove("active");
   }
 
   function aiNormalizePrompt(text) {
@@ -10589,7 +10594,7 @@
         closeInterfaceSurfaces();
         return;
       }
-      if ($("aiBuilderPanel") && $("aiBuilderPanel").classList.contains("open")) {
+      if ($("aiBuilderDock") && $("aiBuilderDock").classList.contains("open")) {
         closeAiBuilderPanel();
         return;
       }
