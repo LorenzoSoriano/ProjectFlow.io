@@ -18,6 +18,8 @@
     const type = typeof nodeOrType === "string" ? nodeOrType : (node && node.type) || "object";
     if (type === "object" || type === "class") return 500;
     if (type === "function") return 470;
+    if (type === "emptyGraph") return 450;
+    if (type === "graphInput" || type === "graphOutput") return 360;
     if (type === "enum") return 440;
     if (type === "component") return 430;
     if (["event", "action", "condition", "state", "switch", "ifElse", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop"].includes(type)) return 430;
@@ -54,6 +56,9 @@
     struct: { label: "Struct", icon: "{}", color: "#63a59a" },
     jobStruct: { label: "Unity Job Struct", icon: "J", color: "#d29a58" },
     function: { label: "Funzione", icon: "ƒ", color: "#6fb47b" },
+    emptyGraph: { label: "Empty", icon: "□", color: "#7189a8" },
+    graphInput: { label: "Graph Input", icon: "→", color: "#55a9b7" },
+    graphOutput: { label: "Graph Output", icon: "←", color: "#b57bab" },
     enum: { label: "Enum", icon: "E", color: "#9c7fb5" },
     switch: { label: "Switch", icon: "⇆", color: "#8f7fb2" },
     ifElse: { label: "If / Else", icon: "if", color: "#c88455" },
@@ -371,18 +376,14 @@
     if (typeof target.methodLogic !== "string") target.methodLogic = "";
     if (!["basic", "advanced"].includes(target.methodEditorMode)) target.methodEditorMode = "basic";
     if (!target.methodBody || typeof target.methodBody !== "object") {
-      target.methodBody = { nodes: [], connections: [] };
+      target.methodBody = { version: 1, name: "Function Body", nodes: [], connections: [], groups: [] };
     }
     if (!Array.isArray(target.methodBody.nodes)) target.methodBody.nodes = [];
     if (!Array.isArray(target.methodBody.connections)) target.methodBody.connections = [];
-    target.methodBody.nodes = target.methodBody.nodes
-      .filter((entry) => entry && typeof entry === "object")
-      .map((entry, index) => ({
-        id: entry.id || uid("inner_action"),
-        type: "action",
-        title: typeof entry.title === "string" && entry.title ? entry.title : "Action " + (index + 1),
-        actionKind: typeof entry.actionKind === "string" ? entry.actionKind : "custom"
-      }));
+    if (!Array.isArray(target.methodBody.groups)) target.methodBody.groups = [];
+    if (typeof target.methodBody.name !== "string" || !target.methodBody.name) target.methodBody.name = "Function Body";
+    if (!target.methodEntryPortId) target.methodEntryPortId = uid("method_entry");
+    if (!target.methodExitPortId) target.methodExitPortId = uid("method_exit");
     syncLegacyParameters(target);
   }
 
@@ -1033,6 +1034,20 @@
       if (typeof node.stateKind !== "string") node.stateKind = "normal";
     }
 
+    if (node.type === "emptyGraph") {
+      if (!node.nestedGraph || typeof node.nestedGraph !== "object") {
+        node.nestedGraph = { version: 1, name: "Empty Body", nodes: [], connections: [], groups: [] };
+      }
+      if (!Array.isArray(node.nestedGraph.nodes)) node.nestedGraph.nodes = [];
+      if (!Array.isArray(node.nestedGraph.connections)) node.nestedGraph.connections = [];
+      if (!Array.isArray(node.nestedGraph.groups)) node.nestedGraph.groups = [];
+      if (typeof node.nestedGraph.name !== "string" || !node.nestedGraph.name) node.nestedGraph.name = "Empty Body";
+    }
+
+    if (node.type === "graphInput" || node.type === "graphOutput") {
+      node.boundaryLocked = true;
+    }
+
     if (node.type === "sketch") {
       const fallbackSketchWidth = Math.max(360, Math.min(2400, Number(node.sketchWidth) || 520));
       const fallbackSketchHeight = Math.max(220, Math.min(1600, Number(node.sketchHeight) || 320));
@@ -1679,7 +1694,10 @@
     return { width: 262, height: 196 };
   }
 
-  let project = loadProject();
+  let rootProject = loadProject();
+  let project = rootProject;
+  let graphWorkspaceStack = [];
+  let currentWorkspaceLabel = "";
   let view = loadView();
   let minimapSize = loadMinimapSize();
   let selectedNodeId = null;
@@ -1759,7 +1777,7 @@
   };
 
   function historySnapshot() {
-    return JSON.stringify(project);
+    return JSON.stringify(rootProject || project);
   }
 
   function updateHistoryUI() {
@@ -1823,10 +1841,10 @@
 
     historyState.restoring = true;
     try {
-      project = normalizeProject(JSON.parse(historyState.entries[index]));
+      setProjectDocument(normalizeProject(JSON.parse(historyState.entries[index])));
       historyState.index = index;
       resetEditorSelection();
-      $("projectName").value = project.name || "Untitled Flow";
+      $("projectName").value = rootProject.name || "Untitled Flow";
       render();
       saveProject(false);
     } finally {
@@ -2391,6 +2409,212 @@
     $("connectionBanner").classList.remove("show");
   }
 
+  function setProjectDocument(nextProject) {
+    rootProject = normalizeProject(nextProject || blankProject());
+    project = rootProject;
+    graphWorkspaceStack = [];
+    currentWorkspaceLabel = "";
+    updateGraphBreadcrumb();
+    return rootProject;
+  }
+
+  function normalizeNestedWorkspaceGraph(rawGraph, fallbackName) {
+    const graph = rawGraph && typeof rawGraph === "object" ? rawGraph : {};
+    if (typeof graph.name !== "string" || !graph.name) graph.name = fallbackName || "Nested Graph";
+    graph.version = 1;
+    graph.schema = normalizeProjectSchema((rootProject && rootProject.schema) || graph.schema || "unity");
+    if (!Array.isArray(graph.nodes)) graph.nodes = [];
+    if (!Array.isArray(graph.connections)) graph.connections = [];
+    if (!Array.isArray(graph.groups)) graph.groups = [];
+    return normalizeProject(graph);
+  }
+
+  function boundaryNode(graph, id, type, title, x, y) {
+    let node = graph.nodes.find((item) => item && item.id === id);
+    if (!node) {
+      node = {
+        id,
+        type,
+        title,
+        description: type === "graphInput" ? "Input del graph padre" : "Output verso il graph padre",
+        pseudo: "",
+        rows: [],
+        x,
+        y,
+        boundaryLocked: true
+      };
+      graph.nodes.push(node);
+    }
+    node.type = type;
+    node.title = title;
+    node.boundaryLocked = true;
+    if (typeof node.x !== "number") node.x = x;
+    if (typeof node.y !== "number") node.y = y;
+    if (!Array.isArray(node.rows)) node.rows = [];
+    return node;
+  }
+
+  function boundaryRow(source, kind, fallbackLabel, valueOverride) {
+    return {
+      id: source.id,
+      label: source.label || source.name || fallbackLabel,
+      value: valueOverride !== undefined ? valueOverride : (source.value || source.dataType || ""),
+      kind
+    };
+  }
+
+  function syncFunctionNestedBoundaries(target, graph) {
+    ensureFunctionSignature(target, target.access || target.methodAccess);
+    const inputNode = boundaryNode(graph, "__graph_input__", "graphInput", "Function Inputs", 120, 280);
+    const outputNode = boundaryNode(graph, "__graph_output__", "graphOutput", "Function Output", 1180, 280);
+
+    inputNode.rows = [{ id: target.methodEntryPortId, label: "Entry", value: "", kind: "flowOut" }];
+    target.methodParameters.forEach((parameter) => {
+      if ((parameter.mode || "value") === "out") return;
+      inputNode.rows.push(boundaryRow(parameter, "output", parameter.name || "value", parameterTypeKey(parameter)));
+    });
+
+    outputNode.rows = [{ id: target.methodExitPortId, label: "Return", value: "", kind: "flowIn" }];
+    target.methodParameters.forEach((parameter) => {
+      if (!["out", "ref"].includes(parameter.mode || "value")) return;
+      outputNode.rows.push(boundaryRow(parameter, "input", parameter.name || "value", parameterTypeKey(parameter)));
+    });
+    if (target.returnType && target.returnType !== "void") {
+      outputNode.rows.push({
+        id: target.returnPortId,
+        label: target.returnName || "result",
+        value: nodeReturnTypeKey(target),
+        kind: "input"
+      });
+    }
+
+    const validInput = new Set(inputNode.rows.map((rowItem) => rowItem.id));
+    const validOutput = new Set(outputNode.rows.map((rowItem) => rowItem.id));
+    graph.connections = graph.connections.filter((edge) => {
+      if (edge.from.nodeId === inputNode.id && !validInput.has(edge.from.rowId)) return false;
+      if (edge.to.nodeId === outputNode.id && !validOutput.has(edge.to.rowId)) return false;
+      return true;
+    });
+  }
+
+  function syncEmptyNestedBoundaries(target, graph) {
+    const inputNode = boundaryNode(graph, "__graph_input__", "graphInput", "Inputs", 120, 280);
+    const outputNode = boundaryNode(graph, "__graph_output__", "graphOutput", "Outputs", 1180, 280);
+
+    inputNode.rows = target.rows
+      .filter((item) => item.kind === "flowIn" || item.kind === "input")
+      .map((item) => boundaryRow(item, item.kind === "flowIn" ? "flowOut" : "output", "Input", item.value));
+
+    outputNode.rows = target.rows
+      .filter((item) => item.kind === "flowOut" || item.kind === "output")
+      .map((item) => boundaryRow(item, item.kind === "flowOut" ? "flowIn" : "input", "Output", item.value));
+
+    const validInput = new Set(inputNode.rows.map((rowItem) => rowItem.id));
+    const validOutput = new Set(outputNode.rows.map((rowItem) => rowItem.id));
+    graph.connections = graph.connections.filter((edge) => {
+      if (edge.from.nodeId === inputNode.id && !validInput.has(edge.from.rowId)) return false;
+      if (edge.to.nodeId === outputNode.id && !validOutput.has(edge.to.rowId)) return false;
+      return true;
+    });
+  }
+
+  function saveCurrentGraphView() {
+    if (!project || project === rootProject) return;
+    project.workspaceView = { x: view.x, y: view.y, scale: view.scale };
+  }
+
+  function openNestedGraph(target, kind, label) {
+    let graph;
+    if (kind === "function") {
+      ensureFunctionSignature(target, target.access || target.methodAccess);
+      target.methodBody = normalizeNestedWorkspaceGraph(target.methodBody, "Function Body");
+      graph = target.methodBody;
+      syncFunctionNestedBoundaries(target, graph);
+    } else {
+      ensureNodeMeta(target);
+      target.nestedGraph = normalizeNestedWorkspaceGraph(target.nestedGraph, "Empty Body");
+      graph = target.nestedGraph;
+      syncEmptyNestedBoundaries(target, graph);
+    }
+
+    saveCurrentGraphView();
+    graphWorkspaceStack.push({
+      graph: project,
+      label: currentWorkspaceLabel || (rootProject && rootProject.name) || "Project",
+      view: { x: view.x, y: view.y, scale: view.scale }
+    });
+
+    project = graph;
+    currentWorkspaceLabel = label || graph.name || "Nested Graph";
+    const savedView = graph.workspaceView;
+    view = savedView && typeof savedView.x === "number"
+      ? { x: savedView.x, y: savedView.y, scale: savedView.scale || 1 }
+      : { x: 70, y: 60, scale: 1 };
+
+    closeInterfaceSurfaces();
+    resetEditorSelection();
+    updateGraphBreadcrumb();
+    render();
+    if (!savedView) requestAnimationFrame(() => fitView());
+    markDirty();
+  }
+
+  function leaveNestedGraphTo(index) {
+    if (!graphWorkspaceStack.length) return;
+    saveCurrentGraphView();
+
+    const targetIndex = Math.max(0, Math.min(index, graphWorkspaceStack.length - 1));
+    const target = graphWorkspaceStack[targetIndex];
+    project = target.graph;
+    currentWorkspaceLabel = target.label;
+    view = { x: target.view.x, y: target.view.y, scale: target.view.scale };
+    graphWorkspaceStack = graphWorkspaceStack.slice(0, targetIndex);
+
+    resetEditorSelection();
+    updateGraphBreadcrumb();
+    render();
+  }
+
+  function leaveNestedGraph() {
+    if (!graphWorkspaceStack.length) return false;
+    leaveNestedGraphTo(graphWorkspaceStack.length - 1);
+    return true;
+  }
+
+  function updateGraphBreadcrumb() {
+    const nav = $("graphBreadcrumb");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    if (!graphWorkspaceStack.length) {
+      nav.classList.add("hidden");
+      return;
+    }
+
+    nav.classList.remove("hidden");
+    const crumbs = graphWorkspaceStack.map((entry) => entry.label).concat([currentWorkspaceLabel || project.name || "Nested Graph"]);
+    crumbs.forEach((label, index) => {
+      if (index > 0) {
+        const sep = document.createElement("span");
+        sep.className = "graph-breadcrumb-separator";
+        sep.textContent = "›";
+        nav.appendChild(sep);
+      }
+
+      if (index < crumbs.length - 1) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.addEventListener("click", () => leaveNestedGraphTo(index));
+        nav.appendChild(button);
+      } else {
+        const current = document.createElement("strong");
+        current.textContent = label;
+        nav.appendChild(current);
+      }
+    });
+  }
+
   const SITE_PAGE_NAMES = new Set(["home", "projects", "guide", "about", "privacy"]);
   let currentSitePage = "home";
 
@@ -2485,8 +2709,9 @@
     if (editor) editor.classList.remove("hidden");
     document.body.classList.remove("home-mode");
 
-    $("projectName").value = project.name || "Untitled Flow";
+    $("projectName").value = (rootProject || project).name || "Untitled Flow";
     updateProjectNameAccess();
+    updateGraphBreadcrumb();
     resetHistory();
     requestAnimationFrame(() => {
       render();
@@ -2500,8 +2725,8 @@
     return withProjectLoading("Apertura di " + record.name, async () => {
       closeInterfaceSurfaces();
       setActiveProjectId(record.id);
-      project = normalizeProject(cloneProjectData(record.data));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      setProjectDocument(normalizeProject(cloneProjectData(record.data)));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rootProject));
       resetEditorSelection();
       showEditorView();
       if (record.sharedProjectId) startSharedProjectSession(record);
@@ -2560,7 +2785,7 @@
       const data = blankProject(name, schema);
       const record = upsertLocalProject(data, uid("project"));
       setActiveProjectId(record.id);
-      project = normalizeProject(cloneProjectData(record.data));
+      setProjectDocument(normalizeProject(cloneProjectData(record.data)));
       queueCloudSave(record);
       resetEditorSelection();
       showEditorView();
@@ -2580,7 +2805,7 @@
 
       const record = upsertLocalProject(demo, uid("project"));
       setActiveProjectId(record.id);
-      project = normalizeProject(cloneProjectData(record.data));
+      setProjectDocument(normalizeProject(cloneProjectData(record.data)));
       queueCloudSave(record);
       resetEditorSelection();
       showEditorView();
@@ -2621,9 +2846,9 @@
     removeLocalProject(id);
     if (currentProjectId === id) {
       setActiveProjectId(projectLibrary[0] ? projectLibrary[0].id : "");
-      project = currentProjectId
+      setProjectDocument(currentProjectId
         ? normalizeProject(cloneProjectData(projectRecordById(currentProjectId).data))
-        : blankProject();
+        : blankProject());
     }
 
     await cloudDeleteProject(id);
@@ -3645,7 +3870,7 @@
       const localRecord = projectRecordById(record.id);
       cloudState.applyingRemote = true;
       try {
-        project = normalizeProject(cloneProjectData(value.data));
+        setProjectDocument(normalizeProject(cloneProjectData(value.data)));
         if (localRecord) {
           localRecord.name = value.name || project.name || localRecord.name;
           localRecord.updatedAt = Number(value.updatedAt) || Date.now();
@@ -3771,8 +3996,8 @@
 
       const active = projectRecordById(currentProjectId);
       if (active && $("editorView") && !$("editorView").classList.contains("hidden")) {
-        project = normalizeProject(cloneProjectData(active.data));
-        $("projectName").value = project.name;
+        setProjectDocument(normalizeProject(cloneProjectData(active.data)));
+        $("projectName").value = rootProject.name;
         updateProjectNameAccess();
         render();
         if (active.sharedProjectId) startSharedProjectSession(active);
@@ -4140,14 +4365,16 @@
   }
 
   function saveProject(showMessage) {
+    const documentProject = rootProject || project;
     if (canRenameCurrentProject()) {
-      project.name = $("projectName").value.trim() || "Untitled Flow";
+      documentProject.name = $("projectName").value.trim() || "Untitled Flow";
     } else {
-      $("projectName").value = project.name || "Untitled Flow";
+      $("projectName").value = documentProject.name || "Untitled Flow";
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    saveCurrentGraphView();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(documentProject));
 
-    const record = upsertLocalProject(project, currentProjectId || uid("project"));
+    const record = upsertLocalProject(documentProject, currentProjectId || uid("project"));
     setActiveProjectId(record.id);
     queueCloudSave(record);
 
@@ -4338,6 +4565,13 @@
       const owner = ownerClassName(node);
       return (owner ? owner + " · " : "") + node.methodAccess + " " + nodeReturnTypeLabel(node);
     }
+    if (node.type === "emptyGraph") {
+      const inputs = node.rows.filter((item) => item.kind === "input" || item.kind === "flowIn").length;
+      const outputs = node.rows.filter((item) => item.kind === "output" || item.kind === "flowOut").length;
+      return "NESTED GRAPH · " + inputs + " IN · " + outputs + " OUT";
+    }
+    if (node.type === "graphInput") return "NESTED GRAPH · INPUT BOUNDARY";
+    if (node.type === "graphOutput") return "NESTED GRAPH · OUTPUT BOUNDARY";
     if (node.type === "struct") {
       return node.structVisibility + " " + (node.structReadonly ? "readonly struct" : "struct") + (node.structSerializable ? " · Serializable" : "");
     }
@@ -5076,8 +5310,14 @@
     removeNodeButton.textContent = "×";
     removeNodeButton.title = "Elimina blocco";
     removeNodeButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+    if (node.boundaryLocked) {
+      removeNodeButton.hidden = true;
+      more.hidden = true;
+    }
+
     removeNodeButton.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (node.boundaryLocked) return;
       project.nodes = project.nodes.filter((item) => item.id !== node.id);
       project.connections = project.connections.filter((edge) => edge.from.nodeId !== node.id && edge.to.nodeId !== node.id);
       selectedNodeIds.delete(node.id);
@@ -6191,154 +6431,44 @@
         ensureFunctionSignature(target, target.access || target.methodAccess);
 
         const section = document.createElement("section");
-        section.className = "method-body-section";
-        section.appendChild(makeMethodMiniHeading("FUNCTION BODY", "advanced"));
+        section.className = "method-body-section nested-graph-section";
+        section.appendChild(makeMethodMiniHeading("FUNCTION BODY", "sub graph"));
 
-        const surface = document.createElement("div");
-        surface.className = "method-body-surface";
-
-        const left = document.createElement("div");
-        left.className = "method-body-boundary method-body-inputs";
-        const entry = document.createElement("div");
-        entry.className = "method-body-boundary-chip flow";
-        entry.innerHTML = "<strong>Entry</strong><small>FLOW</small>";
-        left.appendChild(entry);
-
-        target.methodParameters.forEach((parameter) => {
-          const mode = parameter.mode || "value";
-          if (mode === "out") return;
-          const chip = document.createElement("div");
-          chip.className = "method-body-boundary-chip data";
-          const strong = document.createElement("strong");
-          strong.textContent = parameter.name || parameter.label || "value";
-          const small = document.createElement("small");
-          small.textContent = parameterTypeKey(parameter) + (mode === "ref" ? " · REF IN" : " · IN");
-          chip.append(strong, small);
-          left.appendChild(chip);
-        });
-
-        const lane = document.createElement("div");
-        lane.className = "method-body-lane";
-
-        if (!target.methodBody.nodes.length) {
-          const empty = document.createElement("div");
-          empty.className = "method-body-empty";
-          const title = document.createElement("strong");
-          title.textContent = "Spazio interno della funzione";
-          const hint = document.createElement("small");
-          hint.textContent = "Aggiungi azioni per costruire la logica interna.";
-          empty.append(title, hint);
-          lane.appendChild(empty);
-        } else {
-          target.methodBody.nodes.forEach((innerNode, index) => {
-            if (index > 0) {
-              const arrow = document.createElement("div");
-              arrow.className = "method-body-flow-arrow";
-              arrow.textContent = "↓";
-              lane.appendChild(arrow);
-            }
-
-            const card = document.createElement("div");
-            card.className = "method-body-action-card";
-
-            const badge = document.createElement("span");
-            badge.className = "method-body-action-badge";
-            badge.textContent = "▶";
-
-            const fields = document.createElement("div");
-            fields.className = "method-body-action-fields";
-
-            const titleInput = document.createElement("input");
-            titleInput.type = "text";
-            titleInput.value = innerNode.title;
-            titleInput.placeholder = "Nome azione";
-            titleInput.addEventListener("pointerdown", (event) => event.stopPropagation());
-            titleInput.addEventListener("input", () => {
-              innerNode.title = titleInput.value || "Action";
-              markDirty();
-            });
-
-            const kind = compactSelect(innerNode.actionKind, [
-              ["custom", "Custom"],
-              ["callMethod", "Call Method"],
-              ["setVariable", "Set Variable"],
-              ["animator", "Animator"],
-              ["audio", "Audio"],
-              ["spawn", "Spawn"],
-              ["destroy", "Destroy"],
-              ["enable", "Enable / Disable"]
-            ], (value) => {
-              innerNode.actionKind = value;
-              markDirty();
-            }, "method-body-action-kind");
-
-            fields.append(titleInput, kind);
-
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className = "method-body-action-remove";
-            remove.textContent = "×";
-            remove.title = "Rimuovi azione";
-            remove.addEventListener("pointerdown", (event) => event.stopPropagation());
-            remove.addEventListener("click", (event) => {
-              event.stopPropagation();
-              target.methodBody.nodes = target.methodBody.nodes.filter((entry) => entry.id !== innerNode.id);
-              rerenderNode();
-              markDirty();
-            });
-
-            card.append(badge, fields, remove);
-            lane.appendChild(card);
-          });
-        }
-
-        const addAction = document.createElement("button");
-        addAction.type = "button";
-        addAction.className = "method-body-add-action";
-        addAction.textContent = "+ Azione";
-        addAction.addEventListener("pointerdown", (event) => event.stopPropagation());
-        addAction.addEventListener("click", (event) => {
+        const portal = document.createElement("button");
+        portal.type = "button";
+        portal.className = "nested-graph-portal";
+        portal.addEventListener("pointerdown", (event) => event.stopPropagation());
+        portal.addEventListener("click", (event) => {
           event.stopPropagation();
-          target.methodBody.nodes.push({
-            id: uid("inner_action"),
-            type: "action",
-            title: "Action " + (target.methodBody.nodes.length + 1),
-            actionKind: "custom"
-          });
-          rerenderNode();
-          markDirty();
-        });
-        lane.appendChild(addAction);
-
-        const right = document.createElement("div");
-        right.className = "method-body-boundary method-body-outputs";
-
-        target.methodParameters.forEach((parameter) => {
-          const mode = parameter.mode || "value";
-          if (!["out", "ref"].includes(mode)) return;
-          const chip = document.createElement("div");
-          chip.className = "method-body-boundary-chip data";
-          const strong = document.createElement("strong");
-          strong.textContent = parameter.name || parameter.label || "value";
-          const small = document.createElement("small");
-          small.textContent = parameterTypeKey(parameter) + (mode === "ref" ? " · REF OUT" : " · OUT");
-          chip.append(strong, small);
-          right.appendChild(chip);
+          openNestedGraph(
+            target,
+            "function",
+            (target.title || target.label || "Function") + " · Function Body"
+          );
         });
 
-        const returnChip = document.createElement("div");
-        returnChip.className = "method-body-boundary-chip return";
-        const returnStrong = document.createElement("strong");
-        returnStrong.textContent = target.returnType === "void" ? "Return" : (target.returnName || "result");
-        const returnSmall = document.createElement("small");
-        returnSmall.textContent = target.returnType === "void"
-          ? "FLOW · void"
-          : nodeReturnTypeKey(target) + " · RETURN";
-        returnChip.append(returnStrong, returnSmall);
-        right.appendChild(returnChip);
+        const icon = document.createElement("span");
+        icon.className = "nested-graph-portal-icon";
+        icon.textContent = "◇";
 
-        surface.append(left, lane, right);
-        section.appendChild(surface);
+        const copy = document.createElement("span");
+        copy.className = "nested-graph-portal-copy";
+        const title = document.createElement("strong");
+        title.textContent = "Apri Function Body";
+        const detail = document.createElement("small");
+        const count = target.methodBody && Array.isArray(target.methodBody.nodes)
+          ? target.methodBody.nodes.filter((entry) => entry.id !== "__graph_input__" && entry.id !== "__graph_output__").length
+          : 0;
+        detail.textContent = count
+          ? count + (count === 1 ? " blocco nel sotto-grafo" : " blocchi nel sotto-grafo")
+          : "Canvas annidato · input e output vengono creati automaticamente";
+
+        copy.append(title, detail);
+        const arrow = document.createElement("span");
+        arrow.className = "nested-graph-portal-arrow";
+        arrow.textContent = "→";
+        portal.append(icon, copy, arrow);
+        section.appendChild(portal);
         return section;
       };
 
@@ -7494,7 +7624,49 @@
         body.appendChild(section);
       };
 
-      if (node.type === "switch") {
+      if (node.type === "emptyGraph") {
+        appendSection("INPUTS", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "input"), [
+          { label: "Flow Input", value: "flowInput" },
+          { label: "Data Input", value: "dataInput" }
+        ]);
+        appendSection("OUTPUTS", node.rows.filter((item) => item.kind === "flowOut" || item.kind === "output"), [
+          { label: "Flow Output", value: "flowOutput" },
+          { label: "Data Output", value: "dataOutput" }
+        ]);
+
+        const portalWrap = document.createElement("section");
+        portalWrap.className = "method-body-section nested-graph-section empty-graph-portal-section";
+        const portal = document.createElement("button");
+        portal.type = "button";
+        portal.className = "nested-graph-portal";
+        portal.addEventListener("pointerdown", (event) => event.stopPropagation());
+        portal.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openNestedGraph(node, "empty", (node.title || "Empty") + " · Body");
+        });
+
+        const icon = document.createElement("span");
+        icon.className = "nested-graph-portal-icon";
+        icon.textContent = "□";
+        const copy = document.createElement("span");
+        copy.className = "nested-graph-portal-copy";
+        const title = document.createElement("strong");
+        title.textContent = "Apri Empty Graph";
+        const detail = document.createElement("small");
+        const count = node.nestedGraph && Array.isArray(node.nestedGraph.nodes)
+          ? node.nestedGraph.nodes.filter((entry) => entry.id !== "__graph_input__" && entry.id !== "__graph_output__").length
+          : 0;
+        detail.textContent = count
+          ? count + (count === 1 ? " blocco interno" : " blocchi interni")
+          : "Canvas vuoto · le porte esterne vengono istanziate dentro";
+        copy.append(title, detail);
+        const arrow = document.createElement("span");
+        arrow.className = "nested-graph-portal-arrow";
+        arrow.textContent = "→";
+        portal.append(icon, copy, arrow);
+        portalWrap.appendChild(portal);
+        body.appendChild(portalWrap);
+      } else if (node.type === "switch") {
         syncSwitchNode(node);
         appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
         appendSection("VALUE", node.rows.filter((item) => item.kind === "input"), []);
@@ -9512,7 +9684,7 @@
     const structureLike = ["class", "struct", "jobStruct"].includes(node.type);
     const objectLike = node.type === "object";
     const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
-    const directStructured = ["function", "enum", "constant", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
+    const directStructured = ["function", "emptyGraph", "graphInput", "graphOutput", "enum", "constant", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
 
     $("addVariable").style.display = (structureLike || objectLike) ? "" : "none";
     $("addMethod").style.display = structureLike ? "" : "none";
@@ -9526,6 +9698,9 @@
       object: ["GAMEOBJECT DATA", "Componenti e dati appartenenti al GameObject."],
       component: ["COMPONENT API", "Riferimento e proprietà principali del componente Unity."],
       function: ["FUNCTION", "Firma e porte della funzione; la logica avanzata vive nel Function Body."],
+      emptyGraph: ["EMPTY GRAPH", "Configura input e output sul blocco; verranno istanziati nel canvas interno."],
+      graphInput: ["GRAPH INPUT", "Porte generate dal blocco padre."],
+      graphOutput: ["GRAPH OUTPUT", "Porte generate dal blocco padre."],
       enum: ["ENUM VALUES", "Valori nominati disponibili come tipo nel progetto."]
     };
     const labelInfo = labels[node.type] || [
@@ -10135,7 +10310,19 @@
           methodDescription: "",
           methodLogic: "",
           methodEditorMode: "basic",
-          methodBody: { nodes: [], connections: [] }
+          methodBody: { version: 1, name: "Function Body", nodes: [], connections: [], groups: [] }
+        }
+      },
+      emptyGraph: {
+        title: "Empty",
+        description: "Nodo contenitore con un canvas interno completamente libero.",
+        rows: [
+          row("Enter", "", "flowIn"),
+          row("Next", "", "flowOut")
+        ],
+        pseudo: "",
+        extra: {
+          nestedGraph: { version: 1, name: "Empty Body", nodes: [], connections: [], groups: [] }
         }
       },
       enum: {
@@ -10425,6 +10612,7 @@
       { type: "struct", category: "STRUTTURA", label: "Struct", description: "Value type C# con campi e metodi", icon: "{}" },
       { type: "jobStruct", category: "STRUTTURA", label: "Unity Job Struct", description: "IJob / IJobFor / IJobParallelFor / IJobEntity", icon: "J" },
       { type: "function", category: "STRUTTURA", label: "Funzione", description: "Metodo con parametri, return e logica", icon: "ƒ" },
+      { type: "emptyGraph", category: "STRUTTURA", label: "Empty", description: "Nodo vuoto con un sotto-grafo annidato e porte configurabili", icon: "□" },
       { type: "enum", category: "STRUTTURA", label: "Enum", description: "Valori nominati per stati e modalità", icon: "E" },
 
       { type: "event", category: "FLOW", label: "Evento", description: "Ingresso del flow: Start, Update, input, trigger…", icon: "⚡" },
@@ -11505,10 +11693,11 @@
 
   function exportProject() {
     saveProject(false);
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    const documentProject = rootProject || project;
+    const blob = new Blob([JSON.stringify(documentProject, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const safeName = (project.name || "projectflow").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+    const safeName = (documentProject.name || "projectflow").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
     link.href = url;
     link.download = safeName + ".projectflow.json";
     document.body.appendChild(link);
@@ -11524,7 +11713,7 @@
     reader.onload = () => {
       try {
         const imported = normalizeProject(JSON.parse(reader.result));
-        project = imported;
+        setProjectDocument(imported);
         selectedNodeIds.clear();
         selectedNodeId = null;
         selectedEdgeId = null;
@@ -11760,8 +11949,8 @@
   $("resetProject").addEventListener("click", () => {
     closeAccountMenu();
     if (!confirm("Caricare l'Inventory Demo? Il progetto corrente verrà sostituito.")) return;
-    project = sampleProject();
-    $("projectName").value = project.name;
+    setProjectDocument(sampleProject());
+    $("projectName").value = rootProject.name;
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
@@ -11996,6 +12185,10 @@
         closeAiBuilderPanel();
         return;
       }
+      if (leaveNestedGraph()) {
+        event.preventDefault();
+        return;
+      }
       cancelConnection();
       clearSelection();
       return;
@@ -12065,7 +12258,8 @@
       e: "event",
       a: "action",
       s: "state",
-      m: "enum"
+      m: "enum",
+      x: "emptyGraph"
     };
     const type = shortcuts[event.key.toLowerCase()];
     if (type) addNode(type);
