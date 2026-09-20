@@ -3942,6 +3942,7 @@
 
       cloudState.sharedMeta = meta;
       renderSharePanel();
+      renderRemotePresence();
     } catch (error) {
       console.warn("ProjectFlow: impossibile leggere i dati di condivisione.", error);
       renderSharePanel();
@@ -4386,7 +4387,7 @@
 
     const now = Date.now();
     const active = Array.from(cloudState.remotePresence.values())
-      .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry._receivedAt || now) < 45000);
+      .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry._receivedAt || now) < 30000);
     const activeByUid = new Map(active.map((entry) => [entry.uid, entry]));
     const roster = new Map();
 
@@ -4698,6 +4699,7 @@
     if (cloudState.sharedProjectUnsubscribe) cloudState.sharedProjectUnsubscribe();
     if (cloudState.presenceUnsubscribe) cloudState.presenceUnsubscribe();
     if (cloudState.nodePositionsUnsubscribe) cloudState.nodePositionsUnsubscribe();
+    if (cloudState.kickUnsubscribe) cloudState.kickUnsubscribe();
     clearInterval(cloudState.presenceHeartbeat);
     clearTimeout(cloudState.presenceWriteTimer);
     clearTimeout(cloudState.presencePreviewClearTimer);
@@ -4718,6 +4720,7 @@
     cloudState.sharedProjectUnsubscribe = null;
     cloudState.presenceUnsubscribe = null;
     cloudState.nodePositionsUnsubscribe = null;
+    cloudState.kickUnsubscribe = null;
     cloudState.remoteNodePositions = new Map();
     cloudState.presenceHeartbeat = null;
     cloudState.presenceWriteTimer = null;
@@ -4741,6 +4744,21 @@
     stopSharedProjectSession();
     cloudState.sharedProjectId = record.sharedProjectId;
     cloudState.presenceActivity = "Nel progetto";
+
+    ensureCurrentSharedMember(record).finally(() => {
+      if (!cloudState.user || cloudState.sharedProjectId !== record.sharedProjectId) return;
+      const kickRef = sharedKickDocumentRef(record.sharedProjectId, cloudState.user.uid);
+      if (!kickRef) return;
+      if (cloudState.kickUnsubscribe) cloudState.kickUnsubscribe();
+      cloudState.kickUnsubscribe = cloudState.api.onSnapshot(kickRef, (snapshot) => {
+        if (!snapshot.exists()) return;
+        const value = snapshot.data() || {};
+        if (value.active === false) return;
+        forceExitSharedProject("Sei stato rimosso dal progetto condiviso");
+      }, (error) => {
+        console.warn("ProjectFlow: listener espulsione non disponibile.", error);
+      });
+    });
 
     const ref = sharedProjectRef(record.sharedProjectId);
     cloudState.sharedProjectUnsubscribe = cloudState.api.onSnapshot(ref, (snapshot) => {
@@ -4783,6 +4801,11 @@
       }
     }, (error) => {
       console.warn("ProjectFlow: sessione condivisa interrotta.", error);
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      if (denied && record.sharedRole === "editor") {
+        forceExitSharedProject("Accesso al progetto revocato");
+        return;
+      }
       showToast("Accesso collaborativo interrotto");
       stopSharedProjectSession();
     });
@@ -4810,6 +4833,8 @@
       scheduleMinimapRender(0);
     }, (error) => {
       console.warn("ProjectFlow: cursori collaborativi non disponibili.", error);
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      if (denied && record.sharedRole === "editor") forceExitSharedProject("Accesso al progetto revocato");
     });
 
     const nodePositionsCollection = cloudState.api.collection(
@@ -4837,6 +4862,8 @@
       });
     }, (error) => {
       console.warn("ProjectFlow: posizioni realtime non disponibili.", error);
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      if (denied && record.sharedRole === "editor") forceExitSharedProject("Accesso al progetto revocato");
     });
 
     writePresenceNow();
