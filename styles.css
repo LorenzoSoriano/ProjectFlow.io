@@ -9321,3 +9321,48 @@ html[data-ui-theme="light"] .home-cloud-state{
     padding:6px 9px;
   }
 }
+
+
+/* v2.56 — real account avatar in the public header */
+.home-account-avatar{
+  width:24px;
+  height:24px;
+  flex:0 0 24px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid #454545;
+  border-radius:50%;
+  background:#2a2a2a;
+  color:#a9a9a9;
+  background-position:center;
+  background-size:cover;
+  background-repeat:no-repeat;
+  font-size:10px;
+  font-weight:900;
+  line-height:1;
+}
+.home-account-avatar svg{
+  width:14px;
+  height:14px;
+  fill:currentColor;
+}
+.home-account-avatar.has-photo{
+  border-color:rgba(85,214,158,.35);
+  background-color:#252525;
+}
+.home-account-avatar.has-initial{
+  border-color:#4a6675;
+  background:#26343c;
+  color:#c7d8e1;
+}
+html[data-ui-theme="light"] .home-account-avatar{
+  border-color:#d2d7de;
+  background:#eef1f4;
+  color:#68717c;
+}
+html[data-ui-theme="light"] .home-account-avatar.has-initial{
+  border-color:#bfd0da;
+  background:#e8f1f5;
+  color:#354b58;
+}
