@@ -9123,3 +9123,27 @@ html[data-ui-theme="light"] .home-nav a:hover,
 html[data-ui-theme="light"] .home-nav button.active{
   color:#343b45!important;
 }
+
+
+/* v2.53 — flush page menu to the far-right edge */
+.editor-view .topbar{
+  padding-right:0;
+}
+.editor-top-actions{
+  margin-left:auto;
+  gap:7px;
+}
+.editor-top-actions .page-menu-button{
+  order:99;
+  margin-left:1px;
+  height:var(--topbar);
+  border-top:0;
+  border-right:0;
+  border-bottom:0;
+  border-radius:0;
+}
+@media(max-width:850px){
+  .editor-view .topbar{
+    padding-right:0;
+  }
+}
