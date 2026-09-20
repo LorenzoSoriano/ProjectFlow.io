@@ -1247,6 +1247,9 @@
             edgeId: String(point.junctionLink.edgeId),
             pointId: String(point.junctionLink.pointId)
           };
+          if (point.junctionAnchor === "from" || point.junctionAnchor === "to") {
+            normalized.junctionAnchor = point.junctionAnchor;
+          }
         }
         return normalized;
       });
@@ -7350,13 +7353,97 @@
     });
   }
 
-  function makeLinkedJunctionPoint(edgeId, pointId, point) {
+  function makeLinkedJunctionPoint(edgeId, pointId, point, anchor) {
     return {
       id: uid("junction_link"),
       x: point.x,
       y: point.y,
-      junctionLink: { edgeId: edgeId, pointId: pointId }
+      junctionLink: { edgeId: edgeId, pointId: pointId },
+      junctionAnchor: anchor === "to" ? "to" : "from"
     };
+  }
+
+  function sameConnectionRef(a, b) {
+    return !!a && !!b &&
+      a.nodeId === b.nodeId &&
+      a.rowId === b.rowId;
+  }
+
+  function edgeConnects(edge, from, to) {
+    return !!edge && sameConnectionRef(edge.from, from) && sameConnectionRef(edge.to, to);
+  }
+
+  function edgeOwnsReferencedJunction(edge) {
+    if (!edge || !Array.isArray(edge.points)) return false;
+    const ownedPointIds = new Set(
+      edge.points
+        .filter((point) => point && !point.junctionLink)
+        .map((point) => point.id)
+    );
+    if (!ownedPointIds.size) return false;
+
+    return project.connections.some((otherEdge) =>
+      otherEdge.id !== edge.id &&
+      (otherEdge.points || []).some((point) =>
+        point.junctionLink &&
+        point.junctionLink.edgeId === edge.id &&
+        ownedPointIds.has(point.junctionLink.pointId)
+      )
+    );
+  }
+
+  function removeRedundantConnections(from, to, keepEdgeId) {
+    const removedIds = new Set();
+    project.connections = project.connections.filter((edge) => {
+      if (edge.id === keepEdgeId || !edgeConnects(edge, from, to)) return true;
+
+      // Never destroy an edge that currently owns a junction used by other
+      // branches. It can be normalized later without orphaning those branches.
+      if (edgeOwnsReferencedJunction(edge)) return true;
+
+      removedIds.add(edge.id);
+      return false;
+    });
+
+    if (!removedIds.size) return 0;
+    if (selectedEdgeId && removedIds.has(selectedEdgeId)) selectedEdgeId = keepEdgeId;
+    selectedJunctionIds = new Set(
+      Array.from(selectedJunctionIds).filter((key) => {
+        const edgeId = String(key).split("::")[0];
+        return !removedIds.has(edgeId);
+      })
+    );
+    return removedIds.size;
+  }
+
+  function linkedJunctionAnchor(edge, point) {
+    if (!point || !point.junctionLink) return null;
+    if (point.junctionAnchor === "from" || point.junctionAnchor === "to") return point.junctionAnchor;
+
+    const owner = junctionRecord(point.junctionLink.edgeId, point.junctionLink.pointId);
+    if (!owner) return null;
+
+    const sameFrom = sameConnectionRef(edge.from, owner.edge.from);
+    const sameTo = sameConnectionRef(edge.to, owner.edge.to);
+    if (sameFrom && !sameTo) return "from";
+    if (sameTo && !sameFrom) return "to";
+    return null;
+  }
+
+  function edgeVisualRoute(edge, startPoint, endPoint) {
+    const points = Array.isArray(edge.points) ? edge.points : [];
+    const linkedIndex = points.findIndex((point) => point && point.junctionLink);
+    if (linkedIndex < 0) return [startPoint].concat(points, [endPoint]);
+
+    const linkedPoint = points[linkedIndex];
+    const anchor = linkedJunctionAnchor(edge, linkedPoint);
+    if (anchor === "from") {
+      return [linkedPoint].concat(points.slice(linkedIndex + 1), [endPoint]);
+    }
+    if (anchor === "to") {
+      return [startPoint].concat(points.slice(0, linkedIndex + 1));
+    }
+    return [startPoint].concat(points, [endPoint]);
   }
 
   function finishJunctionConnection(portRef, edgeId, pointId) {
@@ -7382,11 +7469,10 @@
       return false;
     }
 
-    const duplicate = project.connections.some((edge) =>
-      edge.from.nodeId === from.nodeId &&
-      edge.from.rowId === from.rowId &&
-      edge.to.nodeId === to.nodeId &&
-      edge.to.rowId === to.rowId &&
+    const ownerAlreadyConnects = edgeConnects(junction.edge, from, to);
+    const anchor = portRef.side === "in" ? "from" : "to";
+    let routedEdge = ownerAlreadyConnects ? junction.edge : project.connections.find((edge) =>
+      edgeConnects(edge, from, to) &&
       (edge.points || []).some((point) =>
         point.junctionLink &&
         point.junctionLink.edgeId === edgeId &&
@@ -7394,16 +7480,37 @@
       )
     );
 
-    if (!duplicate) {
-      project.connections.push({
+    let created = false;
+    if (!routedEdge) {
+      routedEdge = {
         id: uid("edge"),
         from: { nodeId: from.nodeId, rowId: from.rowId, side: "out", kind: check.outputType === "__flow__" ? "flow" : "data" },
         to: { nodeId: to.nodeId, rowId: to.rowId, side: "in", kind: check.outputType === "__flow__" ? "flow" : "data" },
-        points: [makeLinkedJunctionPoint(edgeId, pointId, junction.point)],
+        points: [makeLinkedJunctionPoint(edgeId, pointId, junction.point, anchor)],
         dataType: check.outputType
-      });
-      markDirty();
+      };
+      project.connections.push(routedEdge);
+      created = true;
+    } else if (!ownerAlreadyConnects) {
+      const linkedPoint = (routedEdge.points || []).find((point) =>
+        point.junctionLink &&
+        point.junctionLink.edgeId === edgeId &&
+        point.junctionLink.pointId === pointId
+      );
+      if (linkedPoint) linkedPoint.junctionAnchor = anchor;
+    }
+
+    const removed = removeRedundantConnections(from, to, routedEdge.id);
+    if (created || removed) markDirty();
+
+    if (ownerAlreadyConnects) {
+      showToast(removed
+        ? "Connessione diretta rimossa · resta il percorso del junction"
+        : "Il collegamento passa già da questo junction");
+    } else if (created) {
       showToast(check.outputType === "__flow__" ? "Nuovo ramo FLOW collegato" : "Nuovo ramo DATA collegato");
+    } else if (removed) {
+      showToast("Connessione duplicata rimossa");
     }
 
     pendingPort = null;
@@ -7489,7 +7596,7 @@
     const point = screenToWorld(event.clientX, event.clientY);
     if (!Array.isArray(edge.points)) edge.points = [];
 
-    const route = [startPoint].concat(edge.points, [endPoint]);
+    const route = edgeVisualRoute(edge, startPoint, endPoint);
     let bestSegment = 0;
     let bestDistance = Infinity;
 
@@ -7506,7 +7613,14 @@
       x: Math.round(point.x / 10) * 10,
       y: Math.round(point.y / 10) * 10
     };
-    edge.points.splice(bestSegment, 0, junction);
+    const linkedIndex = edge.points.findIndex((point) => point && point.junctionLink);
+    let insertionIndex = bestSegment;
+    if (linkedIndex >= 0) {
+      const anchor = linkedJunctionAnchor(edge, edge.points[linkedIndex]);
+      if (anchor === "from") insertionIndex = linkedIndex + 1 + bestSegment;
+      else if (anchor === "to") insertionIndex = bestSegment;
+    }
+    edge.points.splice(insertionIndex, 0, junction);
 
     selectedEdgeId = edge.id;
     selectedJunctionIds = new Set([junctionSelectionKey(edge.id, junction.id)]);
@@ -7566,6 +7680,9 @@
       point.x = Math.round((startPoint.x + dx) / 10) * 10;
       point.y = Math.round((startPoint.y + dy) / 10) * 10;
     });
+    // Keep every branch attached to the owner point during the drag itself,
+    // not only on the next full render.
+    syncLinkedJunctionPoints();
     scheduleInteractionRender(false, false);
   }
 
@@ -7577,7 +7694,9 @@
         junctionClickSuppressUntil = Date.now() + 260;
       }
       junctionDrag = null;
+      syncLinkedJunctionPoints();
       markDirty();
+      renderEdges();
       renderMinimap();
     }
   }
@@ -7602,13 +7721,15 @@
     project.connections = project.connections.filter((edge) => nodeById(edge.from.nodeId) && nodeById(edge.to.nodeId));
     syncLinkedJunctionPoints();
 
+    const junctionOverlays = [];
+
     project.connections.forEach((edge) => {
       const a = getPortWorldPosition(edge.from);
       const b = getPortWorldPosition(edge.to);
       if (!a || !b) return;
       if (!Array.isArray(edge.points)) edge.points = [];
 
-      const route = [a].concat(edge.points, [b]);
+      const route = edgeVisualRoute(edge, a, b);
       const isInternalEdge = edge.from.nodeId === edge.to.nodeId && edge.points.length === 0;
       const routePath = isInternalEdge
         ? internalConnectionPath(a, b, edge.from.nodeId)
@@ -7691,9 +7812,13 @@
           cancelConnection();
           removeJunction(edge.id, point.id);
         });
-        edgeLayer.appendChild(junction);
+        // Junctions are appended after every edge hit-area so a newly attached
+        // branch can never cover the point and make it impossible to drag.
+        junctionOverlays.push(junction);
       });
     });
+
+    junctionOverlays.forEach((junction) => edgeLayer.appendChild(junction));
 
     if (selectedNodeIds.size) {
       const groupedTypeRelations = new Map();
