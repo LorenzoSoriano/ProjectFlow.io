@@ -13187,6 +13187,23 @@
     $("shareInviteButton").click();
   });
   $("copyShareLink").addEventListener("click", copyCurrentShareLink);
+  $("copyShareCode").addEventListener("click", copyCurrentShareCode);
+  $("shareJoinCodeButton").addEventListener("click", () => {
+    const input = $("shareJoinCodeInput");
+    const code = input.value;
+    joinSharedProjectByCode(code).then((joined) => {
+      if (joined) input.value = "";
+    });
+  });
+  $("shareJoinCodeInput").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    $("shareJoinCodeButton").click();
+  });
+  $("shareJoinCodeInput").addEventListener("input", (event) => {
+    const raw = normalizeShareCode(event.target.value).slice(0, 10);
+    event.target.value = formatShareCode(raw);
+  });
 
   $("noteTool").addEventListener("click", () => addNode("note"));
   $("sketchTool").addEventListener("click", () => addNode("sketch"));
