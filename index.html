@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260920-1645" />
+  <link rel="stylesheet" href="styles.css?v=20260920-1740" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.37</span>
+        <span class="build-badge" title="Build corrente">v2.38</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -696,6 +696,48 @@
     </div>
   </div>
 
+  <div class="create-project-overlay" id="createProjectDialog" aria-hidden="true">
+    <form class="create-project-dialog" id="createProjectForm" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
+      <div class="create-project-head">
+        <div>
+          <span class="eyebrow">NUOVO SCHEMA</span>
+          <h2 id="createProjectTitle">Crea una nuova pagina</h2>
+          <p>Scegli il nome e l'ambiente logico da usare. Potrai aggiungere altri engine in futuro.</p>
+        </div>
+        <button class="create-project-close" id="createProjectCancel" type="button" aria-label="Chiudi">×</button>
+      </div>
+
+      <div class="create-project-fields">
+        <label class="create-project-field">
+          <span>Nome</span>
+          <input id="createProjectName" type="text" maxlength="80" autocomplete="off" value="Nuovo schema" placeholder="Es. Player Controller" />
+        </label>
+
+        <label class="create-project-field">
+          <span>Tipo di schema</span>
+          <div class="create-project-select-wrap">
+            <select id="createProjectSchema">
+              <option value="unity">Unity</option>
+              <option value="unreal">Unreal Engine</option>
+              <option value="godot">Godot</option>
+              <option value="classic">Flow Chart classico</option>
+            </select>
+          </div>
+        </label>
+
+        <div class="create-project-schema-note">
+          <span class="create-project-schema-dot"></span>
+          <p id="createProjectSchemaNote">Schema orientato a Unity e C#, pronto per componenti, MonoBehaviour e logica di gioco.</p>
+        </div>
+      </div>
+
+      <div class="create-project-actions">
+        <button class="secondary-button" type="button" id="createProjectCancelFooter">Annulla</button>
+        <button class="primary-button" type="submit">Crea pagina</button>
+      </div>
+    </form>
+  </div>
+
   <div class="project-loading-overlay" id="projectLoadingOverlay" aria-hidden="true">
     <div class="project-loading-card">
       <div class="loading-project-mark">PF</div>
@@ -709,6 +751,6 @@
   </div>
 
   <script src="firebase-config.js?v=20260920-1645"></script>
-  <script src="app.js?v=20260920-1645"></script>
+  <script src="app.js?v=20260920-1740"></script>
 </body>
 </html>
