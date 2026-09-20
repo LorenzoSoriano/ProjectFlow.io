@@ -6004,7 +6004,7 @@ body,
 }
 .type-sketch{
   min-width:360px;
-  max-width:1400px;
+  max-width:2400px;
   overflow:visible;
   border-color:#34495c;
   box-shadow:0 12px 30px rgba(0,0,0,.24);
@@ -6137,7 +6137,7 @@ body,
 .node-sketch-paper{
   position:relative;
   min-height:220px;
-  max-height:1000px;
+  max-height:1600px;
   height:320px;
   margin:10px 10px 6px;
   overflow:hidden;
