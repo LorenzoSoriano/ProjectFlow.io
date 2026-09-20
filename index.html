@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#191919" />
   <meta name="description" content="ProjectFlow.io — editor visuale concettuale per progettare oggetti, classi, funzioni, variabili e logiche di gioco prima di scrivere codice." />
   <title>ProjectFlow.io — Visual logic workspace</title>
-  <link rel="stylesheet" href="styles.css?v=20260920-2510" />
+  <link rel="stylesheet" href="styles.css?v=20260920-2550" />
 </head>
 <body>
   <section class="project-home" id="projectHome">
@@ -14,7 +14,7 @@
       <button class="brand home-brand site-nav-button" type="button" data-site-page-target="home" aria-label="ProjectFlow home">
         <span class="brand-mark">PF</span>
         <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span>
-        <span class="build-badge" title="Build corrente">v2.55</span>
+        <span class="build-badge" title="Build corrente">v2.56</span>
       </button>
 
       <nav class="home-nav" aria-label="Navigazione principale">
@@ -27,7 +27,11 @@
 
       <div class="home-account">
         <button class="google-login-button" id="homeAuthButton" type="button">
-          <span class="google-g">G</span>
+          <span class="home-account-avatar" id="homeAccountAvatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path>
+            </svg>
+          </span>
           <span>Accedi con Google</span>
         </button>
       </div>
@@ -417,7 +421,7 @@
         <button class="toolbar-button back-library-button" id="backToProjects" type="button" title="Torna ai progetti" aria-label="Torna ai progetti">← <span>Progetti</span></button>
         <a class="brand" href="#" aria-label="ProjectFlow home">
           <span class="brand-mark">PF</span>
-          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.55</span>
+          <span class="brand-copy"><strong>ProjectFlow</strong><small>.io</small></span><span class="build-badge" title="Build corrente">v2.56</span>
         </a>
         <span class="top-divider"></span>
         <input id="projectName" class="project-name" value="Game Systems — Concept" aria-label="Nome progetto" />
@@ -858,6 +862,6 @@
   </div>
 
   <script src="firebase-config.js?v=20260920-2000"></script>
-  <script src="app.js?v=20260920-2510"></script>
+  <script src="app.js?v=20260920-2550"></script>
 </body>
 </html>
