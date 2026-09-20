@@ -7014,3 +7014,35 @@ body,
   font-weight:750;
   letter-spacing:.2px;
 }
+
+
+/* v2.18 — single account avatar, junction connectors, math & logic nodes */
+.account-avatar.has-photo,
+.account-menu-avatar.has-photo{
+  color:transparent!important;
+  text-shadow:none!important;
+}
+.edge-junction.pending-connector{
+  stroke:#ffffff;
+  stroke-width:4;
+  cursor:crosshair;
+  filter:drop-shadow(0 0 9px color-mix(in srgb,var(--junction-color,#3f7fa6) 90%,transparent));
+}
+.type-math{
+  --node-accent:#6fb47b;
+}
+.type-logic,
+.type-compare{
+  --node-accent:#c88455;
+}
+.type-math .node-type-dot{color:#7ed18d}
+.type-logic .node-type-dot,
+.type-compare .node-type-dot{color:#dda06f}
+.math-meta-inline{
+  align-items:center;
+  gap:6px;
+}
+.math-meta-inline .type-picker{
+  min-width:0;
+  flex:1;
+}
