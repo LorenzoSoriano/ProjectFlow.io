@@ -12,6 +12,8 @@
   const MINIMAP_SIZE_KEY = "projectflow.minimap-size.v1";
   const FORCE_CONNECTIONS_KEY = "projectflow.force-connections.v1";
   const NODE_WIDTH = 440;
+  let rootProject = null;
+  let project = null;
 
   function nodeWidthFor(nodeOrType) {
     const node = typeof nodeOrType === "object" && nodeOrType ? nodeOrType : null;
@@ -1730,8 +1732,8 @@
     return { width: 262, height: 196 };
   }
 
-  let rootProject = loadProject();
-  let project = rootProject;
+  rootProject = loadProject();
+  project = rootProject;
   let graphWorkspaceStack = [];
   let currentWorkspaceLabel = "";
   let view = loadView();
