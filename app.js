@@ -4387,6 +4387,19 @@
     const now = Date.now();
     const active = Array.from(cloudState.remotePresence.values())
       .filter((entry) => entry && entry.uid !== cloudState.user.uid && now - Number(entry._receivedAt || now) < 45000);
+    const activeByUid = new Map(active.map((entry) => [entry.uid, entry]));
+    const roster = new Map();
+
+    const meta = cloudState.sharedMeta || {};
+    (meta.members || []).forEach((member) => {
+      if (!member || !member.uid || member.uid === cloudState.user.uid) return;
+      roster.set(member.uid, member);
+    });
+    active.forEach((entry) => {
+      if (!entry || !entry.uid || entry.uid === cloudState.user.uid) return;
+      roster.set(entry.uid, Object.assign({}, roster.get(entry.uid) || {}, entry));
+    });
+
     const activeKeys = new Set();
 
     const getPresenceElement = (key, className) => {
@@ -4514,13 +4527,6 @@
         }
       }
 
-      if (toolbar) {
-        const avatar = document.createElement("span");
-        avatar.className = "collab-presence-avatar";
-        avatar.textContent = userLabel.trim().charAt(0).toUpperCase();
-        avatar.title = userLabel + " · " + (entry.activity || "Attivo");
-        toolbar.appendChild(avatar);
-      }
     });
 
     if (collaborationLayer) {
@@ -4531,7 +4537,20 @@
     nodeLayer.querySelectorAll(".remote-sketch-preview-canvas").forEach((canvas) => {
       if (canvas.dataset.remoteSketchActive !== "true") canvas.remove();
     });
-    if (toolbar) toolbar.hidden = active.length === 0;
+    if (toolbar) {
+      roster.forEach((member, uid) => {
+        const online = activeByUid.get(uid);
+        const label = (online && (online.name || online.email)) || member.name || member.email || "Collaboratore";
+        const avatar = document.createElement("span");
+        avatar.className = "collab-presence-avatar" + (online ? " online" : " offline");
+        avatar.textContent = String(label).trim().charAt(0).toUpperCase();
+        avatar.title = online
+          ? label + " · " + (online.activity || "Online")
+          : label + " · offline";
+        toolbar.appendChild(avatar);
+      });
+      toolbar.hidden = roster.size === 0;
+    }
   }
 
   async function writePresenceNow() {
