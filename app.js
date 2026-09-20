@@ -359,6 +359,20 @@
     if (!target.returnPortId) target.returnPortId = uid("return");
     if (typeof target.returnName !== "string" || !target.returnName) target.returnName = "result";
     if (typeof target.methodLogic !== "string") target.methodLogic = "";
+    if (!["basic", "advanced"].includes(target.methodEditorMode)) target.methodEditorMode = "basic";
+    if (!target.methodBody || typeof target.methodBody !== "object") {
+      target.methodBody = { nodes: [], connections: [] };
+    }
+    if (!Array.isArray(target.methodBody.nodes)) target.methodBody.nodes = [];
+    if (!Array.isArray(target.methodBody.connections)) target.methodBody.connections = [];
+    target.methodBody.nodes = target.methodBody.nodes
+      .filter((entry) => entry && typeof entry === "object")
+      .map((entry, index) => ({
+        id: entry.id || uid("inner_action"),
+        type: "action",
+        title: typeof entry.title === "string" && entry.title ? entry.title : "Action " + (index + 1),
+        actionKind: typeof entry.actionKind === "string" ? entry.actionKind : "custom"
+      }));
     syncLegacyParameters(target);
   }
 
@@ -399,7 +413,9 @@
       returnPortId: uid("return"),
       returnName: "result",
       methodDescription: "",
-      methodLogic: ""
+      methodLogic: "",
+      methodEditorMode: "basic",
+      methodBody: { nodes: [], connections: [] }
     });
   }
 
@@ -5932,6 +5948,181 @@
         return section;
       };
 
+      const makeMethodModeToggle = (target) => {
+        ensureFunctionSignature(target, target.access || target.methodAccess);
+        const wrap = document.createElement("div");
+        wrap.className = "method-mode-switch";
+        [["basic", "Basic"], ["advanced", "Advanced"]].forEach(([value, label]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "method-mode-button" + (target.methodEditorMode === value ? " active" : "");
+          button.textContent = label;
+          button.addEventListener("pointerdown", (event) => event.stopPropagation());
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            target.methodEditorMode = value;
+            rerenderNode();
+          });
+          wrap.appendChild(button);
+        });
+        return wrap;
+      };
+
+      const makeMethodBodyWorkspace = (target) => {
+        ensureFunctionSignature(target, target.access || target.methodAccess);
+
+        const section = document.createElement("section");
+        section.className = "method-body-section";
+        section.appendChild(makeMethodMiniHeading("FUNCTION BODY", "advanced"));
+
+        const surface = document.createElement("div");
+        surface.className = "method-body-surface";
+
+        const left = document.createElement("div");
+        left.className = "method-body-boundary method-body-inputs";
+        const entry = document.createElement("div");
+        entry.className = "method-body-boundary-chip flow";
+        entry.innerHTML = "<strong>Entry</strong><small>FLOW</small>";
+        left.appendChild(entry);
+
+        target.methodParameters.forEach((parameter) => {
+          const mode = parameter.mode || "value";
+          if (mode === "out") return;
+          const chip = document.createElement("div");
+          chip.className = "method-body-boundary-chip data";
+          const strong = document.createElement("strong");
+          strong.textContent = parameter.name || parameter.label || "value";
+          const small = document.createElement("small");
+          small.textContent = parameterTypeKey(parameter) + (mode === "ref" ? " · REF IN" : " · IN");
+          chip.append(strong, small);
+          left.appendChild(chip);
+        });
+
+        const lane = document.createElement("div");
+        lane.className = "method-body-lane";
+
+        if (!target.methodBody.nodes.length) {
+          const empty = document.createElement("div");
+          empty.className = "method-body-empty";
+          const title = document.createElement("strong");
+          title.textContent = "Spazio interno della funzione";
+          const hint = document.createElement("small");
+          hint.textContent = "Aggiungi azioni per costruire la logica interna.";
+          empty.append(title, hint);
+          lane.appendChild(empty);
+        } else {
+          target.methodBody.nodes.forEach((innerNode, index) => {
+            if (index > 0) {
+              const arrow = document.createElement("div");
+              arrow.className = "method-body-flow-arrow";
+              arrow.textContent = "↓";
+              lane.appendChild(arrow);
+            }
+
+            const card = document.createElement("div");
+            card.className = "method-body-action-card";
+
+            const badge = document.createElement("span");
+            badge.className = "method-body-action-badge";
+            badge.textContent = "▶";
+
+            const fields = document.createElement("div");
+            fields.className = "method-body-action-fields";
+
+            const titleInput = document.createElement("input");
+            titleInput.type = "text";
+            titleInput.value = innerNode.title;
+            titleInput.placeholder = "Nome azione";
+            titleInput.addEventListener("pointerdown", (event) => event.stopPropagation());
+            titleInput.addEventListener("input", () => {
+              innerNode.title = titleInput.value || "Action";
+              markDirty();
+            });
+
+            const kind = compactSelect(innerNode.actionKind, [
+              ["custom", "Custom"],
+              ["callMethod", "Call Method"],
+              ["setVariable", "Set Variable"],
+              ["animator", "Animator"],
+              ["audio", "Audio"],
+              ["spawn", "Spawn"],
+              ["destroy", "Destroy"],
+              ["enable", "Enable / Disable"]
+            ], (value) => {
+              innerNode.actionKind = value;
+              markDirty();
+            }, "method-body-action-kind");
+
+            fields.append(titleInput, kind);
+
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "method-body-action-remove";
+            remove.textContent = "×";
+            remove.title = "Rimuovi azione";
+            remove.addEventListener("pointerdown", (event) => event.stopPropagation());
+            remove.addEventListener("click", (event) => {
+              event.stopPropagation();
+              target.methodBody.nodes = target.methodBody.nodes.filter((entry) => entry.id !== innerNode.id);
+              rerenderNode();
+              markDirty();
+            });
+
+            card.append(badge, fields, remove);
+            lane.appendChild(card);
+          });
+        }
+
+        const addAction = document.createElement("button");
+        addAction.type = "button";
+        addAction.className = "method-body-add-action";
+        addAction.textContent = "+ Azione";
+        addAction.addEventListener("pointerdown", (event) => event.stopPropagation());
+        addAction.addEventListener("click", (event) => {
+          event.stopPropagation();
+          target.methodBody.nodes.push({
+            id: uid("inner_action"),
+            type: "action",
+            title: "Action " + (target.methodBody.nodes.length + 1),
+            actionKind: "custom"
+          });
+          rerenderNode();
+          markDirty();
+        });
+        lane.appendChild(addAction);
+
+        const right = document.createElement("div");
+        right.className = "method-body-boundary method-body-outputs";
+
+        target.methodParameters.forEach((parameter) => {
+          const mode = parameter.mode || "value";
+          if (!["out", "ref"].includes(mode)) return;
+          const chip = document.createElement("div");
+          chip.className = "method-body-boundary-chip data";
+          const strong = document.createElement("strong");
+          strong.textContent = parameter.name || parameter.label || "value";
+          const small = document.createElement("small");
+          small.textContent = parameterTypeKey(parameter) + (mode === "ref" ? " · REF OUT" : " · OUT");
+          chip.append(strong, small);
+          right.appendChild(chip);
+        });
+
+        const returnChip = document.createElement("div");
+        returnChip.className = "method-body-boundary-chip return";
+        const returnStrong = document.createElement("strong");
+        returnStrong.textContent = target.returnType === "void" ? "Return" : (target.returnName || "result");
+        const returnSmall = document.createElement("small");
+        returnSmall.textContent = target.returnType === "void"
+          ? "FLOW · void"
+          : nodeReturnTypeKey(target) + " · RETURN";
+        returnChip.append(returnStrong, returnSmall);
+        right.appendChild(returnChip);
+
+        surface.append(left, lane, right);
+        section.appendChild(surface);
+        return section;
+      };
+
       if (node.type === "function") {
         ensureFunctionSignature(node, node.methodAccess);
 
@@ -5973,6 +6164,7 @@
         }
 
         body.appendChild(functionMeta);
+        body.appendChild(makeMethodModeToggle(node));
 
         body.appendChild(makeParameterSection(node, node.methodAccess));
 
@@ -5990,31 +6182,35 @@
         });
         body.appendChild(methodNotes);
 
-        const returnSection = document.createElement("div");
-        returnSection.className = "method-return-section";
-        returnSection.append(
-          makeMethodMiniHeading("RETURN", node.returnType === "void" ? "void" : 1),
-          makeReturnEditor(node, node.methodAccess)
-        );
-        body.appendChild(returnSection);
+        if (node.methodEditorMode === "advanced") {
+          body.appendChild(makeMethodBodyWorkspace(node));
+        } else {
+          const logicSection = document.createElement("div");
+          logicSection.className = "method-logic-section";
+          logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
 
-        const logicSection = document.createElement("div");
-        logicSection.className = "method-logic-section";
-        logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
+          const logic = document.createElement("textarea");
+          logic.className = "node-pseudo-inline method-logic-editor";
+          logic.value = node.methodLogic || node.pseudo || "";
+          logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
+          logic.spellcheck = false;
+          logic.addEventListener("pointerdown", (event) => event.stopPropagation());
+          logic.addEventListener("input", () => {
+            node.methodLogic = logic.value;
+            node.pseudo = logic.value;
+            markDirty();
+          });
+          logicSection.appendChild(logic);
+          body.appendChild(logicSection);
 
-        const logic = document.createElement("textarea");
-        logic.className = "node-pseudo-inline method-logic-editor";
-        logic.value = node.methodLogic || node.pseudo || "";
-        logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
-        logic.spellcheck = false;
-        logic.addEventListener("pointerdown", (event) => event.stopPropagation());
-        logic.addEventListener("input", () => {
-          node.methodLogic = logic.value;
-          node.pseudo = logic.value;
-          markDirty();
-        });
-        logicSection.appendChild(logic);
-        body.appendChild(logicSection);
+          const returnSection = document.createElement("div");
+          returnSection.className = "method-return-section";
+          returnSection.append(
+            makeMethodMiniHeading("RETURN", node.returnType === "void" ? "void" : 1),
+            makeReturnEditor(node, node.methodAccess)
+          );
+          body.appendChild(returnSection);
+        }
       }
 
       const removeMember = (item) => {
@@ -6421,6 +6617,7 @@
             editor.appendChild(callbackLine);
           }
 
+          editor.appendChild(makeMethodModeToggle(item));
           editor.appendChild(makeParameterSection(item, item.access));
 
           editor.appendChild(makeMethodMiniHeading("COMMENT", "summary"));
@@ -6437,30 +6634,34 @@
           });
           editor.appendChild(description);
 
-          const returnSection = document.createElement("div");
-          returnSection.className = "method-return-section";
-          returnSection.append(
-            makeMethodMiniHeading("RETURN", item.returnType === "void" ? "void" : 1),
-            makeReturnEditor(item, item.access)
-          );
-          editor.appendChild(returnSection);
+          if (item.methodEditorMode === "advanced") {
+            editor.appendChild(makeMethodBodyWorkspace(item));
+          } else {
+            const logicSection = document.createElement("div");
+            logicSection.className = "method-logic-section";
+            logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
 
-          const logicSection = document.createElement("div");
-          logicSection.className = "method-logic-section";
-          logicSection.appendChild(makeMethodMiniHeading("PSEUDOCODE", "optional"));
+            const logic = document.createElement("textarea");
+            logic.className = "method-logic-inline";
+            logic.value = item.methodLogic || "";
+            logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
+            logic.spellcheck = false;
+            logic.addEventListener("pointerdown", (event) => event.stopPropagation());
+            logic.addEventListener("input", () => {
+              item.methodLogic = logic.value;
+              markDirty();
+            });
+            logicSection.appendChild(logic);
+            editor.appendChild(logicSection);
 
-          const logic = document.createElement("textarea");
-          logic.className = "method-logic-inline";
-          logic.value = item.methodLogic || "";
-          logic.placeholder = "Passaggi interni, formule, condizioni o chiamate…";
-          logic.spellcheck = false;
-          logic.addEventListener("pointerdown", (event) => event.stopPropagation());
-          logic.addEventListener("input", () => {
-            item.methodLogic = logic.value;
-            markDirty();
-          });
-          logicSection.appendChild(logic);
-          editor.appendChild(logicSection);
+            const returnSection = document.createElement("div");
+            returnSection.className = "method-return-section";
+            returnSection.append(
+              makeMethodMiniHeading("RETURN", item.returnType === "void" ? "void" : 1),
+              makeReturnEditor(item, item.access)
+            );
+            editor.appendChild(returnSection);
+          }
         } else if (item.kind === "unityEvent") {
           const access = compactSelect(item.access, ["public", "private", "protected"], (value) => {
             item.access = value;
@@ -6735,7 +6936,7 @@
 
         let memberList = null;
         if (items.length) {
-          if (items.length >= 6) {
+          if (items.length >= 6 && titleText !== "VARIABLES" && titleText !== "DATA") {
             const tools = document.createElement("div");
             tools.className = "section-tools";
 
@@ -9429,7 +9630,9 @@
           returnPortId: uid("return"),
           returnName: "result",
           methodDescription: "",
-          methodLogic: ""
+          methodLogic: "",
+          methodEditorMode: "basic",
+          methodBody: { nodes: [], connections: [] }
         }
       },
       enum: {
