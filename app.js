@@ -1725,7 +1725,7 @@
     return {
       version: 1,
       name: name || "Nuovo schema",
-      schema: normalizeProjectSchema(schema),
+      schema: normalizeProjectSchema(schema || "classic"),
       nodes: [],
       connections: []
     };
@@ -3071,7 +3071,7 @@
     if (!dialog || !nameInput || !schemaSelect) return;
 
     nameInput.value = "Nuovo schema";
-    schemaSelect.value = "unity";
+    schemaSelect.value = "classic";
     updateCreateProjectSchemaPreview();
 
     dialog.classList.add("show");
@@ -3093,7 +3093,7 @@
     const nameInput = $("createProjectName");
     const schemaSelect = $("createProjectSchema");
     const name = (nameInput && nameInput.value.trim()) || "Nuovo schema";
-    const schema = normalizeProjectSchema(schemaSelect ? schemaSelect.value : "unity");
+    const schema = normalizeProjectSchema(schemaSelect ? schemaSelect.value : "classic");
 
     closeCreateProjectDialog();
 
@@ -9001,6 +9001,25 @@
   function renderEdges() {
     edgeLayer.innerHTML = "";
     edgeLayer.classList.toggle("force-connections", forceConnectionsVisible);
+    edgeLayer.classList.toggle("flowchart-schema", currentSchemaId() === "classic");
+
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    const flowMarker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+    flowMarker.setAttribute("id", "flow-arrowhead");
+    flowMarker.setAttribute("viewBox", "0 -5 10 10");
+    flowMarker.setAttribute("refX", "8");
+    flowMarker.setAttribute("refY", "0");
+    flowMarker.setAttribute("markerWidth", "8");
+    flowMarker.setAttribute("markerHeight", "8");
+    flowMarker.setAttribute("orient", "auto-start-reverse");
+    flowMarker.setAttribute("markerUnits", "userSpaceOnUse");
+
+    const flowArrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    flowArrow.setAttribute("d", "M0,-4.2 L9,0 L0,4.2 Z");
+    flowArrow.setAttribute("class", "flow-arrowhead-shape");
+    flowMarker.appendChild(flowArrow);
+    defs.appendChild(flowMarker);
+    edgeLayer.appendChild(defs);
     project.connections = project.connections.filter((edge) => nodeById(edge.from.nodeId) && nodeById(edge.to.nodeId));
     syncLinkedJunctionPoints();
 
@@ -9040,6 +9059,7 @@
       path.dataset.edgeId = edge.id;
       path.style.stroke = edgeColor;
       path.style.opacity = selectedEdgeId === edge.id ? "1" : ".72";
+      if (isFlowEdge) path.setAttribute("marker-end", "url(#flow-arrowhead)");
       edgeLayer.appendChild(path);
 
       const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
