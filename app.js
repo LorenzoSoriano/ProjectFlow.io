@@ -3621,6 +3621,173 @@
     );
   }
 
+  function normalizeShareCode(value) {
+    return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function formatShareCode(value) {
+    const code = normalizeShareCode(value);
+    if (!code) return "";
+    if (code.startsWith("PF") && code.length > 2) {
+      const body = code.slice(2);
+      return "PF-" + body.slice(0, 4) + (body.length > 4 ? "-" + body.slice(4, 8) : "");
+    }
+    return code;
+  }
+
+  function generateShareCode() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = new Uint8Array(8);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+    }
+    let body = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      body += alphabet[bytes[index] % alphabet.length];
+    }
+    return "PF" + body;
+  }
+
+  function shareCodeDocumentRef(code) {
+    const key = normalizeShareCode(code);
+    if (!key || !cloudState.api || !cloudState.db) return null;
+    return cloudState.api.doc(cloudState.db, "shareCodes", key);
+  }
+
+  function sharedMemberDocumentRef(projectId, userId) {
+    if (!projectId || !userId || !cloudState.api || !cloudState.db) return null;
+    return cloudState.api.doc(
+      cloudState.db,
+      "sharedProjects",
+      projectId,
+      "members",
+      userId
+    );
+  }
+
+  function shareJoinCodeFromLocation() {
+    try {
+      return normalizeShareCode(new URL(window.location.href).searchParams.get("join") || "");
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function ensureSharedAccessCode(record) {
+    if (!record || !cloudState.user) return "";
+    await ensureSharedProject(record);
+
+    let code = normalizeShareCode(record.shareCode);
+    if (!code) {
+      try {
+        const snapshot = await cloudState.api.getDoc(sharedProjectRef(record.sharedProjectId));
+        const value = snapshot.exists() ? snapshot.data() || {} : {};
+        code = normalizeShareCode(value.joinCode);
+      } catch (error) {}
+    }
+
+    if (!code) code = generateShareCode();
+
+    await Promise.all([
+      cloudState.api.setDoc(sharedProjectRef(record.sharedProjectId), {
+        joinCode: code,
+        updatedAt: Date.now(),
+        updatedBy: cloudState.user.uid
+      }, { merge: true }),
+      cloudState.api.setDoc(shareCodeDocumentRef(code), {
+        projectId: record.sharedProjectId,
+        ownerId: cloudState.user.uid,
+        active: true,
+        createdAt: Date.now()
+      }, { merge: true })
+    ]);
+
+    record.shareCode = formatShareCode(code);
+    persistProjectLibrary();
+    cloudState.sharedMeta = Object.assign({}, cloudState.sharedMeta || {}, { joinCode: code });
+    return code;
+  }
+
+  async function claimSharedProjectAccess(projectId, codeValue) {
+    const code = normalizeShareCode(codeValue);
+    if (!projectId || !code || !cloudState.user || !cloudState.api || !cloudState.db) {
+      throw new Error("Codice di condivisione non valido.");
+    }
+
+    const memberRef = sharedMemberDocumentRef(projectId, cloudState.user.uid);
+    await cloudState.api.setDoc(memberRef, {
+      uid: cloudState.user.uid,
+      email: normalizeShareEmail(cloudState.user.email),
+      name: cloudState.user.displayName || "",
+      joinCode: code,
+      role: "editor",
+      joinedAt: Date.now()
+    }, { merge: true });
+
+    const email = normalizeShareEmail(cloudState.user.email);
+    if (email) {
+      await cloudState.api.setDoc(inviteDocumentRef(email, projectId), {
+        projectId: projectId,
+        email: email,
+        joinedBy: "code",
+        createdAt: Date.now()
+      }, { merge: true });
+    }
+
+    return true;
+  }
+
+  async function joinSharedProjectByCode(codeValue) {
+    if (!cloudState.user) {
+      showToast("Accedi con Google per usare un codice");
+      return false;
+    }
+    const code = normalizeShareCode(codeValue);
+    if (!code) {
+      showToast("Inserisci un codice valido");
+      return false;
+    }
+
+    try {
+      const codeRef = shareCodeDocumentRef(code);
+      const codeSnapshot = await cloudState.api.getDoc(codeRef);
+      if (!codeSnapshot.exists()) {
+        showToast("Codice non trovato");
+        return false;
+      }
+      const codeData = codeSnapshot.data() || {};
+      if (codeData.active === false || !codeData.projectId) {
+        showToast("Codice non più attivo");
+        return false;
+      }
+
+      await claimSharedProjectAccess(codeData.projectId, code);
+      const snapshot = await cloudState.api.getDoc(sharedProjectRef(codeData.projectId));
+      if (!snapshot.exists()) {
+        showToast("Progetto condiviso non trovato");
+        return false;
+      }
+
+      const remote = sharedRecordFromSnapshot(snapshot);
+      if (!remote) return false;
+      mergeSharedRecord(remote);
+      persistProjectLibrary();
+      renderProjectLibrary();
+      await activateProject(remote.id, true);
+      showToast("Collegato al progetto");
+      return true;
+    } catch (error) {
+      console.warn("ProjectFlow: accesso con codice non riuscito.", error);
+      const denied = error && (error.code === "permission-denied" || String(error.message || "").toLowerCase().includes("permission"));
+      showToast(denied
+        ? "Codice non valido oppure Firestore Rules non aggiornate"
+        : "Accesso con codice non riuscito");
+      return false;
+    }
+  }
+
   async function refreshSharePanelMeta() {
     const record = projectRecordById(currentProjectId);
     if (!cloudState.user || !record || !cloudState.api || !cloudState.db) {
@@ -3635,6 +3802,7 @@
         ownerId: cloudState.user.uid,
         ownerName: cloudState.user.displayName || "",
         ownerEmail: normalizeShareEmail(cloudState.user.email),
+        joinCode: "",
         invites: []
       };
       renderSharePanel();
@@ -3655,6 +3823,7 @@
         ownerId: value.ownerId || "",
         ownerName: value.ownerName || "",
         ownerEmail: value.ownerEmail || "",
+        joinCode: normalizeShareCode(value.joinCode),
         invites: []
       };
 
