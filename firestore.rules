@@ -28,6 +28,15 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/sharedProjects/$(projectId)/members/$(request.auth.uid));
     }
 
+    function hasValidJoinCode(projectId, joinCode) {
+      return signedIn()
+        && joinCode is string
+        && joinCode != ""
+        && exists(/databases/$(database)/documents/shareCodes/$(joinCode))
+        && get(/databases/$(database)/documents/shareCodes/$(joinCode)).data.active == true
+        && get(/databases/$(database)/documents/shareCodes/$(joinCode)).data.projectId == projectId;
+    }
+
     function canAccessShared(projectId) {
       return isSharedOwner(projectId) || hasSharedInvite(projectId) || hasSharedMember(projectId);
     }
@@ -96,11 +105,7 @@ service cloud.firestore {
               && request.resource.data.uid == request.auth.uid
               && (
                 hasSharedInvite(projectId)
-                || (
-                  request.resource.data.joinCode != ""
-                  && request.resource.data.joinCode ==
-                    get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.joinCode
-                )
+                || hasValidJoinCode(projectId, request.resource.data.joinCode)
               )
             )
           );
