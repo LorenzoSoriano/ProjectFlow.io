@@ -8927,6 +8927,122 @@
     }
   }
 
+  function createConnectionFromCheck(check) {
+    if (!check || !check.ok) return false;
+    const duplicate = project.connections.some((edge) =>
+      edge.from.nodeId === check.from.nodeId &&
+      edge.from.rowId === check.from.rowId &&
+      edge.to.nodeId === check.to.nodeId &&
+      edge.to.rowId === check.to.rowId
+    );
+
+    if (!duplicate) {
+      project.connections.push({
+        id: uid("edge"),
+        from: {
+          nodeId: check.from.nodeId,
+          rowId: check.from.rowId,
+          side: "out",
+          kind: check.outputType === "__flow__" ? "flow" : "data"
+        },
+        to: {
+          nodeId: check.to.nodeId,
+          rowId: check.to.rowId,
+          side: "in",
+          kind: check.outputType === "__flow__" ? "flow" : "data"
+        },
+        points: [],
+        dataType: check.outputType
+      });
+      markDirty();
+    }
+
+    showToast(duplicate
+      ? "Collegamento già esistente"
+      : (check.outputType === "__flow__"
+        ? "Flusso collegato"
+        : (check.outputType === "any"
+          ? "Collegamento creato"
+          : "Collegamento " + check.outputType + " creato")));
+    return !duplicate;
+  }
+
+  function autoConnectSelectedNodeToPort(ref) {
+    if (!ref || selectedNodeIds.size !== 1) return { handled: false };
+    const selectedId = Array.from(selectedNodeIds)[0];
+    if (!selectedId || selectedId === ref.nodeId) return { handled: false };
+
+    const selectedElement = nodeLayer.querySelector('[data-node-id="' + selectedId + '"]');
+    if (!selectedElement) return { handled: false };
+
+    const wantedSide = ref.side === "in" ? "out" : "in";
+    const portElements = Array.from(selectedElement.querySelectorAll('.port[data-side="' + wantedSide + '"]'));
+    const targetItem = memberByRef(ref);
+    const targetType = ref.side === "in" ? memberInputType(targetItem) : memberOutputType(targetItem);
+    const candidates = [];
+
+    portElements.forEach((portElement, index) => {
+      const candidate = {
+        nodeId: selectedId,
+        rowId: portElement.dataset.row,
+        side: wantedSide,
+        kind: portElement.classList.contains("flow-port") ? "flow" : "data"
+      };
+      const check = connectionCheck(candidate, ref);
+      if (!check.ok) return;
+
+      const candidateItem = memberByRef(candidate);
+      const candidateType = wantedSide === "out"
+        ? memberOutputType(candidateItem)
+        : memberInputType(candidateItem);
+      const exactType = normalizedType(candidateType) === normalizedType(targetType) &&
+        !["any", "value"].includes(normalizedType(candidateType));
+      const connected = project.connections.some((edge) =>
+        (wantedSide === "out" &&
+          edge.from.nodeId === candidate.nodeId &&
+          edge.from.rowId === candidate.rowId) ||
+        (wantedSide === "in" &&
+          edge.to.nodeId === candidate.nodeId &&
+          edge.to.rowId === candidate.rowId)
+      );
+      const flow = check.outputType === "__flow__";
+      const targetPos = getPortWorldPosition(ref);
+      const candidatePos = getPortWorldPosition(candidate);
+      const verticalDistance = targetPos && candidatePos
+        ? Math.abs(targetPos.y - candidatePos.y)
+        : index * 10;
+
+      candidates.push({
+        check: check,
+        score:
+          (exactType ? 1000 : 0) +
+          (flow ? 300 : 0) +
+          (!connected ? 120 : 0) -
+          Math.min(100, verticalDistance / 4) -
+          index * 0.01
+      });
+    });
+
+    if (!candidates.length) {
+      showToast("Nessun connettore compatibile nel blocco selezionato.");
+      return { handled: true, connected: false };
+    }
+
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+    createConnectionFromCheck(best.check);
+
+    pendingPort = null;
+    pendingJunction = null;
+    $("connectionBanner").classList.remove("show");
+    renderNodes();
+    renderEdges();
+    renderMinimap();
+    renderInspector();
+
+    return { handled: true, connected: true };
+  }
+
   function handlePortClick(ref) {
     if (pendingJunction && !pendingPort) {
       finishJunctionConnection(ref, pendingJunction.edgeId, pendingJunction.pointId);
@@ -8934,6 +9050,8 @@
     }
 
     if (!pendingPort) {
+      const autoResult = autoConnectSelectedNodeToPort(ref);
+      if (autoResult.handled) return;
       const item = memberByRef(ref);
       if (ref.side === "out" && item && item.kind === "function" && normalizedType(item.returnType) === "void") {
         showToast("Questo metodo è void: non ha un output dati.");
@@ -8963,26 +9081,7 @@
       return;
     }
 
-    const duplicate = project.connections.some((edge) =>
-      edge.from.nodeId === check.from.nodeId &&
-      edge.from.rowId === check.from.rowId &&
-      edge.to.nodeId === check.to.nodeId &&
-      edge.to.rowId === check.to.rowId
-    );
-
-    if (!duplicate) {
-      project.connections.push({
-        id: uid("edge"),
-        from: { nodeId: check.from.nodeId, rowId: check.from.rowId, side: "out", kind: check.outputType === "__flow__" ? "flow" : "data" },
-        to: { nodeId: check.to.nodeId, rowId: check.to.rowId, side: "in", kind: check.outputType === "__flow__" ? "flow" : "data" },
-        points: [],
-        dataType: check.outputType
-      });
-      showToast(check.outputType === "__flow__"
-        ? "Flusso collegato"
-        : (check.outputType === "any" ? "Collegamento creato" : "Collegamento " + check.outputType + " creato"));
-      markDirty();
-    }
+    createConnectionFromCheck(check);
 
     pendingPort = null;
     $("connectionBanner").classList.remove("show");
