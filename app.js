@@ -1486,6 +1486,7 @@
   const GEMINI_MODEL_ID = "gemini-3.8-flash";
   let geminiModel = null;
   let geminiModelPromise = null;
+  let geminiRelaxedModel = null;
   let zoomSharpTimer = null;
   let interactionFrame = null;
   let interactionNeedsGroups = false;
@@ -10154,6 +10155,32 @@
     }
   }
 
+  async function aiGetGeminiRelaxedModel() {
+    if (geminiRelaxedModel) return geminiRelaxedModel;
+    if (!cloudState.configured) throw new Error("Configurazione Firebase mancante.");
+
+    const ready = await initCloud(true);
+    if (!ready || !cloudState.app) throw new Error("Firebase non è disponibile.");
+
+    const base = "https://www.gstatic.com/firebasejs/" + FIREBASE_SDK_VERSION + "/";
+    const aiApi = await import(base + "firebase-ai.js");
+    const ai = aiApi.getAI(cloudState.app, {
+      backend: new aiApi.GoogleAIBackend()
+    });
+
+    geminiRelaxedModel = aiApi.getGenerativeModel(ai, {
+      model: GEMINI_MODEL_ID,
+      systemInstruction: aiPlannerSystemPrompt(),
+      generationConfig: {
+        temperature: 0.25,
+        topP: 0.9,
+        maxOutputTokens: 1800,
+        responseMimeType: "application/json"
+      }
+    });
+    return geminiRelaxedModel;
+  }
+
   function aiSafeNodeType(type) {
     return new Set(aiPlannerCatalog().map((entry) => entry.type)).has(type) ? type : null;
   }
@@ -10379,21 +10406,48 @@
     const source = aiNormalizePrompt(prompt);
     if (!source) return null;
 
+    const applyGeminiResult = (result) => {
+      const content = result && result.response ? result.response.text() : "";
+      const plan = aiValidatePlan(aiExtractJson(content));
+      return aiApplyGeneratedPlan(plan);
+    };
+
     const model = await aiGetGeminiModel();
     aiBuilderSetStatus("Gemini · sto progettando il graph…", "loading");
 
     try {
       const result = await model.generateContent(aiPlannerUserPrompt(source));
-      const content = result && result.response ? result.response.text() : "";
-      const plan = aiValidatePlan(aiExtractJson(content));
-      const applied = aiApplyGeneratedPlan(plan);
+      const applied = applyGeminiResult(result);
       aiBuilderSetStatus("Gemini · " + GEMINI_MODEL_ID + " · pronto", "ready");
       return applied;
     } catch (error) {
+      const code = String(error && error.code || "");
+      const message = String(error && error.message || error || "");
+      const invalidArgument = code === "AI/fetch-error" &&
+        (/\b400\b/.test(message) || /invalid argument/i.test(message));
+
+      if (invalidArgument) {
+        try {
+          aiBuilderSetStatus("Gemini · retry JSON compatibile…", "loading");
+          const relaxed = await aiGetGeminiRelaxedModel();
+          const retryResult = await relaxed.generateContent(aiPlannerUserPrompt(source));
+          const applied = applyGeminiResult(retryResult);
+          aiBuilderSetStatus("Gemini · " + GEMINI_MODEL_ID + " · pronto", "ready");
+          return applied;
+        } catch (retryError) {
+          geminiRelaxedModel = null;
+          geminiModel = null;
+          geminiModelPromise = null;
+          aiBuilderSetStatus("Gemini · richiesta fallita", "error");
+          throw retryError;
+        }
+      }
+
       // Recreate the Firebase AI client on the next attempt. This matters when
       // AI Logic / IAM / API restrictions are enabled while ProjectFlow is open.
       geminiModel = null;
       geminiModelPromise = null;
+      geminiRelaxedModel = null;
       aiBuilderSetStatus("Gemini · richiesta fallita", "error");
       throw error;
     }
