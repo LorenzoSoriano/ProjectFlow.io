@@ -1483,6 +1483,10 @@
   let panState = null;
   let saveTimer = null;
   let toastTimer = null;
+  const AI_LOCAL_MODEL_ID = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+  let aiLocalEngine = null;
+  let aiLocalEnginePromise = null;
+  let aiLocalModelModule = null;
   let zoomSharpTimer = null;
   let interactionFrame = null;
   let interactionNeedsGroups = false;
@@ -10013,28 +10017,400 @@
     };
   }
 
-  function aiExecuteBuilderPrompt(prompt) {
+  function aiBuilderSetStatus(text, state) {
+    const status = $("aiBuilderStatus");
+    const copy = $("aiBuilderStatusText");
+    if (copy) copy.textContent = text || "AI locale";
+    if (status) {
+      status.classList.remove("loading", "ready", "error", "fallback");
+      if (state) status.classList.add(state);
+    }
+  }
+
+  function aiPlannerCatalog() {
+    return [
+      { type: "object", purpose: "GameObject / target reference", ports: "OUT GameObject:GameObject" },
+      { type: "component", purpose: "Unity component reference", config: "componentType", ports: "OUT component reference" },
+      { type: "event", purpose: "flow entry point", ports: "OUT Next:flow, OUT payload:any; may add extra output rows" },
+      { type: "action", purpose: "perform a gameplay action", ports: "IN Enter:flow, OUT Next:flow; may add extra input/output rows" },
+      { type: "variable", purpose: "state/data value", ports: "IN+OUT value:data; rows can define named variables" },
+      { type: "ifElse", purpose: "branch by bool", ports: "IN Enter:flow, IN Condition:bool, OUT True:flow, OUT False:flow" },
+      { type: "whileLoop", purpose: "while loop", ports: "IN Enter:flow, IN Condition:bool, OUT Loop:flow, OUT Done:flow" },
+      { type: "doWhileLoop", purpose: "do while loop", ports: "IN Enter:flow, OUT Loop:flow, IN Condition:bool, OUT Done:flow" },
+      { type: "forLoop", purpose: "indexed loop", ports: "IN Enter:flow, IN Start:int, IN End:int, IN Step:int, OUT Index:int, OUT Loop:flow, OUT Done:flow" },
+      { type: "foreachLoop", purpose: "collection loop", config: "foreachItemType", ports: "IN Enter:flow, IN Collection:any, OUT Item:any, OUT Index:int, OUT Loop:flow, OUT Done:flow" },
+      { type: "math", purpose: "numeric expression", config: "mathOperation(add|subtract|multiply|divide|modulo|power|min|max|clamp|lerp|abs|sqrt), mathDataType", ports: "inputs depend on operation: A/B or Value/Min/Max; OUT Result:data" },
+      { type: "logic", purpose: "boolean expression", config: "logicOperation(and|or|xor|not)", ports: "IN A:bool, optional IN B:bool, OUT Result:bool" },
+      { type: "compare", purpose: "comparison", config: "compareOperation(equal|notEqual|greater|greaterEqual|less|lessEqual), compareDataType", ports: "IN A:data, IN B:data, OUT Result:bool" },
+      { type: "adapter", purpose: "explicit data conversion", config: "adapterInputType, adapterOutputType", ports: "IN In:data, OUT Out:data" },
+      { type: "state", purpose: "gameplay state", ports: "IN Enter:flow, OUT Transition:flow; may add data rows" },
+      { type: "condition", purpose: "reusable condition block", ports: "IN Enter:flow, IN A:any, IN B:any, OUT True:flow, OUT False:flow, OUT result:bool" },
+      { type: "ui", purpose: "UI state/element", ports: "rows are editable properties" }
+    ];
+  }
+
+  function aiCurrentGraphContext() {
+    const selected = selectedNodes().slice(0, 16);
+    const source = selected.length ? selected : project.nodes.slice(-24);
+    return {
+      projectName: project.name || "Untitled Flow",
+      selected: selected.map((node) => ({ id: node.id, type: node.type, title: node.title })),
+      nearbyNodes: source.map((node) => ({
+        id: node.id,
+        type: node.type,
+        title: node.title,
+        rows: (node.rows || []).slice(0, 8).map((item) => ({
+          label: item.label,
+          kind: item.kind,
+          dataType: item.dataType || item.value || item.componentType || ""
+        }))
+      })),
+      connectionCount: project.connections.length
+    };
+  }
+
+  function aiPlannerSystemPrompt() {
+    return [
+      "You are ProjectFlow Graph Planner, a visual-programming architect for Unity-style gameplay logic.",
+      "You do NOT write source code as the primary result. You design a graph using only the provided ProjectFlow node catalog.",
+      "Decide autonomously which nodes are needed, how they are configured, and how they connect.",
+      "Prefer semantic, reusable logic. Use explicit state variables, comparisons, branches and actions when appropriate.",
+      "Return ONLY one JSON object with keys: summary, groupTitle, nodes, connections.",
+      "nodes: array of {key,type,title,description,pseudo,config,rows,column,row}. key must be unique.",
+      "rows is optional and only adds/customizes data ports. Each row is {label,kind,dataType,defaultValue}. kind is one of input,output,variable,property.",
+      "connections: array of {from:{node,port},to:{node,port},dataType}. node references a node key. port is the visible port label.",
+      "Use dataType='__flow__' for execution-flow connections. Otherwise use a concrete type such as bool,int,float,string,GameObject,Transform,Rigidbody or any.",
+      "Do not invent node types outside the catalog. Do not reference ports that do not exist or that you did not add in rows.",
+      "Keep graphs compact but complete. A behavior request should normally have an event/entry, state/data as needed, control flow, and actions.",
+      "column and row are small non-negative integers for layout; flow should generally progress left-to-right.",
+      "JSON only. No markdown and no commentary outside JSON."
+    ].join("\n");
+  }
+
+  function aiPlannerUserPrompt(prompt) {
+    return JSON.stringify({
+      request: prompt,
+      catalog: aiPlannerCatalog(),
+      currentGraph: aiCurrentGraphContext()
+    });
+  }
+
+  function aiExtractJson(text) {
+    const source = String(text || "").trim();
+    if (!source) throw new Error("Il modello non ha restituito un piano.");
+    try {
+      return JSON.parse(source);
+    } catch (error) {
+      const first = source.indexOf("{");
+      const last = source.lastIndexOf("}");
+      if (first >= 0 && last > first) return JSON.parse(source.slice(first, last + 1));
+      throw error;
+    }
+  }
+
+  async function aiGetLocalEngine() {
+    if (aiLocalEngine) return aiLocalEngine;
+    if (aiLocalEnginePromise) return aiLocalEnginePromise;
+    if (!window.isSecureContext) throw new Error("Il modello locale richiede HTTPS o localhost.");
+    if (!navigator.gpu) throw new Error("WebGPU non è disponibile in questo browser/dispositivo.");
+
+    aiLocalEnginePromise = (async () => {
+      aiBuilderSetStatus("Caricamento runtime AI…", "loading");
+      if (!aiLocalModelModule) {
+        aiLocalModelModule = await import("https://esm.run/@mlc-ai/web-llm");
+      }
+      const webllm = aiLocalModelModule;
+      const engine = await webllm.CreateMLCEngine(AI_LOCAL_MODEL_ID, {
+        initProgressCallback: (report) => {
+          const progress = typeof report.progress === "number"
+            ? Math.max(0, Math.min(100, Math.round(report.progress * 100)))
+            : null;
+          const label = progress !== null
+            ? "Caricamento modello locale · " + progress + "%"
+            : (report.text || "Caricamento modello locale…");
+          aiBuilderSetStatus(label, "loading");
+        },
+        logLevel: "WARN"
+      }, {
+        context_window_size: 4096
+      });
+      aiLocalEngine = engine;
+      aiBuilderSetStatus("AI locale generativa pronta", "ready");
+      return engine;
+    })();
+
+    try {
+      return await aiLocalEnginePromise;
+    } catch (error) {
+      aiLocalEnginePromise = null;
+      aiLocalEngine = null;
+      aiBuilderSetStatus("AI locale non disponibile", "error");
+      throw error;
+    }
+  }
+
+  function aiSafeNodeType(type) {
+    return new Set(aiPlannerCatalog().map((entry) => entry.type)).has(type) ? type : null;
+  }
+
+  function aiRowFromSpec(spec) {
+    if (!spec || typeof spec !== "object") return null;
+    const label = String(spec.label || "value").slice(0, 80);
+    const kind = ["input", "output", "variable", "property"].includes(spec.kind) ? spec.kind : "input";
+    const dataType = String(spec.dataType || "any").slice(0, 80);
+    if (kind === "variable" || kind === "property") {
+      const item = variableRow(label, dataType, "private");
+      item.kind = kind;
+      if (spec.defaultValue !== undefined) item.defaultValue = String(spec.defaultValue).slice(0, 200);
+      return item;
+    }
+    return row(label, dataType, kind);
+  }
+
+  function aiApplyNodeConfig(node, spec) {
+    const config = spec && spec.config && typeof spec.config === "object" ? spec.config : {};
+    const assignString = (key, allowed) => {
+      if (typeof config[key] !== "string") return;
+      if (allowed && !allowed.includes(config[key])) return;
+      node[key] = config[key];
+    };
+
+    if (node.type === "component") {
+      assignString("componentType");
+      if (node.componentType) {
+        node.title = spec.title || node.componentType;
+        node.componentCategory = componentCategoryFor(node.componentType);
+      }
+    }
+    if (node.type === "event") assignString("eventKind");
+    if (node.type === "action") assignString("actionKind");
+    if (node.type === "state") assignString("stateKind");
+    if (node.type === "foreachLoop") assignString("foreachItemType");
+    if (node.type === "math") {
+      assignString("mathOperation", ["add","subtract","multiply","divide","modulo","power","min","max","clamp","lerp","abs","sqrt"]);
+      assignString("mathDataType");
+    }
+    if (node.type === "logic") assignString("logicOperation", ["and","or","xor","not"]);
+    if (node.type === "compare") {
+      assignString("compareOperation", ["equal","notEqual","greater","greaterEqual","less","lessEqual"]);
+      assignString("compareDataType");
+    }
+    if (node.type === "adapter") {
+      assignString("adapterInputType");
+      assignString("adapterOutputType");
+    }
+
+    ensureNodeMeta(node);
+
+    const extraRows = Array.isArray(spec.rows) ? spec.rows.slice(0, 12).map(aiRowFromSpec).filter(Boolean) : [];
+    if (node.type === "variable" && extraRows.length) {
+      node.rows = extraRows.filter((item) => item.kind === "variable" || item.kind === "property");
+      if (!node.rows.length) node.rows = [variableRow("value", "any", "private")];
+    } else if (["event", "action", "state", "ui"].includes(node.type) && extraRows.length) {
+      const signatures = new Set((node.rows || []).map((item) => String(item.kind) + "|" + String(item.label).toLowerCase()));
+      extraRows.forEach((item) => {
+        const signature = String(item.kind) + "|" + String(item.label).toLowerCase();
+        if (!signatures.has(signature)) {
+          node.rows.push(item);
+          signatures.add(signature);
+        }
+      });
+    }
+    ensureNodeMeta(node);
+  }
+
+  function aiPortCandidates(node, side) {
+    if (!node) return [];
+    ensureNodeMeta(node);
+    const candidates = [];
+    (node.rows || []).forEach((item) => {
+      const canIn = ["input","flowIn","variable","property","unityEvent","condition"].includes(item.kind);
+      const canOut = ["output","flowOut","variable","property","unityEvent","component","condition"].includes(item.kind);
+      if ((side === "in" && canIn) || (side === "out" && canOut)) {
+        candidates.push({
+          row: item,
+          label: String(item.label || "").trim(),
+          type: side === "in" ? memberInputType(item) : memberOutputType(item)
+        });
+      }
+    });
+    return candidates;
+  }
+
+  function aiResolvePort(node, label, side) {
+    const wanted = String(label || "").trim().toLowerCase();
+    const ports = aiPortCandidates(node, side);
+    if (!ports.length) return null;
+    let match = ports.find((entry) => entry.label.toLowerCase() === wanted);
+    if (!match) match = ports.find((entry) => entry.label.toLowerCase().includes(wanted) || wanted.includes(entry.label.toLowerCase()));
+    if (!match && ports.length === 1) match = ports[0];
+    return match || null;
+  }
+
+  function aiValidatePlan(rawPlan) {
+    if (!rawPlan || typeof rawPlan !== "object") throw new Error("Piano AI non valido.");
+    const rawNodes = Array.isArray(rawPlan.nodes) ? rawPlan.nodes.slice(0, 28) : [];
+    if (!rawNodes.length) throw new Error("Il piano AI non contiene blocchi.");
+
+    const seen = new Set();
+    const nodes = [];
+    rawNodes.forEach((spec, index) => {
+      if (!spec || typeof spec !== "object") return;
+      const type = aiSafeNodeType(String(spec.type || ""));
+      if (!type) return;
+      let key = String(spec.key || ("node" + (index + 1))).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+      if (!key) key = "node" + (index + 1);
+      while (seen.has(key)) key += "_" + (index + 1);
+      seen.add(key);
+      nodes.push(Object.assign({}, spec, { key: key, type: type }));
+    });
+    if (!nodes.length) throw new Error("Il modello ha proposto solo tipi di blocco non supportati.");
+
+    const validKeys = new Set(nodes.map((node) => node.key));
+    const connections = (Array.isArray(rawPlan.connections) ? rawPlan.connections : [])
+      .slice(0, 56)
+      .filter((edge) => edge && edge.from && edge.to &&
+        validKeys.has(String(edge.from.node || "")) &&
+        validKeys.has(String(edge.to.node || "")) &&
+        edge.from.port && edge.to.port)
+      .map((edge) => ({
+        from: { node: String(edge.from.node), port: String(edge.from.port) },
+        to: { node: String(edge.to.node), port: String(edge.to.port) },
+        dataType: String(edge.dataType || "any")
+      }));
+
+    return {
+      summary: String(rawPlan.summary || "Graph generato dal modello locale.").slice(0, 500),
+      groupTitle: String(rawPlan.groupTitle || "AI · Generated Graph").slice(0, 100),
+      nodes: nodes,
+      connections: connections
+    };
+  }
+
+  function aiApplyGeneratedPlan(plan) {
+    const center = viewportCenterWorld();
+    const byKey = new Map();
+    const created = [];
+
+    plan.nodes.forEach((spec, index) => {
+      const column = Math.max(0, Math.min(8, Number.isFinite(Number(spec.column)) ? Number(spec.column) : index % 4));
+      const rowIndex = Math.max(0, Math.min(8, Number.isFinite(Number(spec.row)) ? Number(spec.row) : Math.floor(index / 4)));
+      const x = Math.round(center.x - 720 + column * 430);
+      const y = Math.round(center.y - 280 + rowIndex * 290);
+      const component = spec.type === "component" && spec.config ? spec.config.componentType : undefined;
+      const node = defaultNode(spec.type, x, y, component, spec.config || {});
+      node.title = String(spec.title || node.title || typeMeta(spec.type).label).slice(0, 100);
+      node.description = String(spec.description || "").slice(0, 500);
+      node.pseudo = String(spec.pseudo || "").slice(0, 500);
+      aiApplyNodeConfig(node, spec);
+      project.nodes.push(node);
+      byKey.set(spec.key, node);
+      created.push(node);
+    });
+
+    let connected = 0;
+    const skipped = [];
+    plan.connections.forEach((edge, index) => {
+      const fromNode = byKey.get(edge.from.node);
+      const toNode = byKey.get(edge.to.node);
+      const fromPort = aiResolvePort(fromNode, edge.from.port, "out");
+      const toPort = aiResolvePort(toNode, edge.to.port, "in");
+      if (!fromNode || !toNode || !fromPort || !toPort) {
+        skipped.push(index);
+        return;
+      }
+      const inferredType = fromPort.type || edge.dataType || "any";
+      const requestedType = edge.dataType === "__flow__" ? "__flow__" : (edge.dataType || inferredType || "any");
+      if (requestedType !== "__flow__" &&
+          fromPort.type && toPort.type &&
+          !sameType(fromPort.type, toPort.type) &&
+          !sameType(requestedType, toPort.type)) {
+        skipped.push(index);
+        return;
+      }
+      aiConnect(fromNode, fromPort.row, toNode, toPort.row, requestedType);
+      connected += 1;
+    });
+
+    if (!Array.isArray(project.groups)) project.groups = [];
+    const group = {
+      id: uid("group"),
+      title: plan.groupTitle || "AI · Generated Graph",
+      nodeIds: created.map((node) => node.id)
+    };
+    project.groups.push(group);
+
+    selectedNodeIds = new Set(group.nodeIds);
+    syncPrimarySelection();
+    selectedGroupId = group.id;
+    selectedEdgeId = null;
+    selectedTypeRelationId = null;
+    selectedJunctionIds.clear();
+
+    render();
+    markDirty();
+    flushHistoryCheckpoint();
+    broadcastActivity("AI genera " + group.title);
+
+    return {
+      nodes: created.length,
+      connections: connected,
+      skippedConnections: skipped.length,
+      message: plan.summary + " · " + created.length + " blocchi, " + connected + " connessioni" +
+        (skipped.length ? " · " + skipped.length + " connessioni scartate dal validator" : "")
+    };
+  }
+
+  function aiExecutePatternFallback(prompt) {
     const source = aiNormalizePrompt(prompt);
     const lower = source.toLowerCase();
     if (!source) return null;
-
     const toggleIntent =
       /\b(toggle|open|closed|aperto|chiuso|on\s*off|on\/off|accendi|spegni|attivo|inattivo)\b/.test(lower) ||
       (/\b(door|porta|gate|cancello|light|luce|lampada)\b/.test(lower) &&
        /\b(controllo|control|gestione|stato|state)\b/.test(lower));
-
     if (toggleIntent) return aiBuildToggleGraph(source);
-
-    const eventAction = aiBuildEventActionGraph(source);
-    if (eventAction) return eventAction;
-
-    return {
-      unsupported: true,
-      message: "Per ora il builder locale sa creare controlli toggle (Door open/closed, Light on/off) e flussi “Quando … → azione”. Il formato è già estendibile: i prossimi pattern potranno usare gli stessi nodi e connessioni."
-    };
+    return aiBuildEventActionGraph(source);
   }
 
-  function submitAiBuilderPrompt() {
+  async function aiExecuteBuilderPrompt(prompt) {
+    const source = aiNormalizePrompt(prompt);
+    if (!source) return null;
+
+    try {
+      const engine = await aiGetLocalEngine();
+      aiBuilderSetStatus("AI locale · sto progettando il graph…", "loading");
+      const reply = await engine.chat.completions.create({
+        messages: [
+          { role: "system", content: aiPlannerSystemPrompt() },
+          { role: "user", content: aiPlannerUserPrompt(source) }
+        ],
+        temperature: 0.25,
+        top_p: 0.9,
+        max_tokens: 1800,
+        response_format: { type: "json_object" }
+      });
+      const content = reply && reply.choices && reply.choices[0] && reply.choices[0].message
+        ? reply.choices[0].message.content
+        : "";
+      const plan = aiValidatePlan(aiExtractJson(content));
+      const result = aiApplyGeneratedPlan(plan);
+      aiBuilderSetStatus("AI locale generativa pronta", "ready");
+      return result;
+    } catch (error) {
+      console.warn("ProjectFlow local AI fallback:", error);
+      const fallback = aiExecutePatternFallback(source);
+      if (fallback) {
+        aiBuilderSetStatus("Fallback locale · modello generativo non disponibile", "fallback");
+        fallback.message += " · Ho usato il planner di compatibilità perché il modello locale non era disponibile.";
+        return fallback;
+      }
+      aiBuilderSetStatus("AI locale non disponibile", "error");
+      throw error;
+    }
+  }
+
+  async function submitAiBuilderPrompt() {
     const input = $("aiBuilderPrompt");
     const button = $("aiBuilderSend");
     if (!input) return;
@@ -10046,17 +10422,21 @@
     if (button) button.disabled = true;
 
     try {
-      const result = aiExecuteBuilderPrompt(prompt);
+      const result = await aiExecuteBuilderPrompt(prompt);
       aiBuilderAddMessage("assistant", result && result.message
         ? result.message
         : "Non sono riuscito a trasformare questa richiesta in un graph.");
-      if (result && !result.unsupported) {
+      if (result && result.nodes) {
         showToast("AI Builder · " + result.nodes + " blocchi creati");
       }
     } catch (error) {
       console.error("ProjectFlow AI Builder:", error);
-      aiBuilderAddMessage("assistant", "Errore durante la generazione del graph. Nessuna API esterna è stata chiamata.");
-      showToast("AI Builder · errore");
+      aiBuilderAddMessage(
+        "assistant",
+        "Non riesco ad avviare il modello locale su questo dispositivo: " +
+          String(error && error.message ? error.message : error)
+      );
+      showToast("AI Builder · modello locale non disponibile");
     } finally {
       if (button) button.disabled = false;
       requestAnimationFrame(() => input.focus());
