@@ -2332,6 +2332,32 @@
     return project.nodes.find((node) => node.id === id) || null;
   }
 
+  function findNodeDeep(graph, id, visited) {
+    if (!graph || !id || !Array.isArray(graph.nodes)) return null;
+    const seen = visited || new Set();
+    if (seen.has(graph)) return null;
+    seen.add(graph);
+
+    const direct = graph.nodes.find((node) => node && node.id === id);
+    if (direct) return direct;
+
+    for (const node of graph.nodes) {
+      if (!node || typeof node !== "object") continue;
+      const nested = [];
+      if (node.methodBody && typeof node.methodBody === "object") nested.push(node.methodBody);
+      if (node.nestedGraph && typeof node.nestedGraph === "object") nested.push(node.nestedGraph);
+      for (const child of nested) {
+        const found = findNodeDeep(child, id, seen);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function rootNodeById(id) {
+    return findNodeDeep(rootProject || project, id);
+  }
+
   function selectedNode() {
     if (selectedNodeIds.size !== 1) return null;
     const id = selectedNodeIds.values().next().value;
