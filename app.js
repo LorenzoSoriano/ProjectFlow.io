@@ -2826,7 +2826,8 @@
       syncFunctionNestedBoundaries(target, graph);
     } else {
       ensureNodeMeta(target);
-      target.nestedGraph = normalizeNestedWorkspaceGraph(target.nestedGraph, "Empty Body");
+      const fallbackName = target.type === "flowProcess" ? "Process Body" : "Empty Body";
+      target.nestedGraph = normalizeNestedWorkspaceGraph(target.nestedGraph, fallbackName);
       graph = target.nestedGraph;
       syncEmptyNestedBoundaries(target, graph);
     }
@@ -6429,6 +6430,30 @@
         body.appendChild(meta);
       }
 
+      if (node.type === "flowIO") {
+        syncFlowIONode(node);
+        const meta = document.createElement("div");
+        meta.className = "node-meta-inline gameplay-meta-inline";
+        meta.append(
+          compactSelect(node.flowIoMode, [
+            ["input", "Input"],
+            ["output", "Output"]
+          ], (value) => {
+            node.flowIoMode = value;
+            node.title = value === "output" ? "Output" : "Input";
+            syncFlowIONode(node);
+            pruneNodeRowConnections(node);
+            rerenderNode();
+          }, "node-meta-select"),
+          typePicker(node.flowChartDataType || "any", (value) => {
+            node.flowChartDataType = value;
+            syncFlowIONode(node);
+            rerenderNode();
+          }, "inline-type-picker")
+        );
+        body.appendChild(meta);
+      }
+
       if (node.type === "event") {
         const meta = document.createElement("div");
         meta.className = "node-meta-inline gameplay-meta-inline";
@@ -7980,7 +8005,57 @@
         body.appendChild(section);
       };
 
-      if (node.type === "emptyGraph") {
+      if (node.type === "flowStart" || node.type === "flowEnd") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
+      } else if (node.type === "flowIO") {
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
+        appendSection(node.flowIoMode === "output" ? "DATA IN" : "DATA OUT",
+          node.rows.filter((item) => node.flowIoMode === "output" ? item.kind === "input" : item.kind === "output"),
+          []
+        );
+      } else if (node.type === "flowProcess") {
+        syncFlowProcessNode(node);
+        appendSection("FLOW", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "flowOut"), []);
+        appendSection("DATA IN", node.rows.filter((item) => item.kind === "input"), [
+          { label: "Data Input", value: "dataInput" }
+        ]);
+        appendSection("DATA OUT", node.rows.filter((item) => item.kind === "output"), [
+          { label: "Data Output", value: "dataOutput" }
+        ]);
+
+        const portalWrap = document.createElement("section");
+        portalWrap.className = "method-body-section nested-graph-section empty-graph-portal-section";
+        const portal = document.createElement("button");
+        portal.type = "button";
+        portal.className = "nested-graph-portal";
+        portal.addEventListener("pointerdown", (event) => event.stopPropagation());
+        portal.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openNestedGraph(node, "empty", (node.title || "Process") + " · Body");
+        });
+
+        const icon = document.createElement("span");
+        icon.className = "nested-graph-portal-icon";
+        icon.textContent = "▭";
+        const copy = document.createElement("span");
+        copy.className = "nested-graph-portal-copy";
+        const title = document.createElement("strong");
+        title.textContent = "Apri Process Body";
+        const detail = document.createElement("small");
+        const count = node.nestedGraph && Array.isArray(node.nestedGraph.nodes)
+          ? node.nestedGraph.nodes.filter((entry) => entry.id !== "__graph_input__" && entry.id !== "__graph_output__").length
+          : 0;
+        detail.textContent = count
+          ? count + (count === 1 ? " blocco interno" : " blocchi interni")
+          : "Dettaglia il processo in un sotto-grafo";
+        copy.append(title, detail);
+        const arrow = document.createElement("span");
+        arrow.className = "nested-graph-portal-arrow";
+        arrow.textContent = "→";
+        portal.append(icon, copy, arrow);
+        portalWrap.appendChild(portal);
+        body.appendChild(portalWrap);
+      } else if (node.type === "emptyGraph") {
         appendSection("INPUTS", node.rows.filter((item) => item.kind === "flowIn" || item.kind === "input"), [
           { label: "Flow Input", value: "flowInput" },
           { label: "Data Input", value: "dataInput" }
@@ -9373,6 +9448,36 @@
     container.innerHTML = "";
     ensureNodeMeta(node);
 
+    if (node.type === "flowIO") {
+      const title = document.createElement("div");
+      title.className = "dynamic-section-title";
+      title.textContent = "FLOW CHART I/O";
+      container.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "settings-grid";
+      grid.appendChild(inspectorField("MODE", selectControl(node.flowIoMode, [
+        ["input", "Input"],
+        ["output", "Output"]
+      ], (value) => {
+        node.flowIoMode = value;
+        node.title = value === "output" ? "Output" : "Input";
+        syncFlowIONode(node);
+        pruneNodeRowConnections(node);
+        $("nodeTitle").value = node.title;
+        renderNodes();
+        renderInspector();
+        markDirty();
+      })));
+      grid.appendChild(inspectorField("DATA TYPE", selectControl(node.flowChartDataType || "any", ["any"].concat(availableDataTypes()), (value) => {
+        node.flowChartDataType = value;
+        syncFlowIONode(node);
+        renderNodes();
+        markDirty();
+      })));
+      container.appendChild(grid);
+    }
+
     if (currentSchemaId() === "classic" && node.type === "event") {
       const title = document.createElement("div");
       title.className = "dynamic-section-title";
@@ -10110,7 +10215,7 @@
 
     const structureLike = ["class", "struct", "jobStruct"].includes(node.type);
     const objectLike = node.type === "object";
-    const flowStructured = ["event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
+    const flowStructured = ["flowStart", "flowEnd", "flowIO", "flowProcess", "event", "action", "state", "condition", "ifElse", "switch", "whileLoop", "doWhileLoop", "forLoop", "foreachLoop", "breakFlow", "continueFlow", "returnFlow"];
     const directStructured = ["function", "emptyGraph", "graphInput", "graphOutput", "enum", "constant", "adapter", "math", "logic", "compare"].concat(flowStructured).includes(node.type);
 
     $("addVariable").style.display = (structureLike || objectLike) ? "" : "none";
@@ -10125,6 +10230,10 @@
       object: ["GAMEOBJECT DATA", "Componenti e dati appartenenti al GameObject."],
       component: ["COMPONENT API", "Riferimento e proprietà principali del componente Unity."],
       function: ["FUNCTION", "Firma e porte della funzione; la logica avanzata vive nel Function Body."],
+      flowStart: ["FLOW CHART START", "Punto iniziale: espone solo la direzione del flusso."],
+      flowEnd: ["FLOW CHART END", "Punto terminale: chiude il ramo corrente."],
+      flowIO: ["FLOW CHART I/O", "Input legge un valore; Output riceve un valore da scrivere o mostrare."],
+      flowProcess: ["FLOW CHART PROCESS", "Operazione generica con porte dati, pseudocodice e body annidato."],
       emptyGraph: ["EMPTY GRAPH", "Configura input e output sul blocco; verranno istanziati nel canvas interno."],
       graphInput: ["GRAPH INPUT", "Porte generate dal blocco padre."],
       graphOutput: ["GRAPH OUTPUT", "Porte generate dal blocco padre."],
@@ -10143,7 +10252,7 @@
     $("contentSectionLabel").textContent = labelInfo[0];
     $("contentSectionHint").textContent = labelInfo[1];
 
-    const pseudoVisible = ["class", "struct", "jobStruct", "object", "event", "action", "note"].includes(node.type);
+    const pseudoVisible = ["class", "struct", "jobStruct", "object", "event", "action", "flowProcess", "note"].includes(node.type);
     $("inspectorPseudoSection").style.display = pseudoVisible ? "" : "none";
 
     const contextTitles = {
@@ -10154,6 +10263,10 @@
       function: currentSchemaId() === "classic"
         ? ["FUNCTION", "Parametri, risultato e comportamento del sub-flow"]
         : ["FUNCTION SIGNATURE", "Owner, accesso, tipo e return"],
+      flowStart: ["FLOW CHART START", "Nodo iniziale del diagramma"],
+      flowEnd: ["FLOW CHART END", "Nodo terminale del diagramma"],
+      flowIO: ["FLOW CHART INPUT / OUTPUT", "Direzione del dato e tipo trasportato"],
+      flowProcess: ["FLOW CHART PROCESS", "Operazione generica e relativo sotto-grafo"],
       event: currentSchemaId() === "classic"
         ? ["FLOW CHART ENTRY", "Configura come inizia questo ramo del diagramma"]
         : ["EVENT", "Impostazioni dell'evento"],
@@ -11695,8 +11808,11 @@
   }
 
   function aiPlannerSystemPrompt() {
+    const schema = currentSchemaId();
     return [
-      "You are ProjectFlow Graph Planner, a visual-programming architect for Unity-style gameplay logic.",
+      schema === "classic"
+        ? "You are ProjectFlow Graph Planner for a clean, engine-neutral Flow Chart."
+        : "You are ProjectFlow Graph Planner, a visual-programming architect for engine-style gameplay logic.",
       "You do NOT write source code as the primary result. You design a graph using only the provided ProjectFlow node catalog.",
       "Decide autonomously which nodes are needed, how they are configured, and how they connect.",
       "Prefer semantic, reusable logic. Use explicit state variables, comparisons, branches and actions when appropriate.",
