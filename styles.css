@@ -7048,3 +7048,29 @@ body,
   min-width:0;
   flex:1;
 }
+
+
+/* v2.20 — forced connection visibility */
+.connection-visibility-tool{
+  min-width:34px;
+}
+.connection-visibility-tool span{
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.connection-visibility-tool.active{
+  border-color:#6d76c8;
+  background:rgba(124,108,255,.14);
+  color:#d8d4ff;
+  box-shadow:0 0 0 1px rgba(124,108,255,.12),0 0 18px rgba(124,108,255,.08);
+}
+.edge-layer.force-connections .edge:not(.selected){
+  opacity:.92!important;
+}
+.edge-layer.force-connections .auto-type-edge{
+  opacity:.78;
+}
+.edge-layer.force-connections .auto-type-glow{
+  opacity:.12;
+}
