@@ -3271,7 +3271,10 @@
     setTimeout(() => next.classList.remove("page-entering"), 320);
 
     updateSiteNavigation(pageName);
-    if (pageName === "projects") renderProjectLibrary();
+    if (pageName === "projects") {
+      renderProjectJoinUI();
+      renderProjectLibrary();
+    }
 
     if (opts.updateHash !== false) {
       const hash = "#" + pageName;
@@ -3608,6 +3611,23 @@
     reader.readAsText(file);
   }
 
+  function renderProjectJoinUI() {
+    const loginNotice = $("projectJoinLoginNotice");
+    const controls = $("projectJoinControls");
+    const loginButton = $("projectJoinLoginButton");
+    const loggedIn = !!cloudState.user;
+
+    if (loginNotice) {
+      loginNotice.hidden = loggedIn;
+      loginNotice.style.display = loggedIn ? "none" : "";
+    }
+    if (controls) {
+      controls.hidden = !loggedIn;
+      controls.style.display = loggedIn ? "" : "none";
+    }
+    if (loginButton) loginButton.hidden = loggedIn;
+  }
+
   function updateAccountUI() {
     const user = cloudState.user;
     const configured = cloudState.configured;
@@ -3679,6 +3699,9 @@
     if (menuSync) menuSync.textContent = user ? "Sincronizzazione Firebase attiva" : "Solo salvataggio locale";
     if (logout) logout.hidden = !user;
     if (syncNow) syncNow.disabled = false;
+
+    renderProjectJoinUI();
+    if ($("shareLoginNotice") && $("shareControls")) renderSharePanel();
   }
 
   async function initCloud(force) {
@@ -4182,7 +4205,9 @@
     const record = projectRecordById(currentProjectId);
     const loggedIn = !!cloudState.user;
     notice.hidden = loggedIn;
+    notice.style.display = loggedIn ? "none" : "";
     controls.hidden = !loggedIn;
+    controls.style.display = loggedIn ? "" : "none";
 
     if (!loggedIn) {
       memberList.innerHTML = "";
@@ -13666,6 +13691,7 @@
   });
   $("shareProjectButton").addEventListener("click", openSharePanel);
   $("shareLoginButton").addEventListener("click", startGoogleLogin);
+  $("projectJoinLoginButton").addEventListener("click", startGoogleLogin);
   $("closeSharePanel").addEventListener("click", () => closeInterfaceSurfaces());
   $("shareInviteButton").addEventListener("click", () => {
     const input = $("shareEmailInput");
