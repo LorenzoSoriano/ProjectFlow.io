@@ -271,6 +271,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   vector-effect:non-scaling-stroke;
   cursor:grab;
   pointer-events:all;
+  touch-action:none;
+  user-select:none;
   filter:drop-shadow(0 0 5px color-mix(in srgb,var(--junction-color,#3f7fa6) 55%,transparent));
   transition:r .12s ease,stroke .12s ease;
 }
