@@ -4615,6 +4615,7 @@
       return node.classVisibility + " " + node.baseType + (node.instanceAccess === "instance" ? " · Instance" : "");
     }
     if (node.type === "function") {
+      if (currentSchemaId() !== "unity") return "FUNCTION · " + nodeReturnTypeLabel(node);
       const owner = ownerClassName(node);
       return (owner ? owner + " · " : "") + node.methodAccess + " " + nodeReturnTypeLabel(node);
     }
@@ -6528,44 +6529,50 @@
       if (node.type === "function") {
         ensureFunctionSignature(node, node.methodAccess);
 
-        const functionMeta = document.createElement("div");
-        functionMeta.className = "node-function-inline redesigned-function-meta";
+        if (currentSchemaId() === "unity") {
+          const functionMeta = document.createElement("div");
+          functionMeta.className = "node-function-inline redesigned-function-meta";
 
-        const ownerOptions = [["", "No owner"]].concat(allClassNodes().map((item) => [item.id, item.title]));
-        functionMeta.append(
-          compactSelect(node.methodAccess, ["public", "private", "protected", "internal"], (value) => {
-            node.methodAccess = value;
-            node.methodParameters.forEach((parameter) => { parameter.access = value; });
-            rerenderNode();
-          }, "inline-access-select"),
-          compactSelect(node.methodKind, [
-            ["custom", "Custom"],
-            ["lifecycle", "Unity"],
-            ["eventHandler", "Handler"],
-            ["unityEventListener", "Listener"],
-            ["coroutine", "Coroutine"]
-          ], (value) => {
-            node.methodKind = value;
-            if (value === "lifecycle") applyLifecyclePreset(node, UNITY_LIFECYCLE[0]);
-            rerenderNode();
-          }, "inline-method-kind"),
-          compactSelect(node.ownerClassId, ownerOptions, (value) => {
-            node.ownerClassId = value;
-            rerenderNode();
-          }, "function-owner-select")
-        );
-
-        if (node.methodKind === "lifecycle") {
-          functionMeta.appendChild(compactSelect(node.title, UNITY_LIFECYCLE.map((preset) => [preset.name, preset.name + "()"]), (value) => {
-            const preset = UNITY_LIFECYCLE.find((entry) => entry.name === value);
-            if (preset) {
-              applyLifecyclePreset(node, preset);
+          const ownerOptions = [["", "No owner"]].concat(allClassNodes().map((item) => [item.id, item.title]));
+          functionMeta.append(
+            compactSelect(node.methodAccess, ["public", "private", "protected", "internal"], (value) => {
+              node.methodAccess = value;
+              node.methodParameters.forEach((parameter) => { parameter.access = value; });
               rerenderNode();
-            }
-          }, "lifecycle-callback-select"));
+            }, "inline-access-select"),
+            compactSelect(node.methodKind, [
+              ["custom", "Custom"],
+              ["lifecycle", "Unity"],
+              ["eventHandler", "Handler"],
+              ["unityEventListener", "Listener"],
+              ["coroutine", "Coroutine"]
+            ], (value) => {
+              node.methodKind = value;
+              if (value === "lifecycle") applyLifecyclePreset(node, UNITY_LIFECYCLE[0]);
+              rerenderNode();
+            }, "inline-method-kind"),
+            compactSelect(node.ownerClassId, ownerOptions, (value) => {
+              node.ownerClassId = value;
+              rerenderNode();
+            }, "function-owner-select")
+          );
+
+          if (node.methodKind === "lifecycle") {
+            functionMeta.appendChild(compactSelect(node.title, UNITY_LIFECYCLE.map((preset) => [preset.name, preset.name + "()"]), (value) => {
+              const preset = UNITY_LIFECYCLE.find((entry) => entry.name === value);
+              if (preset) {
+                applyLifecyclePreset(node, preset);
+                rerenderNode();
+              }
+            }, "lifecycle-callback-select"));
+          }
+
+          body.appendChild(functionMeta);
+        } else {
+          node.ownerClassId = "";
+          node.methodKind = "custom";
         }
 
-        body.appendChild(functionMeta);
         body.appendChild(makeMethodModeToggle(node));
 
         body.appendChild(makeParameterSection(node, node.methodAccess));
@@ -9276,55 +9283,60 @@
       const grid = document.createElement("div");
       grid.className = "settings-grid";
 
-      const ownerOptions = [["", "— Nessuna classe —"]].concat(allClassNodes().map((item) => [item.id, item.title]));
-      grid.appendChild(inspectorField("CLASSE", selectControl(node.ownerClassId, ownerOptions, (value) => {
-        node.ownerClassId = value;
-        renderNodes();
-        markDirty();
-      })));
-
-      grid.appendChild(inspectorField("ACCESSO", selectControl(node.methodAccess, [
-        ["public", "public"],
-        ["private", "private"],
-        ["protected", "protected"],
-        ["internal", "internal"]
-      ], (value) => {
-        node.methodAccess = value;
-        renderNodes();
-        markDirty();
-      })));
-
-      grid.appendChild(inspectorField("TIPO METODO", selectControl(node.methodKind, [
-        ["custom", "Custom"],
-        ["lifecycle", "Unity lifecycle"],
-        ["eventHandler", "Event handler"],
-        ["unityEventListener", "UnityEvent listener"],
-        ["coroutine", "Coroutine"]
-      ], (value) => {
-        node.methodKind = value;
-        if (value === "lifecycle") {
-          const preset = UNITY_LIFECYCLE[0];
-          applyLifecyclePreset(node, preset);
-          $("nodeTitle").value = node.title;
-        }
-        renderNodes();
-        renderInspector();
-        markDirty();
-      })));
-
-      if (node.methodKind === "lifecycle") {
-        grid.appendChild(inspectorField("UNITY CALLBACK", selectControl(node.title, UNITY_LIFECYCLE.map((item) => [item.name, item.name + "()"]), (value) => {
-          const preset = UNITY_LIFECYCLE.find((item) => item.name === value);
-          if (preset) {
-            node.title = preset.name;
-            node.returnType = preset.returnType;
-            node.parameters = preset.parameters;
-            $("nodeTitle").value = node.title;
-            renderNodes();
-            renderInspector();
-            markDirty();
-          }
+      if (currentSchemaId() === "unity") {
+        const ownerOptions = [["", "— Nessuna classe —"]].concat(allClassNodes().map((item) => [item.id, item.title]));
+        grid.appendChild(inspectorField("CLASSE", selectControl(node.ownerClassId, ownerOptions, (value) => {
+          node.ownerClassId = value;
+          renderNodes();
+          markDirty();
         })));
+
+        grid.appendChild(inspectorField("ACCESSO", selectControl(node.methodAccess, [
+          ["public", "public"],
+          ["private", "private"],
+          ["protected", "protected"],
+          ["internal", "internal"]
+        ], (value) => {
+          node.methodAccess = value;
+          renderNodes();
+          markDirty();
+        })));
+
+        grid.appendChild(inspectorField("TIPO METODO", selectControl(node.methodKind, [
+          ["custom", "Custom"],
+          ["lifecycle", "Unity lifecycle"],
+          ["eventHandler", "Event handler"],
+          ["unityEventListener", "UnityEvent listener"],
+          ["coroutine", "Coroutine"]
+        ], (value) => {
+          node.methodKind = value;
+          if (value === "lifecycle") {
+            const preset = UNITY_LIFECYCLE[0];
+            applyLifecyclePreset(node, preset);
+            $("nodeTitle").value = node.title;
+          }
+          renderNodes();
+          renderInspector();
+          markDirty();
+        })));
+
+        if (node.methodKind === "lifecycle") {
+          grid.appendChild(inspectorField("UNITY CALLBACK", selectControl(node.title, UNITY_LIFECYCLE.map((item) => [item.name, item.name + "()"]), (value) => {
+            const preset = UNITY_LIFECYCLE.find((item) => item.name === value);
+            if (preset) {
+              node.title = preset.name;
+              node.returnType = preset.returnType;
+              node.parameters = preset.parameters;
+              $("nodeTitle").value = node.title;
+              renderNodes();
+              renderInspector();
+              markDirty();
+            }
+          })));
+        }
+      } else {
+        node.ownerClassId = "";
+        node.methodKind = "custom";
       }
 
       grid.appendChild(inspectorField("RETURN TYPE", selectControl(node.returnType, ["void"].concat(availableDataTypes()), (value) => {
@@ -10732,6 +10744,28 @@
       y: Math.round(y)
     };
     Object.assign(node, source.extra || {}, nodePreset);
+
+    if (currentSchemaId() === "classic") {
+      if (type === "function") {
+        node.title = "Function";
+        node.description = "Funzione generica con parametri, risultato e sotto-grafo.";
+      } else if (type === "emptyGraph") {
+        node.title = "Sub Flow";
+        node.description = "Sotto-diagramma con input e output configurabili.";
+      } else if (type === "event") {
+        node.title = "Start";
+        node.description = "Punto di ingresso del diagramma.";
+        node.eventKind = "custom";
+      } else if (type === "action") {
+        node.title = "Process";
+        node.description = "Passaggio operativo del flow chart.";
+        node.actionKind = "custom";
+      } else if (type === "returnFlow") {
+        node.title = "End / Return";
+        node.description = "Termina il ramo corrente o restituisce un risultato.";
+      }
+    }
+
     if (type === "math") node.title = mathOperationLabel(node.mathOperation);
     if (type === "logic") node.title = logicOperationLabel(node.logicOperation);
     if (type === "compare") node.title = compareOperationLabel(node.compareOperation);
