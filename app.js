@@ -1402,10 +1402,38 @@
     };
   }
 
-  function blankProject(name) {
+  const PROJECT_SCHEMAS = {
+    unity: {
+      label: "Unity",
+      description: "Schema orientato a Unity e C#, pronto per componenti, MonoBehaviour e logica di gioco."
+    },
+    unreal: {
+      label: "Unreal Engine",
+      description: "Schema orientato ai concetti di Unreal Engine e Blueprint."
+    },
+    godot: {
+      label: "Godot",
+      description: "Schema orientato a scene, nodi, segnali e script Godot."
+    },
+    classic: {
+      label: "Flow Chart classico",
+      description: "Flow chart generico e indipendente da uno specifico game engine."
+    }
+  };
+
+  function normalizeProjectSchema(schema) {
+    return Object.prototype.hasOwnProperty.call(PROJECT_SCHEMAS, schema) ? schema : "unity";
+  }
+
+  function projectSchemaMeta(schema) {
+    return PROJECT_SCHEMAS[normalizeProjectSchema(schema)];
+  }
+
+  function blankProject(name, schema) {
     return {
       version: 1,
       name: name || "Nuovo schema",
+      schema: normalizeProjectSchema(schema),
       nodes: [],
       connections: []
     };
@@ -1416,6 +1444,7 @@
     if (!Array.isArray(base.nodes)) base.nodes = [];
     if (!Array.isArray(base.connections)) base.connections = [];
     if (!Array.isArray(base.groups)) base.groups = [];
+    base.schema = normalizeProjectSchema(base.schema);
     // v2.5 migration: the old project-level Sketch drawer becomes a real node.
     if (base.sketch && Array.isArray(base.sketch.strokes) && base.sketch.strokes.length &&
         !base.nodes.some((node) => node && node.type === "sketch")) {
@@ -2486,9 +2515,49 @@
     });
   }
 
-  async function createProjectFromHome() {
-    return withProjectLoading("Creazione nuovo schema…", async () => {
-      const data = blankProject("Nuovo schema");
+  function updateCreateProjectSchemaPreview() {
+    const select = $("createProjectSchema");
+    const note = $("createProjectSchemaNote");
+    if (!select || !note) return;
+    const meta = projectSchemaMeta(select.value);
+    note.textContent = meta.description;
+  }
+
+  function openCreateProjectDialog() {
+    const dialog = $("createProjectDialog");
+    const nameInput = $("createProjectName");
+    const schemaSelect = $("createProjectSchema");
+    if (!dialog || !nameInput || !schemaSelect) return;
+
+    nameInput.value = "Nuovo schema";
+    schemaSelect.value = "unity";
+    updateCreateProjectSchemaPreview();
+
+    dialog.classList.add("show");
+    dialog.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => {
+      nameInput.focus();
+      nameInput.select();
+    });
+  }
+
+  function closeCreateProjectDialog() {
+    const dialog = $("createProjectDialog");
+    if (!dialog) return;
+    dialog.classList.remove("show");
+    dialog.setAttribute("aria-hidden", "true");
+  }
+
+  async function createProjectFromDialog() {
+    const nameInput = $("createProjectName");
+    const schemaSelect = $("createProjectSchema");
+    const name = (nameInput && nameInput.value.trim()) || "Nuovo schema";
+    const schema = normalizeProjectSchema(schemaSelect ? schemaSelect.value : "unity");
+
+    closeCreateProjectDialog();
+
+    return withProjectLoading("Creazione " + name + "…", async () => {
+      const data = blankProject(name, schema);
       const record = upsertLocalProject(data, uid("project"));
       setActiveProjectId(record.id);
       project = normalizeProject(cloneProjectData(record.data));
@@ -2497,7 +2566,11 @@
       showEditorView();
       await new Promise((resolve) => requestAnimationFrame(resolve));
       fitView();
-    }, "Preparazione canvas e autosave");
+    }, "Preparazione canvas " + projectSchemaMeta(schema).label + " e autosave");
+  }
+
+  function createProjectFromHome() {
+    openCreateProjectDialog();
   }
 
   async function openDemoProject() {
@@ -2599,6 +2672,7 @@
     const meta = document.createElement("p");
     meta.className = "project-card-meta";
     meta.textContent =
+      projectSchemaMeta(record.data.schema).label + " · " +
       stats.nodes + " blocchi · " +
       stats.connections + " connessioni · " +
       formatProjectDate(record.updatedAt);
@@ -12023,6 +12097,22 @@
   $("createProjectHome").addEventListener("click", createProjectFromHome);
   $("createProjectProjects").addEventListener("click", createProjectFromHome);
   $("createProjectEmpty").addEventListener("click", createProjectFromHome);
+
+  $("createProjectForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    createProjectFromDialog();
+  });
+  $("createProjectCancel").addEventListener("click", closeCreateProjectDialog);
+  $("createProjectSchema").addEventListener("change", updateCreateProjectSchemaPreview);
+  $("createProjectDialog").addEventListener("mousedown", (event) => {
+    if (event.target === $("createProjectDialog")) closeCreateProjectDialog();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && $("createProjectDialog").classList.contains("show")) {
+      event.preventDefault();
+      closeCreateProjectDialog();
+    }
+  });
 
   $("uploadProjectHome").addEventListener("click", () => $("homeUploadFile").click());
   $("uploadProjectProjects").addEventListener("click", () => $("homeUploadFile").click());
