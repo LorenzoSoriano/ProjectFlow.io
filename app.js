@@ -6311,6 +6311,7 @@
       if (node.boundaryLocked) return;
       project.nodes = project.nodes.filter((item) => item.id !== node.id);
       project.connections = project.connections.filter((edge) => edge.from.nodeId !== node.id && edge.to.nodeId !== node.id);
+      sanitizeProjectConnections();
       selectedNodeIds.delete(node.id);
       syncPrimarySelection();
       render();
@@ -9241,6 +9242,63 @@
     return point ? { edge: edge, point: point, type: edgeDataType(edge) } : null;
   }
 
+  function sanitizeProjectConnections() {
+    if (!project || !Array.isArray(project.connections) || !Array.isArray(project.nodes)) return;
+
+    const validRowsByNode = new Map();
+    project.nodes.forEach((node) => {
+      validRowsByNode.set(
+        node.id,
+        new Set((node.rows || []).map((item) => item && item.id).filter(Boolean))
+      );
+    });
+
+    project.connections = project.connections.filter((edge) => {
+      if (!edge || !edge.from || !edge.to) return false;
+      const fromRows = validRowsByNode.get(edge.from.nodeId);
+      const toRows = validRowsByNode.get(edge.to.nodeId);
+      if (!fromRows || !toRows) return false;
+      if (!fromRows.has(edge.from.rowId) || !toRows.has(edge.to.rowId)) return false;
+      return true;
+    });
+
+    const edgeMap = new Map(project.connections.map((edge) => [edge.id, edge]));
+    project.connections.forEach((edge) => {
+      if (!Array.isArray(edge.points)) edge.points = [];
+      edge.points = edge.points
+        .filter((point) => point && typeof point.x === "number" && typeof point.y === "number")
+        .map((point) => {
+          if (!point.junctionLink) return point;
+          const owner = edgeMap.get(point.junctionLink.edgeId);
+          const ownerPoint = owner && Array.isArray(owner.points)
+            ? owner.points.find((candidate) =>
+                candidate &&
+                !candidate.junctionLink &&
+                candidate.id === point.junctionLink.pointId
+              )
+            : null;
+          if (ownerPoint) return point;
+
+          const detached = {
+            id: point.id || uid("junction"),
+            x: point.x,
+            y: point.y
+          };
+          if (point.fanoutJunction) detached.fanoutJunction = true;
+          return detached;
+        });
+    });
+
+    if (selectedEdgeId && !edgeMap.has(selectedEdgeId)) selectedEdgeId = null;
+    selectedJunctionIds = new Set(
+      Array.from(selectedJunctionIds).filter((key) => {
+        const parts = String(key).split("::");
+        const edge = edgeMap.get(parts[0]);
+        return !!(edge && (edge.points || []).some((point) => point.id === parts[1]));
+      })
+    );
+  }
+
   function syncLinkedJunctionPoints() {
     const points = new Map();
     project.connections.forEach((edge) => {
@@ -9668,7 +9726,7 @@
     flowMarker.appendChild(flowArrow);
     defs.appendChild(flowMarker);
     edgeLayer.appendChild(defs);
-    project.connections = project.connections.filter((edge) => nodeById(edge.from.nodeId) && nodeById(edge.to.nodeId));
+    sanitizeProjectConnections();
     syncLinkedJunctionPoints();
 
     const junctionOverlays = [];
@@ -11462,6 +11520,7 @@
 
   function removeEdge(id) {
     project.connections = project.connections.filter((edge) => edge.id !== id);
+    sanitizeProjectConnections();
     selectedEdgeId = null;
     selectedJunctionIds = new Set(Array.from(selectedJunctionIds).filter((key) => !key.startsWith(id + "::")));
     renderEdges();
@@ -11523,6 +11582,7 @@
     project.connections = project.connections.filter((edge) =>
       !ids.has(edge.from.nodeId) && !ids.has(edge.to.nodeId)
     );
+    sanitizeProjectConnections();
     (project.groups || []).forEach((group) => {
       group.nodeIds = group.nodeIds.filter((id) => !ids.has(id));
     });
