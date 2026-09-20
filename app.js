@@ -166,12 +166,13 @@
       { id: "primitive", label: "PRIMITIVE", values: ["bool", "int", "float", "double", "string"] },
       { id: "math", label: "MATH", values: ["Vector2", "Vector3", "Quaternion", "Color"] },
       { id: "core", label: "UNITY CORE", values: ["GameObject", "Transform", "LayerMask"] },
-      { id: "physics", label: "PHYSICS", values: ["Rigidbody", "Rigidbody2D", "Collider", "Collider2D", "BoxCollider", "SphereCollider", "CapsuleCollider"] },
-      { id: "animation", label: "ANIMATION", values: ["Animator", "Animation", "AnimationClip", "RuntimeAnimatorController"] },
-      { id: "audio", label: "AUDIO", values: ["AudioSource", "AudioListener", "AudioClip"] },
+      { id: "physics", label: "PHYSICS", values: ["Rigidbody", "Rigidbody2D", "CharacterController", "Collider", "Collider2D", "BoxCollider", "SphereCollider", "CapsuleCollider", "MeshCollider", "BoxCollider2D", "CircleCollider2D", "CapsuleCollider2D"] },
+      { id: "animation", label: "ANIMATION", values: ["Animator", "Animation", "PlayableDirector", "AnimationClip", "RuntimeAnimatorController"] },
+      { id: "audio", label: "AUDIO", values: ["AudioSource", "AudioListener", "AudioReverbZone", "AudioClip"] },
       { id: "rendering", label: "RENDERING", values: ["Camera", "Light", "SpriteRenderer", "MeshRenderer", "SkinnedMeshRenderer", "Texture2D", "Material"] },
-      { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform"] },
-      { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] }
+      { id: "ui", label: "UI", values: ["Canvas", "CanvasGroup", "RectTransform", "GraphicRaycaster"] },
+      { id: "effects", label: "EFFECTS", values: ["ParticleSystem", "TrailRenderer", "LineRenderer"] },
+      { id: "navigation", label: "NAVIGATION", values: ["NavMeshAgent", "NavMeshObstacle", "OffMeshLink"] }
     ];
 
     const enums = enumNodes().map((node) => node.title);
@@ -179,6 +180,12 @@
 
     const custom = publicClassNodes().map((node) => node.title);
     if (custom.length) groups.push({ id: "classes", label: "CUSTOM CLASSES", values: custom });
+
+    const structs = publicStructNodes().filter((node) => node.type === "struct").map((node) => node.title);
+    if (structs.length) groups.push({ id: "structs", label: "STRUCTS", values: structs });
+
+    const jobs = publicStructNodes().filter((node) => node.type === "jobStruct").map((node) => node.title);
+    if (jobs.length) groups.push({ id: "jobs", label: "UNITY JOBS", values: jobs });
     return groups;
   }
 
@@ -3920,7 +3927,7 @@
   }
 
   function loadPanelWidths() {
-    let widths = { inspector: 350 };
+    let widths = { inspector: 390 };
     try {
       const saved = JSON.parse(localStorage.getItem(PANELS_KEY) || "null");
       if (saved && typeof saved.inspector === "number") widths.inspector = saved.inspector;
