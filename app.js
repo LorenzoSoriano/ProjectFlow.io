@@ -1641,7 +1641,8 @@
   function schemaAllowsNodeType(type) {
     if (["graphInput", "graphOutput", "note", "sketch"].includes(type)) return true;
     const schema = currentSchemaId();
-    if (schema === "unity") return true;
+    const flowChartOnly = new Set(["flowStart", "flowEnd", "flowIO", "flowProcess"]);
+    if (schema === "unity") return !flowChartOnly.has(type);
 
     if (schema === "classic") {
       return new Set([
