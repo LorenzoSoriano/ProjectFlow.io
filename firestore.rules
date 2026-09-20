@@ -23,8 +23,13 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/shareInvites/$(authEmail())/projects/$(projectId));
     }
 
+    function hasSharedMember(projectId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/sharedProjects/$(projectId)/members/$(request.auth.uid));
+    }
+
     function canAccessShared(projectId) {
-      return isSharedOwner(projectId) || hasSharedInvite(projectId);
+      return isSharedOwner(projectId) || hasSharedInvite(projectId) || hasSharedMember(projectId);
     }
 
     match /users/{userId}/projects/{projectId} {
@@ -35,7 +40,7 @@ service cloud.firestore {
     match /sharedProjects/{projectId} {
       allow get, list:
         if signedIn()
-        && (resource.data.ownerId == request.auth.uid || hasSharedInvite(projectId));
+        && (resource.data.ownerId == request.auth.uid || hasSharedInvite(projectId) || hasSharedMember(projectId));
 
       allow create:
         if signedIn()
@@ -62,18 +67,91 @@ service cloud.firestore {
           && request.auth.uid == presenceUserId;
       }
 
+      match /nodePositions/{nodeId} {
+        allow read:
+          if canAccessShared(projectId);
+
+        allow create, update:
+          if canAccessShared(projectId)
+          && request.resource.data.updatedBy == request.auth.uid;
+
+        allow delete:
+          if isSharedOwner(projectId);
+      }
+
+      match /members/{memberId} {
+        allow read:
+          if canAccessShared(projectId);
+
+        allow create:
+          if signedIn()
+          && (
+            isSharedOwner(projectId)
+            || (
+              memberId == request.auth.uid
+              && request.resource.data.uid == request.auth.uid
+              && request.resource.data.joinCode != ""
+              && request.resource.data.joinCode ==
+                get(/databases/$(database)/documents/sharedProjects/$(projectId)).data.joinCode
+            )
+          );
+
+        allow update:
+          if signedIn()
+          && (
+            isSharedOwner(projectId)
+            || (
+              memberId == request.auth.uid
+              && resource.data.uid == request.auth.uid
+              && request.resource.data.uid == request.auth.uid
+            )
+          );
+
+        allow delete:
+          if signedIn()
+          && (isSharedOwner(projectId) || memberId == request.auth.uid);
+      }
+
       match /invites/{inviteId} {
         allow read, create, update, delete:
           if isSharedOwner(projectId);
       }
     }
 
+    match /shareCodes/{code} {
+      allow get:
+        if signedIn();
+
+      allow list:
+        if false;
+
+      allow create:
+        if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && isSharedOwner(request.resource.data.projectId);
+
+      allow update, delete:
+        if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && isSharedOwner(resource.data.projectId);
+    }
+
     match /shareInvites/{inviteEmail}/projects/{projectId} {
       allow read:
         if signedIn() && authEmail() == inviteEmail;
 
-      allow create, update, delete:
-        if isSharedOwner(projectId);
+      allow create, update:
+        if isSharedOwner(projectId)
+        || (
+          signedIn()
+          && authEmail() == inviteEmail
+          && hasSharedMember(projectId)
+          && request.resource.data.projectId == projectId
+        );
+
+      allow delete:
+        if isSharedOwner(projectId)
+        || (signedIn() && authEmail() == inviteEmail);
     }
   }
 }
