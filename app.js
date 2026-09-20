@@ -1455,6 +1455,7 @@
   let selectedNodeId = null;
   let selectedNodeIds = new Set();
   let selectedEdgeId = null;
+  let selectedTypeRelationId = null;
   let selectedJunctionIds = new Set();
   let selectedGroupId = null;
   let pendingPort = null;
@@ -1809,6 +1810,7 @@
     selectedNodeIds = new Set(group.nodeIds.filter((id) => !!nodeById(id)));
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedTypeRelationId = null;
     selectedJunctionIds.clear();
     updateGroupActionUI();
 
@@ -4455,6 +4457,7 @@
         return {
           relationKind: "type",
           edgeId: null,
+          typeRelationId: relation.id,
           internal: false,
           direction: outgoing ? "out" : "in",
           sourceNodeId: relation.sourceNodeId,
@@ -4537,10 +4540,12 @@
 
           if (relation.relationKind === "type") {
             selectedEdgeId = null;
+            selectedTypeRelationId = relation.typeRelationId;
             selectedNodeIds = new Set([relation.sourceNodeId, relation.targetNodeId]);
             syncPrimarySelection();
           } else {
             selectedEdgeId = relation.edgeId;
+            selectedTypeRelationId = null;
             selectedNodeIds.clear();
             selectedNodeId = null;
           }
@@ -7583,6 +7588,7 @@
     }
 
     selectedEdgeId = edgeId;
+    selectedTypeRelationId = null;
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedGroupId = null;
@@ -7730,6 +7736,8 @@
 
   function toggleForcedConnections() {
     forceConnectionsVisible = !forceConnectionsVisible;
+    selectedEdgeId = null;
+    selectedTypeRelationId = null;
     localStorage.setItem(FORCE_CONNECTIONS_KEY, forceConnectionsVisible ? "1" : "0");
     updateConnectionVisibilityControl();
     renderEdges();
@@ -7747,6 +7755,9 @@
     const junctionOverlays = [];
 
     project.connections.forEach((edge) => {
+      if (selectedTypeRelationId) return;
+      if (selectedEdgeId && edge.id !== selectedEdgeId) return;
+
       const a = getPortWorldPosition(edge.from);
       const b = getPortWorldPosition(edge.to);
       if (!a || !b) return;
@@ -7787,22 +7798,17 @@
         event.preventDefault();
         event.stopPropagation();
         selectedEdgeId = edge.id;
+        selectedTypeRelationId = null;
         selectedJunctionIds.clear();
         selectedNodeIds.clear();
         selectedNodeId = null;
         selectedGroupId = null;
 
-        nodeLayer.querySelectorAll(".flow-node.selected").forEach((nodeElement) => nodeElement.classList.remove("selected"));
-        groupLayer.querySelectorAll(".graph-group.selected").forEach((groupElement) => groupElement.classList.remove("selected"));
-        edgeLayer.querySelectorAll(".edge").forEach((edgeElement) => {
-          const active = edgeElement.dataset.edgeId === edge.id;
-          edgeElement.classList.toggle("selected", active);
-          edgeElement.style.opacity = active ? "1" : ".72";
-        });
-        edgeLayer.querySelectorAll(".edge-junction.selected").forEach((pointElement) => pointElement.classList.remove("selected"));
-
+        renderNodes();
+        renderEdges();
         renderInspector();
         renderMinimap();
+        showToast("Connessione isolata");
       });
       hitPath.addEventListener("dblclick", (event) => {
         if (event.button !== 0) return;
@@ -7843,11 +7849,13 @@
 
     junctionOverlays.forEach((junction) => edgeLayer.appendChild(junction));
 
-    if (forceConnectionsVisible || selectedNodeIds.size) {
+    if (selectedTypeRelationId || forceConnectionsVisible || selectedNodeIds.size) {
       const groupedTypeRelations = new Map();
 
       buildTypeRelations().forEach((relation) => {
-        if (!forceConnectionsVisible &&
+        if (selectedTypeRelationId && relation.id !== selectedTypeRelationId) return;
+        if (!selectedTypeRelationId &&
+            !forceConnectionsVisible &&
             !selectedNodeIds.has(relation.sourceNodeId) &&
             !selectedNodeIds.has(relation.targetNodeId)) return;
 
@@ -7875,10 +7883,31 @@
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         path.setAttribute("d", pathData);
-        path.setAttribute("class", "auto-type-edge " + (relation.targetNodeType === "enum" ? "enum-link" : "class-link"));
+        path.setAttribute("class", "auto-type-edge " + (relation.targetNodeType === "enum" ? "enum-link" : "class-link") + (selectedTypeRelationId === relation.id ? " selected" : ""));
         path.style.stroke = color;
         path.style.setProperty("--relation-count", String(relation.count));
         edgeLayer.insertBefore(path, edgeLayer.firstChild);
+
+        const hitPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        hitPath.setAttribute("d", pathData);
+        hitPath.setAttribute("class", "auto-type-hit");
+        hitPath.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          selectedEdgeId = null;
+          selectedTypeRelationId = relation.id;
+          selectedNodeIds = new Set([relation.sourceNodeId, relation.targetNodeId]);
+          syncPrimarySelection();
+          selectedJunctionIds.clear();
+          selectedGroupId = null;
+          renderNodes();
+          renderEdges();
+          renderInspector();
+          renderMinimap();
+          showToast("Connessione isolata");
+        });
+        edgeLayer.appendChild(hitPath);
       });
     }
   }
@@ -8700,6 +8729,7 @@
 
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedTypeRelationId = null;
     selectedJunctionIds.clear();
     selectedGroupId = null;
     renderNodes();
@@ -8712,6 +8742,7 @@
     selectedNodeIds.clear();
     selectedNodeId = null;
     selectedEdgeId = null;
+    selectedTypeRelationId = null;
     selectedJunctionIds.clear();
     selectedGroupId = null;
     renderNodes();
@@ -10070,6 +10101,7 @@
     selectedGroupId = null;
     syncPrimarySelection();
     selectedEdgeId = null;
+    selectedTypeRelationId = null;
     renderNodes();
     renderEdges();
     renderInspector();
@@ -10167,6 +10199,7 @@
       selectedNodeIds = new Set(project.nodes.map((node) => node.id));
       syncPrimarySelection();
       selectedEdgeId = null;
+      selectedTypeRelationId = null;
       selectedJunctionIds.clear();
       selectedGroupId = null;
       renderNodes();
