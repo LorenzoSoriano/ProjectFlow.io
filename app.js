@@ -1673,8 +1673,10 @@
     closeSurface($("accountMenu"));
     closeSurface($("newBlockPalette"));
     closeSurface($("sharePanel"));
+    closeSurface($("aiBuilderPanel"));
     if ($("addObjectTop")) $("addObjectTop").setAttribute("aria-expanded", "false");
     if ($("shareProjectButton")) $("shareProjectButton").setAttribute("aria-expanded", "false");
+    if ($("aiBuilderButton")) $("aiBuilderButton").setAttribute("aria-expanded", "false");
     document.querySelectorAll(".section-add-popup.open, .type-picker-popup.open").forEach(closeSurface);
 
     if ($("editorAuthButton") && except !== $("accountMenu")) {
@@ -9635,6 +9637,385 @@
     $("addObjectTop").setAttribute("aria-expanded", "false");
   }
 
+  function aiBuilderAddMessage(role, text) {
+    const container = $("aiBuilderMessages");
+    if (!container) return;
+    const message = document.createElement("div");
+    message.className = "ai-message " + (role === "user" ? "user" : "assistant");
+
+    const label = document.createElement("span");
+    label.className = "ai-message-role";
+    label.textContent = role === "user" ? "Tu" : "ProjectFlow AI";
+
+    const copy = document.createElement("p");
+    copy.textContent = text;
+    message.append(label, copy);
+    container.appendChild(message);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function openAiBuilderPanel() {
+    const panel = $("aiBuilderPanel");
+    if (!panel) return;
+    const willOpen = !panel.classList.contains("open");
+    closeInterfaceSurfaces(willOpen ? panel : null);
+    panel.classList.toggle("open", willOpen);
+    panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
+    $("aiBuilderButton").setAttribute("aria-expanded", willOpen ? "true" : "false");
+    $("aiBuilderButton").classList.toggle("active", willOpen);
+    if (willOpen) {
+      requestAnimationFrame(() => {
+        const input = $("aiBuilderPrompt");
+        if (input) input.focus();
+      });
+    }
+  }
+
+  function closeAiBuilderPanel() {
+    const panel = $("aiBuilderPanel");
+    if (!panel) return;
+    panel.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+    $("aiBuilderButton").setAttribute("aria-expanded", "false");
+    $("aiBuilderButton").classList.remove("active");
+  }
+
+  function aiNormalizePrompt(text) {
+    return String(text || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function aiTitleCase(text) {
+    return String(text || "")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
+  function aiEntityFromPrompt(prompt) {
+    const source = aiNormalizePrompt(prompt);
+    const lower = source.toLowerCase();
+    if (/\b(door|porta)\b/.test(lower)) return "Door";
+    if (/\b(gate|cancello)\b/.test(lower)) return "Gate";
+    if (/\b(light|luce|lamp|lampada)\b/.test(lower)) return "Light";
+    if (/\b(menu|panel|pannello)\b/.test(lower)) return "Menu";
+
+    const match = source.match(/(?:controllo|control|toggle|gestione)\s+([a-z0-9_ -]+?)(?=\s+(?:open|closed|aperto|chiuso|on|off|attivo|inattivo)\b|$)/i);
+    if (match && match[1]) return aiTitleCase(match[1]);
+    return "Target";
+  }
+
+  function aiFindRow(node, kind, label) {
+    if (!node || !Array.isArray(node.rows)) return null;
+    return node.rows.find((item) =>
+      (!kind || item.kind === kind) &&
+      (!label || String(item.label || "").toLowerCase() === String(label).toLowerCase())
+    ) || null;
+  }
+
+  function aiConnect(fromNode, fromRow, toNode, toRow, dataType) {
+    if (!fromNode || !fromRow || !toNode || !toRow) return null;
+    const type = dataType || memberOutputType(fromRow);
+    const edge = {
+      id: uid("edge"),
+      from: {
+        nodeId: fromNode.id,
+        rowId: fromRow.id,
+        side: "out",
+        kind: type === "__flow__" ? "flow" : "data"
+      },
+      to: {
+        nodeId: toNode.id,
+        rowId: toRow.id,
+        side: "in",
+        kind: type === "__flow__" ? "flow" : "data"
+      },
+      points: [],
+      dataType: type
+    };
+    project.connections.push(edge);
+    return edge;
+  }
+
+  function aiActionNode(title, description, pseudo, x, y, targetInput) {
+    const node = defaultNode("action", x, y);
+    node.title = title;
+    node.description = description || "";
+    node.pseudo = pseudo || "";
+    node.actionKind = "custom";
+    node.rows = [
+      row("Enter", "", "flowIn"),
+      row("Next", "", "flowOut")
+    ];
+    if (targetInput) node.rows.push(row("Target", targetInput, "input"));
+    return node;
+  }
+
+  function aiSetBoolNode(variableName, nextValue, x, y) {
+    const node = aiActionNode(
+      "Set " + variableName + " = " + (nextValue ? "true" : "false"),
+      "Aggiorna lo stato booleano dopo l'azione.",
+      variableName + " = " + (nextValue ? "true" : "false") + ";",
+      x,
+      y
+    );
+    node.actionKind = "setVariable";
+    node.rows.push(row(nextValue ? "true" : "false", "bool", "output"));
+    return node;
+  }
+
+  function aiToggleConfig(prompt, entity) {
+    const lower = aiNormalizePrompt(prompt).toLowerCase();
+    const doorLike = /\b(door|porta|gate|cancello|open|closed|aperto|chiuso|apri|chiudi)\b/.test(lower);
+    if (doorLike) {
+      return {
+        variableName: "isOpen",
+        trueAction: "Close " + entity,
+        falseAction: "Open " + entity,
+        truePseudo: entity + ".Close();",
+        falsePseudo: entity + ".Open();",
+        groupTitle: "AI · " + entity + " Open / Closed"
+      };
+    }
+    return {
+      variableName: "isOn",
+      trueAction: "Turn Off " + entity,
+      falseAction: "Turn On " + entity,
+      truePseudo: entity + ".SetActive(false);",
+      falsePseudo: entity + ".SetActive(true);",
+      groupTitle: "AI · " + entity + " On / Off"
+    };
+  }
+
+  function aiBuildToggleGraph(prompt) {
+    const center = viewportCenterWorld();
+    const entity = aiEntityFromPrompt(prompt);
+    const config = aiToggleConfig(prompt, entity);
+    const x0 = center.x - 1000;
+    const y0 = center.y - 180;
+
+    const target = defaultNode("object", x0, y0 - 250);
+    target.title = entity;
+    target.description = "Target controllato dal graph generato localmente da ProjectFlow AI.";
+
+    const eventNode = defaultNode("event", x0, y0 + 80);
+    eventNode.title = "On Interact";
+    eventNode.description = "Punto di ingresso: il player interagisce con " + entity + ".";
+    eventNode.eventKind = "custom";
+    eventNode.rows = [row("Next", "", "flowOut")];
+
+    const stateNode = defaultNode("variable", x0, y0 + 390);
+    stateNode.title = entity + " State";
+    stateNode.description = "Stato persistente usato per scegliere il ramo corretto.";
+    const stateRow = variableRow(config.variableName, "bool", "private");
+    stateRow.defaultValue = "false";
+    stateNode.rows = [stateRow];
+
+    const branch = defaultNode("ifElse", x0 + 500, y0 + 90);
+    branch.title = config.variableName + " ?";
+    branch.description = "Se lo stato è true esegue il ramo di chiusura/disattivazione, altrimenti quello di apertura/attivazione.";
+    branch.pseudo = "if (" + config.variableName + ")";
+
+    const trueAction = aiActionNode(
+      config.trueAction,
+      "Azione eseguita quando " + config.variableName + " è true.",
+      config.truePseudo,
+      x0 + 980,
+      y0 - 100,
+      "GameObject"
+    );
+    const setFalse = aiSetBoolNode(config.variableName, false, x0 + 1460, y0 - 100);
+
+    const falseAction = aiActionNode(
+      config.falseAction,
+      "Azione eseguita quando " + config.variableName + " è false.",
+      config.falsePseudo,
+      x0 + 980,
+      y0 + 300,
+      "GameObject"
+    );
+    const setTrue = aiSetBoolNode(config.variableName, true, x0 + 1460, y0 + 300);
+
+    const nodes = [target, eventNode, stateNode, branch, trueAction, setFalse, falseAction, setTrue];
+    nodes.forEach((node) => project.nodes.push(node));
+
+    const targetOut = aiFindRow(target, "output", "GameObject");
+    const eventOut = aiFindRow(eventNode, "flowOut", "Next");
+    const branchIn = aiFindRow(branch, "flowIn", "Enter");
+    const branchCondition = aiFindRow(branch, "input", "Condition");
+    const branchTrue = aiFindRow(branch, "flowOut", "True");
+    const branchFalse = aiFindRow(branch, "flowOut", "False");
+    const trueIn = aiFindRow(trueAction, "flowIn", "Enter");
+    const trueOut = aiFindRow(trueAction, "flowOut", "Next");
+    const trueTarget = aiFindRow(trueAction, "input", "Target");
+    const falseIn = aiFindRow(falseAction, "flowIn", "Enter");
+    const falseOut = aiFindRow(falseAction, "flowOut", "Next");
+    const falseTarget = aiFindRow(falseAction, "input", "Target");
+    const setFalseIn = aiFindRow(setFalse, "flowIn", "Enter");
+    const setFalseValue = aiFindRow(setFalse, "output", "false");
+    const setTrueIn = aiFindRow(setTrue, "flowIn", "Enter");
+    const setTrueValue = aiFindRow(setTrue, "output", "true");
+
+    aiConnect(eventNode, eventOut, branch, branchIn, "__flow__");
+    aiConnect(stateNode, stateRow, branch, branchCondition, "bool");
+
+    aiConnect(branch, branchTrue, trueAction, trueIn, "__flow__");
+    aiConnect(target, targetOut, trueAction, trueTarget, "GameObject");
+    aiConnect(trueAction, trueOut, setFalse, setFalseIn, "__flow__");
+    aiConnect(setFalse, setFalseValue, stateNode, stateRow, "bool");
+
+    aiConnect(branch, branchFalse, falseAction, falseIn, "__flow__");
+    aiConnect(target, targetOut, falseAction, falseTarget, "GameObject");
+    aiConnect(falseAction, falseOut, setTrue, setTrueIn, "__flow__");
+    aiConnect(setTrue, setTrueValue, stateNode, stateRow, "bool");
+
+    if (!Array.isArray(project.groups)) project.groups = [];
+    const group = {
+      id: uid("group"),
+      title: config.groupTitle,
+      nodeIds: nodes.map((node) => node.id)
+    };
+    project.groups.push(group);
+
+    selectedNodeIds = new Set(nodes.map((node) => node.id));
+    syncPrimarySelection();
+    selectedGroupId = group.id;
+    selectedEdgeId = null;
+    selectedTypeRelationId = null;
+    selectedJunctionIds.clear();
+
+    render();
+    markDirty();
+    flushHistoryCheckpoint();
+    broadcastActivity("AI crea " + config.groupTitle);
+
+    return {
+      nodes: nodes.length,
+      connections: 10,
+      message: "Creato " + config.groupTitle + ": target, evento Interact, stato " + config.variableName + ", If/Else, due azioni e aggiornamento dello stato."
+    };
+  }
+
+  function aiBuildEventActionGraph(prompt) {
+    const source = aiNormalizePrompt(prompt);
+    const lower = source.toLowerCase();
+    const whenIndex = lower.search(/\b(quando|when)\b/);
+    if (whenIndex < 0) return null;
+
+    const tail = source.slice(whenIndex).replace(/^\s*(quando|when)\s+/i, "");
+    const verbMatch = tail.match(/\b(apri|chiudi|attiva|disattiva|mostra|nascondi|avvia|ferma|open|close|enable|disable|show|hide|start|stop)\b/i);
+    if (!verbMatch || typeof verbMatch.index !== "number") return null;
+
+    const eventText = tail.slice(0, verbMatch.index).replace(/\b(allora|then)\s*$/i, "").trim();
+    const actionText = tail.slice(verbMatch.index).trim();
+    if (!eventText || !actionText) return null;
+
+    const center = viewportCenterWorld();
+    const eventNode = defaultNode("event", center.x - 470, center.y - 100);
+    eventNode.title = "On " + aiTitleCase(eventText);
+    eventNode.description = "Evento generato dalla richiesta: " + eventText + ".";
+    eventNode.rows = [row("Next", "", "flowOut")];
+
+    const actionNode = aiActionNode(
+      aiTitleCase(actionText),
+      "Azione generata dalla richiesta AI.",
+      actionText,
+      center.x + 40,
+      center.y - 100
+    );
+
+    project.nodes.push(eventNode, actionNode);
+    aiConnect(
+      eventNode,
+      aiFindRow(eventNode, "flowOut", "Next"),
+      actionNode,
+      aiFindRow(actionNode, "flowIn", "Enter"),
+      "__flow__"
+    );
+
+    if (!Array.isArray(project.groups)) project.groups = [];
+    const group = {
+      id: uid("group"),
+      title: "AI · " + aiTitleCase(actionText),
+      nodeIds: [eventNode.id, actionNode.id]
+    };
+    project.groups.push(group);
+
+    selectedNodeIds = new Set(group.nodeIds);
+    syncPrimarySelection();
+    selectedGroupId = group.id;
+    selectedEdgeId = null;
+    selectedTypeRelationId = null;
+    selectedJunctionIds.clear();
+
+    render();
+    markDirty();
+    flushHistoryCheckpoint();
+    broadcastActivity("AI crea evento e azione");
+
+    return {
+      nodes: 2,
+      connections: 1,
+      message: "Creato il flusso “" + eventNode.title + " → " + actionNode.title + "”."
+    };
+  }
+
+  function aiExecuteBuilderPrompt(prompt) {
+    const source = aiNormalizePrompt(prompt);
+    const lower = source.toLowerCase();
+    if (!source) return null;
+
+    const toggleIntent =
+      /\b(toggle|open|closed|aperto|chiuso|on\s*off|on\/off|accendi|spegni|attivo|inattivo)\b/.test(lower) ||
+      (/\b(door|porta|gate|cancello|light|luce|lampada)\b/.test(lower) &&
+       /\b(controllo|control|gestione|stato|state)\b/.test(lower));
+
+    if (toggleIntent) return aiBuildToggleGraph(source);
+
+    const eventAction = aiBuildEventActionGraph(source);
+    if (eventAction) return eventAction;
+
+    return {
+      unsupported: true,
+      message: "Per ora il builder locale sa creare controlli toggle (Door open/closed, Light on/off) e flussi “Quando … → azione”. Il formato è già estendibile: i prossimi pattern potranno usare gli stessi nodi e connessioni."
+    };
+  }
+
+  function submitAiBuilderPrompt() {
+    const input = $("aiBuilderPrompt");
+    const button = $("aiBuilderSend");
+    if (!input) return;
+    const prompt = input.value.trim();
+    if (!prompt) return;
+
+    aiBuilderAddMessage("user", prompt);
+    input.value = "";
+    if (button) button.disabled = true;
+
+    try {
+      const result = aiExecuteBuilderPrompt(prompt);
+      aiBuilderAddMessage("assistant", result && result.message
+        ? result.message
+        : "Non sono riuscito a trasformare questa richiesta in un graph.");
+      if (result && !result.unsupported) {
+        showToast("AI Builder · " + result.nodes + " blocchi creati");
+      }
+    } catch (error) {
+      console.error("ProjectFlow AI Builder:", error);
+      aiBuilderAddMessage("assistant", "Errore durante la generazione del graph. Nessuna API esterna è stata chiamata.");
+      showToast("AI Builder · errore");
+    } finally {
+      if (button) button.disabled = false;
+      requestAnimationFrame(() => input.focus());
+    }
+  }
+
   function addNode(type, presetComponent, preset) {
     const center = viewportCenterWorld();
     const offset = project.nodes.length % 5 * 18;
@@ -9870,6 +10251,28 @@
 
   $("createGroup").addEventListener("click", toggleGrouping);
   $("forceConnectionsView").addEventListener("click", toggleForcedConnections);
+  $("aiBuilderButton").addEventListener("click", (event) => {
+    event.stopPropagation();
+    openAiBuilderPanel();
+  });
+  $("closeAiBuilder").addEventListener("click", closeAiBuilderPanel);
+  $("aiBuilderPanel").addEventListener("click", (event) => event.stopPropagation());
+  $("aiBuilderForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitAiBuilderPrompt();
+  });
+  $("aiBuilderPrompt").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      submitAiBuilderPrompt();
+    }
+  });
+  document.querySelectorAll("[data-ai-example]").forEach((button) => {
+    button.addEventListener("click", () => {
+      $("aiBuilderPrompt").value = button.dataset.aiExample || "";
+      submitAiBuilderPrompt();
+    });
+  });
   $("shareProjectButton").addEventListener("click", openSharePanel);
   $("shareLoginButton").addEventListener("click", startGoogleLogin);
   $("closeSharePanel").addEventListener("click", () => closeInterfaceSurfaces());
