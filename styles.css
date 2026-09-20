@@ -7941,3 +7941,130 @@ body,
   .create-project-fields{padding:18px}
   .create-project-actions{padding:14px 18px 18px}
 }
+
+
+/* Nested graph workspaces */
+.graph-breadcrumb{
+  min-width:0;
+  max-width:520px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  height:32px;
+  padding:0 9px;
+  margin-left:2px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:rgba(17,23,38,.72);
+  overflow:hidden;
+  white-space:nowrap
+}
+.graph-breadcrumb.hidden{display:none}
+.graph-breadcrumb button,
+.graph-breadcrumb strong{
+  min-width:0;
+  max-width:180px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  border:0;
+  background:transparent;
+  font-size:11px
+}
+.graph-breadcrumb button{
+  padding:4px 2px;
+  color:#9aa7bd;
+  cursor:pointer
+}
+.graph-breadcrumb button:hover{color:var(--text)}
+.graph-breadcrumb strong{
+  color:#d7deec;
+  font-weight:800
+}
+.graph-breadcrumb-separator{
+  flex:0 0 auto;
+  color:#59657b;
+  font-size:12px
+}
+.nested-graph-section{
+  padding:0;
+  border:0;
+  background:transparent
+}
+.nested-graph-portal{
+  width:100%;
+  min-height:66px;
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr) 24px;
+  align-items:center;
+  gap:11px;
+  padding:11px 12px;
+  border:1px solid #2b3851;
+  border-radius:11px;
+  background:linear-gradient(180deg,rgba(24,34,52,.92),rgba(14,21,34,.92));
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+  transition:border-color .15s,transform .15s,background .15s
+}
+.nested-graph-portal:hover{
+  border-color:#536987;
+  background:linear-gradient(180deg,rgba(30,43,65,.98),rgba(17,25,40,.98));
+  transform:translateY(-1px)
+}
+.nested-graph-portal-icon{
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  border:1px solid #41516d;
+  border-radius:9px;
+  background:#0d1422;
+  color:#86a5c8;
+  font-size:16px;
+  font-weight:900
+}
+.nested-graph-portal-copy{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:3px
+}
+.nested-graph-portal-copy strong{
+  font-size:12px;
+  letter-spacing:.1px
+}
+.nested-graph-portal-copy small{
+  color:#7f8da4;
+  font-size:10px;
+  line-height:1.4
+}
+.nested-graph-portal-arrow{
+  justify-self:end;
+  color:#8797b2;
+  font-size:17px
+}
+.empty-graph-portal-section{
+  margin-top:12px
+}
+.flow-node.type-graphInput,
+.flow-node.type-graphOutput{
+  border-style:dashed;
+  border-color:#3a526b;
+  background:linear-gradient(180deg,#101a28,#0b121d)
+}
+.flow-node.type-graphInput .node-header,
+.flow-node.type-graphOutput .node-header{
+  cursor:grab
+}
+.flow-node.type-graphInput .node-title-inline,
+.flow-node.type-graphOutput .node-title-inline{
+  pointer-events:none;
+  opacity:.92
+}
+.flow-node.type-emptyGraph{
+  border-color:#34445d
+}
+@media (max-width:900px){
+  .graph-breadcrumb{max-width:260px}
+}
