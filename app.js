@@ -3634,6 +3634,7 @@
     const homeButton = $("homeAuthButton");
     const editorButton = $("editorAuthButton");
     const syncState = $("homeSyncState");
+    const homeAvatar = $("homeAccountAvatar");
     const avatar = $("editorAccountAvatar");
     const label = $("editorAccountLabel");
     const menuAvatar = $("accountMenuAvatar");
@@ -3665,6 +3666,23 @@
       homeButton.title = configured
         ? (user ? "Apri menu account" : "Accedi per sincronizzare i progetti")
         : "Configura Firebase per attivare Google login e cloud";
+    }
+
+    if (homeAvatar) {
+      const hasPhoto = !!(user && user.photoURL);
+      const initial = user && (user.displayName || user.email)
+        ? (user.displayName || user.email).trim().charAt(0).toUpperCase()
+        : "";
+      homeAvatar.classList.toggle("has-photo", hasPhoto);
+      homeAvatar.classList.toggle("has-initial", !!user && !hasPhoto);
+      homeAvatar.style.backgroundImage = hasPhoto ? 'url("' + user.photoURL + '")' : "";
+      if (hasPhoto) {
+        homeAvatar.textContent = "";
+      } else if (user) {
+        homeAvatar.textContent = initial || "U";
+      } else {
+        homeAvatar.innerHTML = '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z"></path></svg>';
+      }
     }
 
     if (editorButton) {
