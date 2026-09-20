@@ -2783,8 +2783,29 @@
     return true;
   }
 
+  function updateGraphBackButton() {
+    const button = $("backToProjects");
+    if (!button) return;
+
+    const label = button.querySelector("span");
+    const nested = graphWorkspaceStack.length > 0;
+
+    button.classList.toggle("nested-back", nested);
+    if (nested) {
+      const parentLabel = graphWorkspaceStack[graphWorkspaceStack.length - 1]?.label || "Graph padre";
+      if (label) label.textContent = "Graph padre";
+      button.title = "Esci dal Sub Graph e torna a " + parentLabel;
+      button.setAttribute("aria-label", "Esci dal Sub Graph e torna al graph padre");
+    } else {
+      if (label) label.textContent = "Progetti";
+      button.title = "Torna ai progetti";
+      button.setAttribute("aria-label", "Torna ai progetti");
+    }
+  }
+
   function updateGraphBreadcrumb() {
     const nav = $("graphBreadcrumb");
+    updateGraphBackButton();
     if (!nav) return;
     nav.innerHTML = "";
 
@@ -12783,12 +12804,12 @@
 
   $("backToProjects").addEventListener("click", () => {
     saveProject(false);
+
     if (graphWorkspaceStack.length) {
-      project = rootProject;
-      graphWorkspaceStack = [];
-      currentWorkspaceLabel = "";
-      updateGraphBreadcrumb();
+      leaveNestedGraph();
+      return;
     }
+
     showProjectHome("projects");
   });
 
