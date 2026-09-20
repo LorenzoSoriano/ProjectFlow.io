@@ -4477,11 +4477,20 @@
       const field = document.createElement("textarea");
       field.value = text;
       field.setAttribute("readonly", "");
+      field.setAttribute("aria-hidden", "true");
       field.style.position = "fixed";
+      field.style.top = "0";
       field.style.left = "-9999px";
+      field.style.opacity = "0";
       document.body.appendChild(field);
-      field.select();
-      copied = document.execCommand("copy");
+      try {
+        field.focus({ preventScroll: true });
+        field.select();
+        field.setSelectionRange(0, field.value.length);
+        copied = document.execCommand("copy");
+      } catch (copyError) {
+        console.warn("ProjectFlow: fallback copia non disponibile.", copyError);
+      }
       field.remove();
     }
 
@@ -4496,16 +4505,38 @@
       return;
     }
 
+    // Clipboard permissions are tied to the original click. Do not await Firebase
+    // before starting the copy, otherwise browsers such as Safari can reject it.
+    let code = normalizeShareCode(
+      record.shareCode ||
+      (cloudState.sharedMeta && cloudState.sharedMeta.joinCode)
+    );
+    if (!code) code = generateShareCode();
+
+    const display = formatShareCode(code);
+    record.shareCode = display;
+    cloudState.sharedMeta = Object.assign({}, cloudState.sharedMeta || {}, { joinCode: code });
+    persistProjectLibrary();
+
+    const codeValue = $("shareCodeValue");
+    if (codeValue) {
+      codeValue.textContent = display;
+      codeValue.classList.remove("empty");
+    }
+
+    const copyPromise = writeClipboardText(display, "Copia questo codice:");
+
     try {
-      const code = await ensureSharedAccessCode(record);
-      if (!code) return;
-      const display = formatShareCode(code);
-      const copied = await writeClipboardText(display, "Copia questo codice:");
+      const copied = await copyPromise;
+      await ensureSharedAccessCode(record);
       await refreshSharePanelMeta();
-      showToast(copied ? "Codice copiato" : "Codice generato");
+      showToast(copied ? "Codice copiato" : "Codice pronto");
     } catch (error) {
       console.warn("ProjectFlow: codice condivisione non disponibile.", error);
-      showToast("Impossibile creare il codice · controlla le Firestore Rules");
+      const copied = await copyPromise.catch(() => false);
+      showToast(copied
+        ? "Codice copiato, ma la sincronizzazione non è riuscita"
+        : "Impossibile creare il codice · controlla le Firestore Rules");
     }
   }
 
@@ -4543,7 +4574,22 @@
     panel.classList.toggle("open", willOpen);
     panel.setAttribute("aria-hidden", willOpen ? "false" : "true");
     $("shareProjectButton").setAttribute("aria-expanded", willOpen ? "true" : "false");
-    if (willOpen) refreshSharePanelMeta();
+    if (willOpen) {
+      refreshSharePanelMeta().then(async () => {
+        const record = projectRecordById(currentProjectId);
+        if (!record || !cloudState.user) return;
+        const meta = cloudState.sharedMeta || {};
+        const isOwner = !meta.ownerId || meta.ownerId === cloudState.user.uid;
+        if (!isOwner) return;
+        if (normalizeShareCode(record.shareCode || meta.joinCode)) return;
+        try {
+          await ensureSharedAccessCode(record);
+          await refreshSharePanelMeta();
+        } catch (error) {
+          console.warn("ProjectFlow: preparazione codice condivisione non riuscita.", error);
+        }
+      });
+    }
   }
 
   function localDragOwnsNode(nodeId) {
