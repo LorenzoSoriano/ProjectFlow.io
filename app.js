@@ -73,6 +73,8 @@
     sketch: { label: "Sketch", icon: "✎", color: "#8aa7c2" }
   };
 
+  const LEGACY_BLOCK_TYPES = new Set(["condition", "state", "ui"]);
+
   const ROW_META = {
     variable: { icon: "x", label: "Variabile" },
     function: { icon: "ƒ", label: "Metodo" },
@@ -4084,8 +4086,8 @@
     if (node.type === "action") {
       return "FLOW ACTION · " + String(node.actionKind || "custom").toUpperCase();
     }
-    if (node.type === "state") {
-      return "STATE · " + String(node.stateKind || "normal").toUpperCase();
+    if (LEGACY_BLOCK_TYPES.has(node.type)) {
+      return "LEGACY · " + typeMeta(node.type).label.toUpperCase();
     }
     return typeMeta(node.type).label;
   }
@@ -5484,6 +5486,8 @@
           ["custom", "Custom Event"],
           ["start", "Start"],
           ["update", "Update"],
+          ["fixedUpdate", "Fixed Update"],
+          ["lateUpdate", "Late Update"],
           ["input", "Input"],
           ["trigger", "Trigger"],
           ["collision", "Collision"],
@@ -9543,49 +9547,26 @@
 
   function blockPaletteItems() {
     const items = [
-      { type: "object", category: "STRUTTURA", label: "Oggetto", description: "Entità, componente o istanza", icon: "◇" },
-      { type: "class", category: "STRUTTURA", label: "Classe", description: "Responsabilità e membri", icon: "C" },
-      { type: "function", category: "STRUTTURA", label: "Funzione", description: "Parametri, return e logica", icon: "ƒ" },
-      { type: "enum", category: "STRUTTURA", label: "Enum", description: "Stati, modalità e scelte nominate", icon: "E" },
+      { type: "object", category: "STRUTTURA", label: "GameObject", description: "Riferimento a un oggetto Unity e ai suoi componenti", icon: "◇" },
+      { type: "class", category: "STRUTTURA", label: "Classe", description: "Contenitore C# per stato, metodi ed eventi", icon: "C" },
+      { type: "function", category: "STRUTTURA", label: "Funzione", description: "Metodo con parametri, return e logica", icon: "ƒ" },
+      { type: "enum", category: "STRUTTURA", label: "Enum", description: "Valori nominati per stati e modalità", icon: "E" },
 
-      { type: "ifElse", category: "CONTROL FLOW", label: "If / Else", description: "Branch True / False", icon: "if" },
-      { type: "switch", category: "CONTROL FLOW", label: "Switch", description: "Dirama per valore, tipo o enum", icon: "⇆" },
-      { type: "whileLoop", category: "CONTROL FLOW", label: "While", description: "Ripeti finché la condizione è vera", icon: "↻" },
-      { type: "doWhileLoop", category: "CONTROL FLOW", label: "Do While", description: "Esegui e poi verifica la condizione", icon: "⟳" },
-      { type: "forLoop", category: "CONTROL FLOW", label: "For", description: "Ciclo con Start, End, Step e Index", icon: "i" },
-      { type: "foreachLoop", category: "CONTROL FLOW", label: "Foreach", description: "Itera una collezione", icon: "∀" },
+      { type: "event", category: "FLOW", label: "Evento", description: "Ingresso del flow: Start, Update, input, trigger…", icon: "⚡" },
+      { type: "action", category: "FLOW", label: "Azione", description: "Esegue un'operazione nel flow", icon: "▶" },
+      { type: "ifElse", category: "FLOW", label: "If / Else", description: "Dirama il flow usando un bool", icon: "if" },
+      { type: "switch", category: "FLOW", label: "Switch", description: "Dirama il flow usando un valore o enum", icon: "⇆" },
+      { type: "forLoop", category: "FLOW", label: "For", description: "Ciclo indicizzato Start / End / Step", icon: "i" },
+      { type: "foreachLoop", category: "FLOW", label: "Foreach", description: "Itera gli elementi di una collezione", icon: "∀" },
+      { type: "whileLoop", category: "FLOW", label: "While", description: "Ripete finché la condizione è vera", icon: "↻" },
+      { type: "doWhileLoop", category: "FLOW", label: "Do While", description: "Esegue una volta, poi controlla la condizione", icon: "⟳" },
 
-      { type: "event", category: "GAME FLOW", label: "Evento", description: "Avvia il flusso di gameplay", icon: "⚡" },
-      { type: "action", category: "GAME FLOW", label: "Azione", description: "Esegue una modifica o un metodo", icon: "▶" },
-      { type: "condition", category: "GAME FLOW", label: "Condizione", description: "Confronto booleano riutilizzabile", icon: "?" },
-      { type: "state", category: "GAME FLOW", label: "Stato", description: "Fase o modalità del gameplay", icon: "S" },
+      { type: "variable", category: "DATI", label: "Variabile", description: "Dato, configurazione o riferimento condiviso", icon: "x" },
+      { type: "adapter", category: "DATI", label: "Converti tipo", description: "Conversione esplicita tra tipi compatibili", icon: "↔" },
 
-      { type: "math", preset: { mathOperation: "add" }, category: "MATH & LOGIC", label: "Add", description: "A + B", icon: "+" },
-      { type: "math", preset: { mathOperation: "subtract" }, category: "MATH & LOGIC", label: "Subtract", description: "A − B", icon: "−" },
-      { type: "math", preset: { mathOperation: "multiply" }, category: "MATH & LOGIC", label: "Multiply", description: "A × B", icon: "×" },
-      { type: "math", preset: { mathOperation: "divide" }, category: "MATH & LOGIC", label: "Divide", description: "A ÷ B", icon: "÷" },
-      { type: "math", preset: { mathOperation: "modulo" }, category: "MATH & LOGIC", label: "Modulo", description: "A % B", icon: "%" },
-      { type: "math", preset: { mathOperation: "power" }, category: "MATH & LOGIC", label: "Power", description: "A ^ B", icon: "^" },
-      { type: "math", preset: { mathOperation: "min" }, category: "MATH & LOGIC", label: "Min", description: "Valore minimo", icon: "↓" },
-      { type: "math", preset: { mathOperation: "max" }, category: "MATH & LOGIC", label: "Max", description: "Valore massimo", icon: "↑" },
-      { type: "math", preset: { mathOperation: "clamp" }, category: "MATH & LOGIC", label: "Clamp", description: "Value tra Min e Max", icon: "⊣" },
-      { type: "math", preset: { mathOperation: "lerp" }, category: "MATH & LOGIC", label: "Lerp", description: "Interpolazione A → B", icon: "↝" },
-      { type: "math", preset: { mathOperation: "abs" }, category: "MATH & LOGIC", label: "Absolute", description: "|Value|", icon: "|" },
-      { type: "math", preset: { mathOperation: "sqrt" }, category: "MATH & LOGIC", label: "Square Root", description: "√Value", icon: "√" },
-      { type: "logic", preset: { logicOperation: "and" }, category: "MATH & LOGIC", label: "AND", description: "A && B", icon: "∧" },
-      { type: "logic", preset: { logicOperation: "or" }, category: "MATH & LOGIC", label: "OR", description: "A || B", icon: "∨" },
-      { type: "logic", preset: { logicOperation: "xor" }, category: "MATH & LOGIC", label: "XOR", description: "A xor B", icon: "⊕" },
-      { type: "logic", preset: { logicOperation: "not" }, category: "MATH & LOGIC", label: "NOT", description: "!A", icon: "¬" },
-      { type: "compare", preset: { compareOperation: "equal" }, category: "MATH & LOGIC", label: "Equal", description: "A == B", icon: "=" },
-      { type: "compare", preset: { compareOperation: "notEqual" }, category: "MATH & LOGIC", label: "Not Equal", description: "A != B", icon: "≠" },
-      { type: "compare", preset: { compareOperation: "greater" }, category: "MATH & LOGIC", label: "Greater Than", description: "A > B", icon: ">" },
-      { type: "compare", preset: { compareOperation: "greaterEqual" }, category: "MATH & LOGIC", label: "Greater / Equal", description: "A >= B", icon: "≥" },
-      { type: "compare", preset: { compareOperation: "less" }, category: "MATH & LOGIC", label: "Less Than", description: "A < B", icon: "<" },
-      { type: "compare", preset: { compareOperation: "lessEqual" }, category: "MATH & LOGIC", label: "Less / Equal", description: "A <= B", icon: "≤" },
-
-      { type: "variable", category: "DATI", label: "Variabile", description: "Dato o stato condiviso", icon: "x" },
-      { type: "adapter", category: "DATI", label: "Adapter", description: "Converte un tipo in un altro", icon: "↔" },
-      { type: "ui", category: "INTERFACCIA", label: "Interfaccia", description: "Text, button, HUD, menu…", icon: "▣" }
+      { type: "math", category: "OPERATORI", label: "Math", description: "Add, Subtract, Multiply, Divide, Clamp, Lerp…", icon: "±" },
+      { type: "logic", category: "OPERATORI", label: "Logic", description: "AND, OR, XOR, NOT", icon: "∧" },
+      { type: "compare", category: "OPERATORI", label: "Compare", description: "==, !=, >, >=, <, <= → bool", icon: "≶" }
     ];
 
     UNITY_COMPONENT_CATEGORIES.forEach((componentCategory) => {
@@ -9964,9 +9945,6 @@
       { type: "logic", purpose: "boolean expression", config: "logicOperation(and|or|xor|not)", ports: "IN A:bool, optional IN B:bool, OUT Result:bool" },
       { type: "compare", purpose: "comparison", config: "compareOperation(equal|notEqual|greater|greaterEqual|less|lessEqual), compareDataType", ports: "IN A:data, IN B:data, OUT Result:bool" },
       { type: "adapter", purpose: "explicit data conversion", config: "adapterInputType, adapterOutputType", ports: "IN In:data, OUT Out:data" },
-      { type: "state", purpose: "gameplay state", ports: "IN Enter:flow, OUT Transition:flow; may add data rows" },
-      { type: "condition", purpose: "reusable condition block", ports: "IN Enter:flow, IN A:any, IN B:any, OUT True:flow, OUT False:flow, OUT result:bool" },
-      { type: "ui", purpose: "UI state/element", ports: "rows are editable properties" }
     ];
   }
 
